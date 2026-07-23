@@ -497,20 +497,46 @@ considered and **rejected** in favor of complete upfront setup.
 - **Demo door kept** as a secondary "explore without an account" link (anonymous, D27).
 - **No pre-loaded sample/demo project** in v1 (skipped).
 
+### D30 — Frontend / workspace shape (Item 8)
+
+- **Layout = top bar + persistent 3-pane shell.** Top bar (project switcher / breadcrumb /
+  active-paper title / account+settings); **left** nav (papers/notes/experiments tree);
+  **center** active-view (reader / matrix / graph / experiments / feed / writing); **right**
+  **persistent Companion chat** (always visible & addressable).
+- **The persistent chat = the Companion = the USP.** One WebSocket session **per project**,
+  survives center-pane navigation. Voice (D2→Web Speech, D23) drops in as a new transport into
+  the same session — **no logic rewrite**. Clicking in the UI, typing, and (later) speaking all
+  resolve to the **same tool call + route transition** (one path, D19/D20).
+- **State:** **React Query** (all REST server data — cache/invalidate/loading) + a **WebSocket
+  event bus** (harness stream → chat transcript, invalidates RQ cache on `tool_result`,
+  dispatches `ui_action` to the router) + **Zustand** for local UI state (open pane, selection)
+  — which *is* the `ui_state` payload sent up (D20 node 5).
+- **Routing (React Router):** URL owns **project + center-pane content** (`/p/:projectId/
+  paper/:paperId`, `/matrix/:id`, `/graph`, `/experiments`, `/feed`, `/write/:docId`). Chat +
+  nav are persistent shell, not routes. `ui_action` events drive the same router.
+- **Reader:** PDF.js real-PDF render + text/annotation overlay; **selection → inline popover**
+  ("Ask about this" / Highlight / Explain); collapsible **structure sidebar** (docling sections
+  / refs / datasets / code); **toggleable extractive card** whose fields click-through to
+  `scroll_to`+`highlight_span` the source span; **cross-pane quote-anchor sync** (chat citation
+  ↔ card field ↔ PDF span all speak the Q33 anchor).
+- **Writing (LaTeX, Slice 3):** **CodeMirror 6** source (LaTeX highlight) + **live inline KaTeX
+  math** (the Obsidian touch) + **debounced SwiftLaTeX WASM PDF preview** (~1–2s, Overleaf-
+  style — full WYSIWYG for a whole LaTeX doc is impossible) + compile-error panel. GUI help:
+  toolbar snippets, command + `\cite`/`\ref` autocomplete (cite pulls project refs), env
+  snippets, AI syntax-assist via chat (never writes prose). Insert: image upload→VFS→
+  `\includegraphics`, **Mermaid** flowcharts, workspace **dataviz PNG/SVG** exports.
+- **Style:** **Academic & warm, light-only.** Warm off-white/sepia neutrals, serif for reading
+  (Charter/Lora-class), comfortable measure, soft contrast, minimal chrome. Inspiration:
+  Readwise Reader / iA Writer. Single theme (less to build).
+
 ---
 
 ## Open questions — status
 
-**Architecture (D1–D20), build-spec (D21–D24), and detailed-spec (D25–D29) complete as of
-2026-07-23.** Resolved: Q18 (provenance), Q19 (experiment logging), Q20/Q4 (research feed), Q7
-(reader UI), Q3 (deployment / $0 plan), Q5 (PDF storage + BYO drive), the harness design (D20),
-Q6 (rate-limiting — dissolved), Items 1–4 (data model, tool catalog, v1 scope + voice, model
-picks), and Items 5–7 + 9–10 (search federation, BYO-key flow, auth + demo, graph + matrix,
-onboarding).
-
-**The only remaining pre-build item is Item 8 — frontend / workspace shape** (panel layout,
-state management, routing, PDF reader integration), **deliberately deferred to last** so it's
-designed against fully-fixed backend contracts. Nothing else blocks building.
+**FULLY SPECIFIED as of 2026-07-23 — architecture (D1–D20), build-spec (D21–D24), detailed-spec
+(D25–D29), and frontend (D30) all resolved. Nothing blocks building.** A companion
+**`FRONTEND_BRIEF.md`** (screens, flows, style, and the full schema) was written for frontend +
+backend to build against.
 
 *(Next, on the user's instruction only: write PRD / TRD, with user-tagged skills.)*
 
