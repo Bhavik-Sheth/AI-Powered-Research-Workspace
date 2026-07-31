@@ -534,9 +534,14 @@ considered and **rejected** in favor of complete upfront setup.
 ## Open questions — status
 
 **FULLY SPECIFIED as of 2026-07-23 — architecture (D1–D20), build-spec (D21–D24), detailed-spec
-(D25–D29), and frontend (D30) all resolved. Nothing blocks building.** A companion
-**`FRONTEND_BRIEF.md`** (screens, flows, style, and the full schema) was written for frontend +
-backend to build against.
+(D25–D29), and frontend (D30) all resolved. Nothing blocks building.**
+
+> **2026-07-31.** `FRONTEND_BRIEF.md` (screens, flows, style, schema) was **deleted** as
+> redundant — this file is the spec. Recoverable from git history if a screen-by-screen
+> restatement is ever wanted. Visual design now lives in **`UI_DESIGN.md`** (imported from the
+> Claude Design project); it is **inspiration-rank — below this file** on behaviour, data,
+> screens, and flows, and authoritative only on look-and-feel. Note it supersedes **D30's warm
+> sepia palette** with a cool blueprint palette; the rest of D30 stands.
 
 *(Next, on the user's instruction only: write PRD / TRD, with user-tagged skills.)*
 
