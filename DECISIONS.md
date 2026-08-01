@@ -135,6 +135,7 @@ no packaging pipeline, no updater.
   projects/<project-slug>/
     notes/                       *.md            ← project-owned, never shared
     papers/                      symlinks → library/papers/<id>  + papers.md index
+      highlights/<canonical-id>.json   ← vault mirror of that paper's highlights (see below)
     experiments/<exp-slug>/      notebook.ipynb, requirements.txt, outputs/, runs/
     manuscript/                  *.tex, figures/
     project.md                   focus seed, interest profile (human-readable)
@@ -159,6 +160,13 @@ no packaging pipeline, no updater.
   supporting Obsidian's wikilink/plugin conventions.
 - **No multi-machine sync.** No sync layer, no schema concession to a future one. The vault is a
   plain folder — point Syncthing or git at it later without the app knowing.
+- **Highlights are user-authored, so they mirror to the vault**, at
+  `projects/<project-slug>/papers/highlights/<canonical-id>.json` — one file per paper, keyed by
+  the note-identity rule in D4 (stable id, never file path). Postgres stays the queryable copy,
+  same as `papers.md`. **Conversations and messages stay DB-only** — they are derived Companion
+  output, not user-authored content, so they do not get a vault mirror. (This resolves a prior
+  contradiction where highlights were implied to live only in Postgres like conversations; user
+  decision 2026-08-01: mirror highlights only.)
 
 ### D4 — The app is the sole writer of the vault
 
