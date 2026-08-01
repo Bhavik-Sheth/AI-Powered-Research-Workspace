@@ -10,7 +10,7 @@ is the **what**.
 > **considered and reverted**: the product is **fully web-based, single-user-first**. See the
 > "2026-07-23 additions" section and the amendment notes on D1/D2/D12.
 >
-> ### ⚠️ **2026-08-01 — THE DESKTOP PIVOT IS NOW REAL (D31–D36).**
+> ### ⚠️ **2026-08-01 — THE DESKTOP PIVOT IS NOW REAL (D31–D38).**
 >
 > The web-only stance above is **superseded.** Research Companion OS is now an
 > **Obsidian-inspired local desktop application**: an Electron shell supervising a Python
@@ -18,7 +18,9 @@ is the **what**.
 > sandboxed experiment execution as a first-class feature**. The trigger was a requirement the
 > web framing could not satisfy: **running research experiments locally with real filesystem and
 > GPU access.** Read **"2026-08-01 — the desktop pivot"** at the bottom before D1–D30; where the
-> two conflict, the 2026-08-01 section wins.
+> two conflict, the 2026-08-01 section wins. Experiments run as a **Jupyter kernel inside the
+> container**, and **the agent may never execute code on its own — the user approves every run.**
+> **Nothing is open. D1–D38 and Q40–Q48 are all resolved.**
 >
 > **Scope note:** this is a **solo, student-scope project** targeting **Linux, one user (the
 > author)**. Windows/macOS builds, code signing, notarization, auto-update infrastructure, and
@@ -61,8 +63,9 @@ layer the text UI uses, so it can be swapped for realtime s2s later without touc
 > present in Electron builds. D23's "$0, no media server" v1 voice mechanism therefore **does
 > not survive the pivot**. Replacement: **local STT/TTS inside the Python sidecar**
 > (`faster-whisper` for STT; Piper or the OS TTS for output) — genuinely $0, fully offline, and
-> better privacy. Voice remains a **thin transport over the same tool layer**, so the harness is
-> untouched (D2's core claim holds). **Invariant #2 still stands** — a local process now exists,
+> better privacy. **Full detail and rationale in D38.** Voice remains a **thin transport over the
+> same tool layer**, so the harness is untouched (D2's core claim holds).
+> **Invariant #2 still stands** — a local process now exists,
 > but using a Claude/ChatGPT *subscription* through a CLI remains ToS-forbidden; BYO API key or
 > a local model (D34) only.
 
@@ -252,6 +255,18 @@ a locked-down container is the fallback if package coverage proves insufficient.
 - Don't put `agents.create`-style one-time setup in a request path.
 - Don't store user API keys unencrypted, or log them.
 
+**Added 2026-08-01 (desktop pivot)**
+- **Don't ever execute code outside a Docker container** — agent-written or user-written (D33).
+- **Don't let the agent run code without an explicit user approval** (D33/Q40). Sandboxing is
+  not consent.
+- **Don't let a `measured` metric come from anything but a clean restart-and-run-all** (D33/Q19).
+- **Don't route embeddings through Ollama/vLLM** just because a local server is running (D34,
+  invariant #1).
+- **Don't overwrite a vault file the app didn't last write** — conflict, don't clobber (D37).
+- **Don't put logic in `desktop/`** — the Electron shell is a launcher, nothing more (D31).
+- **Don't build multi-machine sync, GPU arbitration, or auth** — all explicitly out of scope
+  (Q41, Q45, D27).
+
 ---
 
 ---
@@ -304,15 +319,19 @@ schema (ingestion writes into the same `{name, value}` shape — no migration).
 > the AI fabricating results. With D33 the app **executes the experiment in a container it
 > controls**, so a third, better class appears:
 > - `source: user` — typed in by hand (Q19's original case). Still supported.
-> - `source: measured` — **captured from a real run** the app supervised: stdout/artifact parse,
->   linked to `run_id`, exit code, image digest, config hash, timestamp. **This is the strongest
->   provenance in the entire system** — a claim backed by a reproducible execution, not a quote.
+> - `source: measured` — **captured from a clean "restart kernel & run all" that exited
+>   successfully** (D33), linked to `run_id`, image digest, `requirements.txt` hash, notebook
+>   hash and timestamp. **This is the strongest provenance in the entire system** — a claim
+>   backed by a reproducible execution rather than a quote. **Interactive, out-of-order cell runs
+>   never produce a `measured` metric**, because hidden kernel state makes the number unverifiable
+>   — that is the price of choosing an interactive kernel (Q42), and it is paid here rather than
+>   by weakening the provenance rule.
 > - `source: llm` — **still forbidden.** The AI may *propose* code and *read* results; it may
 >   **never author a metric value.** Q18's through-line is unchanged.
 >
-> Every experiment record gains `runs[]` (`{run_id, started_at, exit_code, image, config_hash,
-> stdout_ref, artifacts[]}`). The forward-compatibility claim to W&B/MLflow holds — this *is*
-> that ingestion path, arriving early.
+> Every experiment record gains `runs[]` (`{run_id, started_at, exit_code, image, reqs_hash,
+> notebook_hash, stdout_ref, artifacts[]}`). The forward-compatibility claim to W&B/MLflow holds
+> — this *is* that ingestion path, arriving early.
 
 ### D18 — (retired) hosted-core / desktop-harness partition
 
@@ -437,7 +456,9 @@ Portfolio-first, **$0**, extendable to real use later.
 >   content-hash-only class. Re-fetch by canonical id stays as a *repair* path for a missing file.
 > - **BYO Google Drive / OneDrive OAuth is dropped** — it existed to avoid hosted storage cost,
 >   which no longer exists. The local folder *is* user-owned storage, which was the actual goal.
->   Multi-machine sync is an **open question (Q41)**, not a v1 feature.
+>   **Multi-machine sync is not built at all (Q41 — decided).** The app targets the local device;
+>   no sync layer, and no schema concession to a future one. The vault is a plain folder, so
+>   Syncthing or git can be pointed at it later without the app knowing.
 > - **Markdown export is no longer a feature** — the notes were always markdown on disk.
 >
 > Kept below for reference; the three-blob-class scheme and the quota section no longer apply.
@@ -538,6 +559,15 @@ Design rules: **(Fork A)** reader Q&A is **not a tool** — it's the core agent 
 from ambient UI-state + retrieval tools (no redundant `ask_paper` hop). **(Fork B)**
 **moderate-fat** tools (parameterized `get_paper`/`refine_results`) over many-thin. **MCP:**
 build the adapter (extension seam), **bundle zero MCP servers in v1** — native covers v1.
+
+> **Amended 2026-08-01 — execution tools added, with a consent gate.** The desktop pivot gives
+> the agent a machine to act on, so three tools join the catalog (D33):
+> `propose_cell(experiment_id, code)` **A** — writes a notebook cell, **never executes**;
+> `run_all(experiment_id)` **A** — **requires explicit user confirmation**, and is the only path
+> to a `source: measured` metric; `read_run(run_id)` **Q** — outputs and logs.
+> **`run_all` is the first tool in the catalog that cannot complete without a human**, and that
+> is deliberate (Q40 = "No"). The `ui_action` lane (D20 node 3) carries the approval prompt.
+> Everything else in the catalog is unchanged.
 
 ### D23 — v1 scope & voice (amends D2 for v1)
 
@@ -693,9 +723,26 @@ considered and **rejected** in favor of complete upfront setup.
   (Charter/Lora-class), comfortable measure, soft contrast, minimal chrome. Inspiration:
   Readwise Reader / iA Writer. Single theme (less to build).
 
+> **Amended 2026-08-01 — the Experiments view becomes a notebook.** The 3-pane shell, the
+> persistent Companion, the routing model, and the state split are **all unchanged** — this is
+> one center-pane view gaining depth.
+> - **Experiments center-pane = a notebook UI** over the container kernel (D33): cell list, run
+>   controls, streamed output, kernel status, and a visible **"restart & run all"** action —
+>   which is also the only action that produces a `measured` metric, so it should read as a
+>   deliberate step, not a refresh button.
+> - **Cell editor = CodeMirror 6** (resolves **Q46**), the same editor already chosen for LaTeX.
+>   One editor stack for the whole app; Monaco rejected as a second heavy dependency for a
+>   familiarity gain that does not matter at this scale.
+> - **Route:** `/p/:projectId/experiments/:expId` — URL owns the open experiment, consistent with
+>   the existing rule that the URL owns the center pane.
+> - **Agent-written cells must be visually marked as unrun and pending approval** (D33 consent
+>   gate). The user must never be unsure whether something executed.
+> - Palette note from 2026-07-31 still applies: `UI_DESIGN.md`'s cool blueprint palette
+>   supersedes the warm sepia above; the rest of D30 stands.
+
 ---
 
-## 2026-08-01 — the desktop pivot (D31–D36)
+## 2026-08-01 — the desktop pivot (D31–D38)
 
 **Where this section conflicts with anything above, this section wins.**
 
@@ -753,7 +800,7 @@ Electron just attaches.
   projects/<project-slug>/
     notes/                       *.md            ← project-owned, never shared
     papers/                      symlinks → library/papers/<id>  + papers.md index
-    experiments/<exp-slug>/      code/, outputs/, run log
+    experiments/<exp-slug>/      notebook.ipynb, requirements.txt, outputs/, runs/
     manuscript/                  *.tex, figures/
     project.md                   focus seed, interest profile (human-readable)
   .research-os/                  Postgres data, model cache, blob cache  ← REBUILDABLE
@@ -768,7 +815,7 @@ Electron just attaches.
 - **The vault is Obsidian-compatible on purpose.** Notes are plain markdown with wikilinks; the
   user can open the same folder in Obsidian. That is the whole point of the file layout.
 - **Consequence: the app is not the only writer.** It must watch the vault and re-index on
-  external change (see **Q44**).
+  external change — see **D37**.
 
 ### D33 — Experiment execution: Docker sandbox, always
 
@@ -783,21 +830,53 @@ sandbox is **default-on for all execution**, agent-initiated or user-initiated.
   and **reproducible environments are something researchers want anyway** — the sandbox and the
   reproducibility feature are the same mechanism. **Docker becomes a hard dependency**, checked
   at onboarding (D29).
-- **Per-run container**, from a **project-pinned image**. Ship a base image with the usual stack
-  (numpy / pandas / torch / scikit-learn / matplotlib) so a run starts in ~1 s rather than
-  resolving pip every time; per-project extra dependencies layer on top.
+- **Execution model = a Jupyter kernel running *inside* the container** (resolves **Q42**). The
+  container is **per-experiment and long-lived**, not per-run: it starts when the experiment is
+  opened, holds kernel state across cells, and is torn down on close or idle timeout. The
+  notebook itself is a **`.ipynb` file in the vault** (D32) — truth on disk, like everything else.
+- **Base image**: pinned, with the usual stack (numpy / pandas / torch / scikit-learn /
+  matplotlib) so a kernel starts in ~1 s. **Per-project dependencies via `uv` +
+  `requirements.txt`** in the experiment folder, layered on top (resolves **Q43**).
 - **Mounts:** the project's `experiments/<exp>/` read-write, `library/` read-only if the run
   needs paper data. **Nothing else.** Never the whole vault, never `$HOME`.
-- **Network: off by default.** Explicit per-experiment opt-in (dependency installs, dataset
-  downloads) — recorded in the run record, because a networked run is a less reproducible run.
-- **Limits:** CPU, memory, wall-clock timeout. **GPU via `--gpus`** + nvidia-container-toolkit,
-  opt-in per experiment.
-- **Runs go on the D14 queue** — long-lived, cancellable, streaming logs to the UI over the
-  existing WebSocket.
-- **Captured per run:** `run_id`, image digest, config hash, exit code, stdout/stderr, declared
-  output artifacts. This feeds `source: measured` metrics (Q19 amendment) — the strongest
-  provenance in the system.
-- **The agent proposes; it does not silently execute** — see **Q40**.
+- **Network: off by default** for the kernel. Dependency installation happens at **image-build
+  time** (where network is expected and fine), not at execution time — so a *running* kernel
+  stays offline. Dataset downloads are an explicit per-experiment opt-in, recorded in the run
+  record, because a networked run is a less reproducible run.
+- **Limits:** CPU, memory, idle timeout, per-cell wall-clock timeout. **GPU via `--gpus`** +
+  nvidia-container-toolkit, opt-in per experiment. **No GPU arbitration in v1** (Q45 deferred) —
+  if a local vLLM server and an experiment both want the VRAM, the user resolves it manually.
+- **Cell execution + kernel lifecycle ride the D14 queue** — cancellable, with logs and results
+  streaming to the UI over the existing WebSocket (D20 node 5). Interrupt is already first-class
+  there, which is exactly what "stop this cell" needs.
+
+**Reconciling an interactive kernel with reproducible provenance.** A stateful kernel is the
+right tool for research and the wrong tool for evidence: out-of-order cells and hidden state mean
+"it printed 0.94" proves nothing. So the two are separated rather than compromised:
+
+- **Exploration is free.** Run cells in any order, any number of times. Nothing is recorded as a
+  measurement.
+- **A metric becomes `source: measured` (Q19 amendment) only from a clean "restart kernel and run
+  all"** that exits successfully. That run captures `run_id`, image digest, `requirements.txt`
+  hash, notebook hash, execution order, and outputs. Anything else is `source: user` — the
+  researcher vouching for a number by hand, which was Q19's original case and remains valid.
+- This keeps the strongest-provenance claim honest **and** preserves the interactive workflow.
+  Q42's answer costs nothing except the discipline of one clean run before a number counts.
+
+**Consent — the agent never runs code on its own (resolves Q40, answered "No").**
+
+- **Propose → user approves → execute.** The agent may write code into a cell and may read
+  results, but **execution is always a human action.** There is no auto-run, no "trusted
+  experiment" mode, and no blanket per-project approval that would let a later agent-authored
+  cell run unattended.
+- The sandbox and the consent gate are **independent controls, and both are required.** Docker
+  limits what a run can damage; it says nothing about whether the run should have happened. The
+  realistic attack — a prompt-injected paper persuading the agent to write and execute
+  something — is stopped by the gate, not the container.
+- **New tools (D22 amendment):** `propose_cell(experiment_id, code)` **A** — writes a cell,
+  never executes; `run_all(experiment_id)` **A** — **requires explicit user confirmation** and is
+  the only path to a `measured` metric; `read_run(run_id)` **Q** — returns outputs and logs. The
+  approval prompt shows the code and the container spec (image, mounts, network, GPU).
 
 ### D34 — Local LLMs: Ollama and vLLM, first class
 
@@ -814,7 +893,11 @@ Researchers with a decent GPU should be able to run this with **zero API spend**
 - **Invariant #1 holds, and is under active threat here:** once a local model server is running,
   routing embeddings through it looks natural. **Do not.** Embeddings stay on the pinned local
   `gte-modernbert-base` forever (D11/D24).
-- **GPU contention is real** — vLLM holding VRAM starves experiments (see **Q45**).
+- **GPU contention is real but deliberately unhandled in v1 (Q45 — deferred).** A resident vLLM
+  server holding VRAM will starve an experiment container, and vice versa. **No detection, no
+  arbitration, no automatic eviction** — the user stops one or the other by hand. Building a
+  VRAM scheduler for a single-user app is exactly the over-engineering this project avoids;
+  revisit only if it becomes a daily annoyance in real use.
 
 ### D35 — Postgres: local, in Docker
 
@@ -832,38 +915,122 @@ Recorded so no future session re-opens settled ground: **D5** (Postgres-only), *
 (federated search), **D7/Q18** (extractive-only provenance), **D8** (OA + upload, never scrape
 paywalls), **D11/D24** (fixed embedding model — **invariant #1**), **D15/D28** (graph + matrix),
 **D19** (fat backend), **D20** (the harness, all 7 nodes), **D21** (global/project boundary, as
-amended), **D22** (tool catalog), **D30** (3-pane shell + persistent Companion), and
+amended), **D22** (tool catalog, plus three execution tools), **D30** (3-pane shell + persistent
+Companion + routing + state split; only the Experiments center-pane gained a notebook UI), and
 `UI_DESIGN.md` (look and feel). **Invariant #2 also stands** — a local process now exists, but
 Claude/ChatGPT *subscriptions* remain ToS-forbidden as app LLM access; BYO key or local model.
+
+**Two new invariants, introduced by this pivot and equal in rank to the original three:**
+4. **All code execution is sandboxed in Docker — always, no opt-out** (D33).
+5. **The agent never executes code without explicit user approval** (D33/Q40). The sandbox is
+   not a substitute for consent; both controls are required, independently.
+
+### Q40–Q48 — asked and answered (2026-08-01)
+
+**D31–D36 settled the shape of the desktop product and opened nine questions. All nine were
+answered the same day**; the two that needed real design became **D37** (vault watching) and
+**D38** (voice).
+
+| # | Question | Recommendation |
+|---|---|---|
+**All nine were answered later the same day. Kept here as the record of what was asked and
+decided; the two that needed real design became D37 (vault watching) and D38 (voice).**
+
+| # | Question | **Decision (2026-08-01)** |
+|---|---|---|
+| **Q40** ✅ | Does the agent run code without asking? | **No. Never.** Propose → user approves → run. Hard consent gate; see **D33**. |
+| **Q41** ✅ | Multi-machine sync (laptop ↔ desktop). | **Not built. Local device only.** No sync layer, no schema accommodation. The vault is a plain folder — point Syncthing or git at it if ever wanted. |
+| **Q42** ✅ | Jupyter kernel or script runs? | **Jupyter kernel** — interactive and stateful. Overrides the script-runs recommendation; reproducibility is preserved via the restart-and-run-all capture rule in **D33**. |
+| **Q43** ✅ | Base image + per-project dependencies. | **`uv` + per-project `requirements.txt`**, layered on a pinned base image. |
+| **Q44** ✅ | Vault file-watching and external edits. | Expanded into **D37**. |
+| **Q45** ✅ | GPU arbitration (vLLM vs experiments). | **Deferred past v1.** No arbitration, no VRAM detection — if both want the GPU, the user sorts it out manually. |
+| **Q46** ✅ | Monaco vs CodeMirror 6. | **CodeMirror 6** — one editor stack for LaTeX *and* notebook cells. |
+| **Q47** ✅ | Distribution. | **`git clone` + `make dev`.** No AppImage, no packaging pipeline. |
+| **Q48** ✅ | Local voice, unvalidated. | Expanded into **D38**. |
+
+### D37 — Vault watching & external edits (resolves Q44)
+
+**The problem, stated plainly.** D32 makes files on disk the truth, and the vault is deliberately
+Obsidian-compatible — which means **the app is not the only writer**. The user edits notes in
+Obsidian or vim, with the app open or closed; git or a sync tool may rewrite many files at once.
+Five concrete failure modes follow, and each needs an answer:
+
+1. **Silent staleness** — a note changes on disk, the DB still holds the old embedding, and
+   search quietly returns wrong results. This is the dangerous one: it fails invisibly.
+2. **Lost writes** — the agent saves a note (D22 `save_note`) while the user has that file open
+   elsewhere; one write clobbers the other.
+3. **Renames and moves** — if the DB keys notes by path, moving a file orphans its highlights,
+   graph edges, and history.
+4. **Deletes** — removed files leave orphan chunks that keep surfacing in retrieval.
+5. **Bulk change** — a `git checkout` or a sync burst touches 500 files and triggers a
+   re-embedding stampede.
+
+**Decisions:**
+
+- **Watcher:** `watchdog` on the vault, **~2 s debounce**, coalescing bursts. Ignore
+  `.research-os/` and dotfiles entirely.
+- **Content hash gate:** compare SHA-256 before doing any work. An editor that rewrites a file
+  without changing bytes (very common) must cost **zero** re-embedding. This alone kills most of
+  failure mode 5.
+- **Note identity = a UUID in YAML frontmatter, not the file path.** Assigned on first
+  index. Renames and moves then preserve highlights, edges, and history — the watcher just
+  updates the path column. Wikilinks stay filename-based so Obsidian keeps working; the UUID is
+  the DB key, the filename is the human/Obsidian key, and the watcher reconciles the two.
+- **Write safety — the app never blind-overwrites.** Before writing any file it did not itself
+  last write, compare stored `(mtime, hash)`; if it changed externally, **abort the write and
+  surface a conflict** rather than merging or clobbering. The agent's `save_note` prefers
+  **creating a new note or appending** over rewriting a file in place.
+- **Conflict rule:** **the file on disk always wins over the DB.** The DB is rebuildable (D32);
+  the file is not.
+- **Deletes:** tombstone the row and drop its chunks immediately, so retrieval can never cite a
+  file that no longer exists (Q18 provenance depends on this).
+- **Startup reconciliation:** on launch, walk the vault and compare hashes against the DB to
+  repair anything that changed while the app was closed — cheap, because it is hashes, not
+  re-embedding. This is what makes "edit in Obsidian with the app shut" safe.
+
+### D38 — Voice: fully local STT/TTS (resolves Q48)
+
+**Why the old plan is dead, in detail.** D23 chose the **browser Web Speech API** because it was
+free and needed no media server. In Chrome, `webkitSpeechRecognition` does not run locally — it
+**streams audio to a Google speech service**, authorized by a **proprietary API key compiled into
+Google-branded Chrome builds**. Electron ships plain Chromium **without that key**. The result is
+not a degraded experience but a non-functional one: recognition either errors immediately or
+returns no results forever. **This cannot be patched or worked around** — it is an entitlement,
+not a bug. Any Electron app doing speech ships its own engine.
+
+**Decision — STT and TTS both run locally in the Python sidecar:**
+
+- **STT: `faster-whisper`** (CTranslate2), model **`base.en`, int8**. Runs comfortably real-time
+  on CPU, far faster if a GPU is free. ~150 MB of weights, downloaded once and cached in
+  `.research-os/`. `whisper.cpp` is the fallback if the CTranslate2/torch dependency weight
+  proves annoying — it is a small native binary with no Python ML stack behind it.
+- **TTS: Piper** — small, fast, fully offline, acceptable quality. Linux `speech-dispatcher` is
+  the zero-install fallback.
+- **Push-to-talk, not always-on VAD.** Simpler, no accidental capture, no idle CPU burn, no
+  microphone running unprompted in a research tool. Voice activity detection is future scope.
+- **Lazy-loaded** like every other model (D31 cold start) — the STT model must not load until
+  the first time the user actually presses the talk key.
+- **Cost, stated honestly:** this is real weight added to the sidecar that the Web Speech plan
+  did not carry, and it is **not yet prototyped**. Validate with a small spike before voice work
+  starts.
+- **D2's core claim survives:** voice is still a **thin transport over the same tool layer**, so
+  the harness is untouched. Only the transport changed — hosted WebRTC → browser Web Speech →
+  local engine. That is exactly the swap D2 was designed to absorb.
+- **Sequencing unchanged (D23):** text-first, voice after Slice 1. **If local STT proves too
+  heavy, voice slips — the pivot does not reverse.** Voice was never the load-bearing feature;
+  the Companion is.
 
 ---
 
 ## Open questions — status
 
-> **2026-08-01 — reopened by the desktop pivot.** The claim below ("nothing blocks building")
-> was true for the *web* product. **D31–D36 settled the shape of the desktop product, but opened
-> nine new questions (Q40–Q48)**, listed first. Two of them (**Q40** agent-execution consent and
-> **Q42** the execution model) are genuine blockers for the experiment feature; the rest have
-> safe defaults and can be decided at implementation time.
-
-### Open — introduced by the desktop pivot (2026-08-01)
-
-| # | Question | Recommendation |
-|---|---|---|
-| **Q40** ⛔ | **Does the agent run code without asking?** The sandbox contains the blast radius; it does not answer consent. | **Propose → user approves → run.** Show the diff and the container spec before the first run of an experiment; allow "approve this experiment's re-runs" afterwards. Never auto-run code the agent wrote from something it read. **Blocker — decide before building D33.** |
-| **Q41** | **Multi-machine sync** (laptop ↔ desktop). Dropped Drive OAuth left this unanswered. | **Nothing in v1.** The vault is a plain folder — the user can point Syncthing or a private git repo at it. Do not build sync; do not let it shape the schema. |
-| **Q42** ⛔ | **Execution model: Jupyter kernel (interactive, stateful) or script runs (batch, reproducible)?** They imply very different UIs and very different provenance stories. | **Script runs first** — reproducible by construction, matches `source: measured` (Q19 amendment), far simpler. A persistent kernel is the natural v2. **Blocker — this decides the experiment UI.** |
-| **Q43** | **Base image contents + per-project dependency management** (`uv` / `requirements.txt` / conda?). | `uv` + a per-project `requirements.txt` committed in the experiment folder, layered on the base image. Decide at implementation. |
-| **Q44** | **Vault file-watching.** Files are truth (D32) and the user may edit notes in Obsidian with the app closed — how are external edits detected and re-indexed, and what happens on a conflicting concurrent edit? | `watchdog` + debounce → re-embed changed files; **last-writer-wins on disk, DB always yields to the file.** Needs a decision on whether the app ever writes a note the user has open elsewhere. |
-| **Q45** | **GPU arbitration** between a resident vLLM server and experiment containers competing for VRAM. | Detect VRAM pressure and surface an explicit "unload local model" control. No automatic eviction. |
-| **Q46** | **Code editor component** — Monaco (VS Code's editor, the familiar feel) vs reusing **CodeMirror 6**, already chosen for LaTeX in D30. | **CodeMirror 6** — one editor stack, much lighter, already a dependency. Monaco only if the VS Code feel turns out to matter. |
-| **Q47** | **Distribution for self-install** — AppImage, or just `git clone` + `npm run`? | `git clone` + a `make dev` target. Student scope; no packaging pipeline. |
-| **Q48** | **Voice replacement is unvalidated.** The D2 amendment moves STT/TTS local (`faster-whisper` + Piper) because Web Speech does not work in Electron — but this has not been prototyped, and it adds real weight to the sidecar. | Validate before Slice 1 ends. Voice is post-Slice-1 (D23), so this is not blocking; if local STT proves heavy, voice slips rather than the pivot reversing. |
+> **Status 2026-08-01: FULLY SPECIFIED — D1–D38 and Q40–Q48 all resolved. Nothing blocks
+> building.** The desktop pivot reopened the architecture and closed it again the same day.
 
 ### Previously resolved (web product)
 
 **Architecture (D1–D20), build-spec (D21–D24), detailed-spec (D25–D29), and frontend (D30) were
-all resolved as of 2026-07-23** — several now amended or retired by D31–D36 above.
+all resolved as of 2026-07-23** — several now amended or retired by D31–D38 above.
 
 > **2026-07-31.** `FRONTEND_BRIEF.md` (screens, flows, style, schema) was **deleted** as
 > redundant — this file is the spec. Recoverable from git history if a screen-by-screen
