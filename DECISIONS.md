@@ -1,13 +1,28 @@
 # Research Companion OS — Architecture Decisions
 
-Recorded 2026-07-21, extended 2026-07-23. Companion to `Research Companion Workspace OS.md`
-(the product vision). This file is the **how**; that file is the **what**.
+Recorded 2026-07-21, extended 2026-07-23, **pivoted 2026-08-01**. Companion to
+`Research Companion Workspace OS.md` (the product vision). This file is the **how**; that file
+is the **what**.
 
 > **2026-07-23 session** resolved Q18 (provenance) and Q19 (experiment logging), amended D1
 > and D12, added D19 (fat backend / thin frontend) and D20 (the harness design, 7 nodes). A
 > mid-session pivot to a local desktop app — which reopened D2 and invariant #2 — was
 > **considered and reverted**: the product is **fully web-based, single-user-first**. See the
 > "2026-07-23 additions" section and the amendment notes on D1/D2/D12.
+>
+> ### ⚠️ **2026-08-01 — THE DESKTOP PIVOT IS NOW REAL (D31–D36).**
+>
+> The web-only stance above is **superseded.** Research Companion OS is now an
+> **Obsidian-inspired local desktop application**: an Electron shell supervising a Python
+> (FastAPI) sidecar, a plain-files vault on disk, an embedded Postgres index, and **Docker-
+> sandboxed experiment execution as a first-class feature**. The trigger was a requirement the
+> web framing could not satisfy: **running research experiments locally with real filesystem and
+> GPU access.** Read **"2026-08-01 — the desktop pivot"** at the bottom before D1–D30; where the
+> two conflict, the 2026-08-01 section wins.
+>
+> **Scope note:** this is a **solo, student-scope project** targeting **Linux, one user (the
+> author)**. Windows/macOS builds, code signing, notarization, auto-update infrastructure, and
+> multi-tenant scale are **explicitly out of scope** and are not to be raised as objections.
 
 ---
 
@@ -23,6 +38,13 @@ Not a solo local tool, not a pure demo. Auth and multi-tenancy from day one; no 
 > client** and the browser is the only surface. A desktop-app pivot was explored this session
 > and dropped. Scaling and multi-tenancy are explicit **future scope**.
 
+> **SUPERSEDED 2026-08-01 — local desktop app, single user, no hosting.** See **D31**. The
+> product is an **Electron desktop app** running a local Python sidecar against a local vault.
+> There is **no hosted deployment, no multi-tenancy, and no auth in v1**. The reason the
+> hosted framing failed: **local experiment execution** (filesystem + GPU) is a core research
+> need that a browser sandbox cannot serve. Multi-user is no longer "future scope by design" —
+> it is simply **not a goal**.
+
 **D2. Voice — WebRTC streaming STT → text agent → TTS.**
 Not a local speech-to-speech model (incompatible with hosted multi-user) and not a realtime
 s2s API (cost, hard to ground in workspace tools). Voice is a thin client over the same tool
@@ -32,6 +54,17 @@ layer the text UI uses, so it can be swapped for realtime s2s later without touc
 > could run a local s2s model); since the product stayed **fully web-based**, D2 stands
 > unchanged — hosted WebRTC STT → agent → TTS. Same for **invariant #2** (BYO API key, no
 > subscription auth): the local-CLI workaround needs a local process, which no longer exists.
+
+> **Amended 2026-08-01 — voice moves fully local; D23's Web Speech plan breaks.** The
+> **browser Web Speech API is not usable in Electron**: Chromium's speech recognition relies on
+> a Google backend reachable only via a proprietary API key that ships with Chrome and is not
+> present in Electron builds. D23's "$0, no media server" v1 voice mechanism therefore **does
+> not survive the pivot**. Replacement: **local STT/TTS inside the Python sidecar**
+> (`faster-whisper` for STT; Piper or the OS TTS for output) — genuinely $0, fully offline, and
+> better privacy. Voice remains a **thin transport over the same tool layer**, so the harness is
+> untouched (D2's core claim holds). **Invariant #2 still stands** — a local process now exists,
+> but using a Claude/ChatGPT *subscription* through a CLI remains ToS-forbidden; BYO API key or
+> a local model (D34) only.
 
 **D3. v1 scope — everything, in four sub-slices.**
 
@@ -53,6 +86,13 @@ API-first because a downloadable desktop app is planned. Next.js was rejected �
 API-first design. Future desktop = **Tauri/Electron shell around the same React build**, not a
 second UI codebase.
 
+> **Confirmed + activated 2026-08-01 — the shell is now built, and it is Electron.** The seam
+> this decision reserved is being used. **Electron over Tauri** because Tauri delegates to the
+> system webview, and this app leans hard on **PDF.js, KaTeX, and SwiftLaTeX WASM** — a pinned
+> Chromium is worth the bundle size, which is irrelevant for a Linux-only self-install anyway.
+> API-first pays off exactly as predicted: the React build and the FastAPI backend are unchanged,
+> the shell wraps them. See **D31**.
+
 **D5. Postgres only.**
 `pgvector` for embeddings, `tsvector` for BM25, join tables + recursive CTEs for the knowledge
 graph, JSONB for paper metadata. No Qdrant, no Neo4j. Split a store out only when a query
@@ -63,9 +103,23 @@ GoTrue auth (email/Google/GitHub), managed Postgres with pgvector, S3-compatible
 PDFs, row-level security. FastAPI verifies the JWT and keeps full SQL control. Saves ~2 weeks
 of undifferentiated auth/storage plumbing.
 
+> **RETIRED 2026-08-01 — Supabase is gone entirely.** All three things it provided are now
+> local: **auth → dropped** (single local user, D31); **storage → the vault folder on disk**
+> (D32); **Postgres → local, in a Docker container** (D35). Docker is already a hard dependency
+> for the experiment sandbox (D33), so running Postgres in it costs nothing extra and beats
+> bundling embedded binaries. **D5 (Postgres-only, pgvector + tsvector) is untouched** — only
+> the host changed. **D27 (auth) is retired with this.**
+
 **D14. Background jobs — Postgres-backed queue (SAQ w/ Postgres backend, or pgqueuer).**
 No Redis. Transactional enqueue, one less service to run. Jobs: PDF fetch/parse, embedding,
 structured extraction, feed polling.
+
+> **Amended 2026-08-01 — the queue survives, the *cadence* changes.** A desktop app is only
+> running when the user opens it, so **"daily cron" is not a thing that exists.** Scheduled work
+> (feed polling, weekly interest-profile re-extraction) becomes **catch-up-on-launch**: on
+> startup the sidecar checks `last_run_at` per scheduled job and runs anything overdue, once.
+> The queue itself is unchanged (Postgres-backed, transactional). Add **experiment container
+> runs** to the job list (D33) — long-running and cancellable.
 
 **D17. Repo — flat monorepo with npm workspaces.**
 
@@ -78,6 +132,18 @@ packages/api-client/   TS client generated from FastAPI's OpenAPI schema
 The generated client is the load-bearing part: a backend field rename becomes a **frontend
 compile error**, not a runtime `undefined`. `apps/` prefix was considered and dropped as
 pure ceremony.
+
+> **Amended 2026-08-01 — one directory added.**
+>
+> ```
+> backend/               FastAPI sidecar (harness, AI, Docker orchestration) — Python only
+> frontend/              Vite + React renderer
+> desktop/               Electron main + preload — launcher/supervisor, ~300 lines, no logic
+> packages/api-client/   TS client generated from OpenAPI (unchanged)
+> ```
+>
+> **`desktop/` must stay dumb.** It spawns the sidecar, owns the window, and proxies native
+> dialogs. **No AI, no business logic, no data access** — that is D19, restated for the shell.
 
 ---
 
@@ -160,6 +226,13 @@ Client-side. Zero server cost, zero sandbox/RCE surface, instant preview, works 
 Trade-off: ~20–40MB WASM on first use, exotic packages may be missing. Server-side Tectonic in
 a locked-down container is the fallback if package coverage proves insufficient.
 
+> **Amended 2026-08-01 — the fallback just got cheap; take it when needed without ceremony.**
+> Docker is now a hard dependency (D33) and the machine is the user's own, so **Tectonic in a
+> container** costs one image instead of a hosted service, and the "zero server cost / zero RCE
+> surface" argument for WASM largely dissolves. **Keep SwiftLaTeX WASM as the default** (instant
+> preview, no container spin-up per keystroke) and **promote Tectonic-in-Docker from
+> hypothetical fallback to a shipped escape hatch** for full package coverage on final compiles.
+
 ---
 
 ## Standing constraints (do / don't)
@@ -225,6 +298,21 @@ Outcomes are **user-authored** (AI never fabricates results — stays inside the
 discipline). Structured `metrics` make experiments **comparable rows** that can sit in a matrix
 alongside papers' extracted results, and are forward-compatible with the future live-tracking
 schema (ingestion writes into the same `{name, value}` shape — no migration).
+
+> **Amended 2026-08-01 — experiments now actually run, and this makes provenance *stronger*.**
+> Q19 assumed the app could never observe a run, so metrics had to be **user-authored** to stop
+> the AI fabricating results. With D33 the app **executes the experiment in a container it
+> controls**, so a third, better class appears:
+> - `source: user` — typed in by hand (Q19's original case). Still supported.
+> - `source: measured` — **captured from a real run** the app supervised: stdout/artifact parse,
+>   linked to `run_id`, exit code, image digest, config hash, timestamp. **This is the strongest
+>   provenance in the entire system** — a claim backed by a reproducible execution, not a quote.
+> - `source: llm` — **still forbidden.** The AI may *propose* code and *read* results; it may
+>   **never author a metric value.** Q18's through-line is unchanged.
+>
+> Every experiment record gains `runs[]` (`{run_id, started_at, exit_code, image, config_hash,
+> stdout_ref, artifacts[]}`). The forward-compatibility claim to W&B/MLflow holds — this *is*
+> that ingestion path, arriving early.
 
 ### D18 — (retired) hosted-core / desktop-harness partition
 
@@ -304,6 +392,18 @@ context, bidirectionally** — what's open/highlighted flows *into* the loop, an
 
 ### Deployment & the $0 free-tier plan — resolves Q3
 
+> **RETIRED 2026-08-01 — there is no deployment.** The app runs on the user's own machine
+> (D31); Cloudflare Pages, the Hugging Face Space, the Cloudflare Tunnel dev loop, and the
+> Supabase free tier are all **deleted**. Still **$0**, now trivially so. Two pieces of this
+> section **survive and are load-bearing** — carried into D31:
+> - **Heavy ML collapsed into in-process Python libraries** (docling instead of a GROBID JVM;
+>   `sentence-transformers` instead of an ML box). This is what makes a single sidecar process
+>   viable at all.
+> - **Everything ships as one Docker-composed unit**, which is now the install story.
+>
+> **Cost of the retirement, stated plainly:** there is no longer a clickable demo URL for the
+> portfolio. Accepted deliberately — demo via screen recording. Kept below for reference only.
+
 Portfolio-first, **$0**, extendable to real use later.
 
 - **Frontend** → Cloudflare Pages / Vercel (free, always on).
@@ -322,6 +422,25 @@ Portfolio-first, **$0**, extendable to real use later.
   a container move, not a rearchitect.
 
 ### PDF storage & user-owned blobs — resolves Q5
+
+> **INVERTED 2026-08-01 — files are the truth, Postgres is a rebuildable index.** See **D32**.
+> The old rule ("durable truth is Postgres, blobs are a cache") was correct for a hosted app and
+> is **wrong for an Obsidian-inspired local one** — the entire appeal of that model is that your
+> data is plain files in a folder you own, readable without the app. New rule:
+> - **Files on disk are truth** for everything human-authored or source: notes (`.md`), PDFs,
+>   experiment code and outputs, manuscripts.
+> - **Postgres is truth only for machine-derived data**: embeddings, `tsv`, parsed sections,
+>   extractive cards, graph edges, caches. **Delete the whole DB and it rebuilds from the vault.**
+> - Cost of the inversion, stated honestly: a rebuild means **re-parsing and re-embedding** the
+>   corpus. That costs time (minutes to hours), **not data**. Acceptable, and worth it.
+> - **Blob classes collapse to one:** the vault holds the PDF. No eviction tiering, no
+>   content-hash-only class. Re-fetch by canonical id stays as a *repair* path for a missing file.
+> - **BYO Google Drive / OneDrive OAuth is dropped** — it existed to avoid hosted storage cost,
+>   which no longer exists. The local folder *is* user-owned storage, which was the actual goal.
+>   Multi-machine sync is an **open question (Q41)**, not a v1 feature.
+> - **Markdown export is no longer a feature** — the notes were always markdown on disk.
+>
+> Kept below for reference; the three-blob-class scheme and the quota section no longer apply.
 
 **The durable truth is Postgres; PDF blobs are a cache or user-owned.**
 
@@ -375,6 +494,26 @@ The load-bearing schema decision: **what is global (shared, computed once) vs pr
   source ids retained; `papers` keyed on canonical id (this is the dedup + graph-edge key).
 - **Memory tables:** **two** — `paper_chunks` (global, no `project_id`) + `project_chunks` (has
   `project_id`), both `{embedding vector(768), tsv, source_type, source_id, char_span}`.
+
+> **Amended 2026-08-01 — reaffirmed against a "papers per project" request; the boundary holds.**
+> The user asked for **papers and notes to be per-project**, with a clear view of which papers
+> mattered to which project. **Notes: granted in full** — notes are project-owned, live in that
+> project's folder (D32), and never leak across projects. **Papers: the request is granted at the
+> level that matters (membership) but refused at the level of content.** Duplicating a PDF into
+> three projects would mean three parses, three sets of extractive cards, and three sets of
+> embeddings for one paper — destroying the D21 canonical id (DOI→arXiv→S2), the "compute once,
+> ever" constraint, and cross-project dedup. So:
+> - **Global, stored once:** the PDF blob, parsed text, extractive cards, `paper_chunks`
+>   embeddings, paper-intrinsic edges.
+> - **Per project:** membership, **why it's relevant** (user-authored), relevance level, notes,
+>   highlights, matrix placement. `project_papers` carries this and answers "what was relevant to
+>   this project" directly.
+> - **On disk** this reads as per-project anyway — each project folder holds a `papers/` view
+>   (symlinks into the global library + a human-readable `papers.md` index of what matters and
+>   why). See **D32**. Project-isolated retrieval is unchanged: the query-time union already
+>   filters by membership.
+> - **Account-level tables** (`users`, `storage_connections`) are **dropped** with D13/D27;
+>   `api_keys` becomes a local single-row settings store (D36).
 - **Chunking:** **section-aware** (split on docling section boundaries, sub-split long sections
   to a token budget with small overlap) — aligns chunks with the quote-anchor/provenance model.
 
@@ -449,7 +588,24 @@ build the adapter (extension seam), **bundle zero MCP servers in v1** — native
   (D20 node 6); **validate on save** (test call, surface available models).
 - **Entry:** a "Models" settings page + the onboarding wizard (D29).
 
+> **Amended 2026-08-01 — local models promoted to first class; key storage moves to the OS.**
+> See **D34**. Provider list becomes **~6 remote (unchanged) + Ollama + vLLM as named,
+> first-class local options** rather than something buried under "Custom / OpenAI-compatible."
+> Local providers take a **base URL and no key**, and the UI must not demand one. Key storage:
+> the AES-256-GCM master key lived in a Hugging Face Space secret, which no longer exists —
+> it now lives in the **OS keyring** (`libsecret` via the `keyring` package), never in the vault
+> and never in the DB. **Invariant #1 is unaffected and must be actively defended here:**
+> embeddings run on the fixed local `gte-modernbert-base` and are **never** routed through
+> Ollama or vLLM, however tempting the "you already have a local model server" symmetry looks.
+
 ### D27 — Auth + demo mode (Item 7)
+
+> **RETIRED 2026-08-01 — no auth in v1.** Supabase GoTrue, Google OAuth, email/password, the
+> anonymous demo door, and JWT verification are all **deleted**. The app runs locally for one
+> user; the OS login *is* the auth boundary. **`owner_id` columns are dropped** — carrying a
+> dead column "so scaling is a widening" is exactly the speculative ceremony this project should
+> not pay for, and re-adding it later is one migration. **RLS was already deferred; now moot.**
+> Google OAuth also died with the Drive storage connection (Q5 amendment).
 
 - **Full Supabase GoTrue.** Real accounts: **Google OAuth (primary — doubles as the Drive
   connection, Q37) + email/password**; GitHub deferred.
@@ -484,6 +640,14 @@ build the adapter (extension seam), **bundle zero MCP servers in v1** — native
   custom_column_cache}`.
 
 ### D29 — Onboarding (Item 10)
+
+> **Amended 2026-08-01 — four steps become three, and one is new.** Step 1 (**Account**) is
+> **deleted** with D27. Step 4 (**Storage**/Drive) is **replaced** by *"pick your vault folder"*
+> (default `~/ResearchOS`, D32) — and it is **no longer skippable**, since nothing works without
+> a vault. New **step 0: environment check** — verify Docker is present and the daemon is
+> reachable (D33), and offer the exact `dnf`/`systemctl` commands if not. Resulting wizard:
+> **environment → vault folder → models (incl. local, D34) → first project + focus seed.**
+> The gated-not-progressive stance is unchanged.
 
 **Gated setup wizard** (all required → a working project). Progressive/lazy prompting was
 considered and **rejected** in favor of complete upfront setup.
@@ -531,10 +695,175 @@ considered and **rejected** in favor of complete upfront setup.
 
 ---
 
+## 2026-08-01 — the desktop pivot (D31–D36)
+
+**Where this section conflicts with anything above, this section wins.**
+
+The trigger: **experimentation is not optional in research.** Reading papers and taking notes is
+half the loop; running the thing is the other half. A hosted web app cannot touch the user's
+filesystem or GPU, and the "Agentic OS" direction only means something if the agent can act on
+the actual machine. That requirement — not aesthetics, not "desktop feels more OS-like" — is
+what reopened D1 for the third and final time.
+
+**Student-scope framing (binding):** solo developer, **Linux only**, **one user**. Code signing,
+notarization, Windows/macOS builds, auto-update servers, multi-tenancy, and ops burden are
+**out of scope by decision**. Effort goes to the core app.
+
+### D31 — App shape: Electron shell + Python sidecar
+
+**"Does a desktop app even have a backend?" — yes, and here it is forced.** All AI stays Python
+(docling, `sentence-transformers`, LiteLLM, torch). Electron is Node + Chromium and **cannot
+execute Python**. A separate Python process is therefore a **language boundary, not a design
+preference**. This is the same shape as VS Code (Electron + extension host + language servers),
+Obsidian (Electron + main-process file I/O), and Jupyter Lab (web UI + Python server).
+
+| Layer | Tech | Responsibility |
+|---|---|---|
+| **Shell** | Electron main + preload (`desktop/`) | Spawn/supervise the sidecar, own the window, native file dialogs, tray, lifecycle. **Zero logic.** |
+| **Renderer** | React + Vite (`frontend/`) | The window. Unchanged from D30 / `UI_DESIGN.md`. |
+| **Sidecar** | FastAPI + the harness (`backend/`) | Everything real: agent loop (D20), retrieval, parsing, embedding, Docker orchestration. |
+| **Index** | Postgres + pgvector in Docker | Machine-derived data only (D35). |
+| **Truth** | The vault folder | Files on disk (D32). |
+
+**D19 is not weakened — it is sharpened: fat sidecar, thin shell.** The renderer and the Electron
+main process both stay dumb. If logic starts leaking into `desktop/`, that is the failure mode to
+watch for.
+
+**Transport:** the sidecar binds **`127.0.0.1` on an ephemeral port**, and Electron passes the
+port plus a **per-launch bearer token** to the renderer. The token is mandatory: any local
+process — including any web page in any browser — can otherwise reach a localhost port. **D20
+node 5's WebSocket protocol is unchanged**; it just terminates on loopback instead of the
+internet. Existing REST + generated api-client (D17) unchanged.
+
+**Cold start ("open the app and it runs"):** Electron shows the window immediately with a
+readiness strip; the sidecar reports **per-capability readiness** as it warms. **ML models load
+lazily** — importing torch and the embedding model is 5–15 s and must never block first paint.
+Search, notes, and the vault tree are usable before embeddings are. Escape hatch if that still
+irritates in daily use: run the sidecar as a **systemd user service** so it is always warm and
+Electron just attaches.
+
+**Updates:** `git pull` + rebuild. No updater, no release pipeline. Student scope.
+
+### D32 — The vault: files are truth
+
+```
+~/ResearchOS/
+  library/
+    papers/<canonical-id>/       paper.pdf, parsed.json      ← GLOBAL, stored once (D21)
+  projects/<project-slug>/
+    notes/                       *.md            ← project-owned, never shared
+    papers/                      symlinks → library/papers/<id>  + papers.md index
+    experiments/<exp-slug>/      code/, outputs/, run log
+    manuscript/                  *.tex, figures/
+    project.md                   focus seed, interest profile (human-readable)
+  .research-os/                  Postgres data, model cache, blob cache  ← REBUILDABLE
+```
+
+- **Everything outside `.research-os/` is truth.** Everything inside is derived and may be
+  deleted at any time; the app rebuilds it from the vault.
+- **`papers.md` per project** is the direct answer to "which papers were relevant to this
+  project, and why" — a human-readable list with the user's relevance note, readable in Obsidian
+  with the app closed. The DB row (`project_papers`) is the queryable mirror, not the source.
+- **Symlinks, not copies** — one PDF, one parse, one set of embeddings (D21 amendment).
+- **The vault is Obsidian-compatible on purpose.** Notes are plain markdown with wikilinks; the
+  user can open the same folder in Obsidian. That is the whole point of the file layout.
+- **Consequence: the app is not the only writer.** It must watch the vault and re-index on
+  external change (see **Q44**).
+
+### D33 — Experiment execution: Docker sandbox, always
+
+**Every piece of code this system runs, runs in a container. No exceptions, no opt-out.**
+
+The threat is not the user's own scripts — it is that **the agent writes and runs code, and the
+agent reads PDFs from the open internet**. A prompt-injected paper that talks the agent into
+running something is a realistic path to arbitrary code execution on the user's machine. So the
+sandbox is **default-on for all execution**, agent-initiated or user-initiated.
+
+- **Docker containers** (chosen over bubblewrap/firejail): strongest isolation for the effort,
+  and **reproducible environments are something researchers want anyway** — the sandbox and the
+  reproducibility feature are the same mechanism. **Docker becomes a hard dependency**, checked
+  at onboarding (D29).
+- **Per-run container**, from a **project-pinned image**. Ship a base image with the usual stack
+  (numpy / pandas / torch / scikit-learn / matplotlib) so a run starts in ~1 s rather than
+  resolving pip every time; per-project extra dependencies layer on top.
+- **Mounts:** the project's `experiments/<exp>/` read-write, `library/` read-only if the run
+  needs paper data. **Nothing else.** Never the whole vault, never `$HOME`.
+- **Network: off by default.** Explicit per-experiment opt-in (dependency installs, dataset
+  downloads) — recorded in the run record, because a networked run is a less reproducible run.
+- **Limits:** CPU, memory, wall-clock timeout. **GPU via `--gpus`** + nvidia-container-toolkit,
+  opt-in per experiment.
+- **Runs go on the D14 queue** — long-lived, cancellable, streaming logs to the UI over the
+  existing WebSocket.
+- **Captured per run:** `run_id`, image digest, config hash, exit code, stdout/stderr, declared
+  output artifacts. This feeds `source: measured` metrics (Q19 amendment) — the strongest
+  provenance in the system.
+- **The agent proposes; it does not silently execute** — see **Q40**.
+
+### D34 — Local LLMs: Ollama and vLLM, first class
+
+Researchers with a decent GPU should be able to run this with **zero API spend**.
+
+- **Near-zero plan change:** LiteLLM (D10) already speaks `ollama/*` natively and reaches vLLM
+  through its OpenAI-compatible endpoint. This is configuration, not architecture.
+- **Named, first-class entries** in the model settings (D26) — **not** hidden under "Custom /
+  OpenAI-compatible." Each takes a **base URL and no API key**; the UI must not require one.
+- **Model discovery:** query the endpoint for available models rather than making the user type
+  a model string.
+- **Tool-calling varies wildly across local models.** D20 node 6's **prompted-structured-output
+  fallback** is what makes this usable, and it becomes load-bearing rather than a nicety.
+- **Invariant #1 holds, and is under active threat here:** once a local model server is running,
+  routing embeddings through it looks natural. **Do not.** Embeddings stay on the pinned local
+  `gte-modernbert-base` forever (D11/D24).
+- **GPU contention is real** — vLLM holding VRAM starves experiments (see **Q45**).
+
+### D35 — Postgres: local, in Docker
+
+`docker compose` brings up **Postgres + pgvector**, data under `.research-os/`, started and
+health-checked by the sidecar on launch. Chosen over embedded binaries (`pgserver`) and over
+SQLite + `sqlite-vec`: **Docker is already a hard dependency for D33**, so this adds one
+container and zero new concepts, and it keeps **D5, D14, D21, and the whole retrieval design
+byte-for-byte unchanged**. SQLite would have been simpler to ship but would have forced a
+rewrite of the pgvector/tsvector hybrid retrieval and the Postgres job queue — a large cost for
+a dependency already paid.
+
+### D36 — What the pivot does *not* change
+
+Recorded so no future session re-opens settled ground: **D5** (Postgres-only), **D6/D25**
+(federated search), **D7/Q18** (extractive-only provenance), **D8** (OA + upload, never scrape
+paywalls), **D11/D24** (fixed embedding model — **invariant #1**), **D15/D28** (graph + matrix),
+**D19** (fat backend), **D20** (the harness, all 7 nodes), **D21** (global/project boundary, as
+amended), **D22** (tool catalog), **D30** (3-pane shell + persistent Companion), and
+`UI_DESIGN.md` (look and feel). **Invariant #2 also stands** — a local process now exists, but
+Claude/ChatGPT *subscriptions* remain ToS-forbidden as app LLM access; BYO key or local model.
+
+---
+
 ## Open questions — status
 
-**FULLY SPECIFIED as of 2026-07-23 — architecture (D1–D20), build-spec (D21–D24), detailed-spec
-(D25–D29), and frontend (D30) all resolved. Nothing blocks building.**
+> **2026-08-01 — reopened by the desktop pivot.** The claim below ("nothing blocks building")
+> was true for the *web* product. **D31–D36 settled the shape of the desktop product, but opened
+> nine new questions (Q40–Q48)**, listed first. Two of them (**Q40** agent-execution consent and
+> **Q42** the execution model) are genuine blockers for the experiment feature; the rest have
+> safe defaults and can be decided at implementation time.
+
+### Open — introduced by the desktop pivot (2026-08-01)
+
+| # | Question | Recommendation |
+|---|---|---|
+| **Q40** ⛔ | **Does the agent run code without asking?** The sandbox contains the blast radius; it does not answer consent. | **Propose → user approves → run.** Show the diff and the container spec before the first run of an experiment; allow "approve this experiment's re-runs" afterwards. Never auto-run code the agent wrote from something it read. **Blocker — decide before building D33.** |
+| **Q41** | **Multi-machine sync** (laptop ↔ desktop). Dropped Drive OAuth left this unanswered. | **Nothing in v1.** The vault is a plain folder — the user can point Syncthing or a private git repo at it. Do not build sync; do not let it shape the schema. |
+| **Q42** ⛔ | **Execution model: Jupyter kernel (interactive, stateful) or script runs (batch, reproducible)?** They imply very different UIs and very different provenance stories. | **Script runs first** — reproducible by construction, matches `source: measured` (Q19 amendment), far simpler. A persistent kernel is the natural v2. **Blocker — this decides the experiment UI.** |
+| **Q43** | **Base image contents + per-project dependency management** (`uv` / `requirements.txt` / conda?). | `uv` + a per-project `requirements.txt` committed in the experiment folder, layered on the base image. Decide at implementation. |
+| **Q44** | **Vault file-watching.** Files are truth (D32) and the user may edit notes in Obsidian with the app closed — how are external edits detected and re-indexed, and what happens on a conflicting concurrent edit? | `watchdog` + debounce → re-embed changed files; **last-writer-wins on disk, DB always yields to the file.** Needs a decision on whether the app ever writes a note the user has open elsewhere. |
+| **Q45** | **GPU arbitration** between a resident vLLM server and experiment containers competing for VRAM. | Detect VRAM pressure and surface an explicit "unload local model" control. No automatic eviction. |
+| **Q46** | **Code editor component** — Monaco (VS Code's editor, the familiar feel) vs reusing **CodeMirror 6**, already chosen for LaTeX in D30. | **CodeMirror 6** — one editor stack, much lighter, already a dependency. Monaco only if the VS Code feel turns out to matter. |
+| **Q47** | **Distribution for self-install** — AppImage, or just `git clone` + `npm run`? | `git clone` + a `make dev` target. Student scope; no packaging pipeline. |
+| **Q48** | **Voice replacement is unvalidated.** The D2 amendment moves STT/TTS local (`faster-whisper` + Piper) because Web Speech does not work in Electron — but this has not been prototyped, and it adds real weight to the sidecar. | Validate before Slice 1 ends. Voice is post-Slice-1 (D23), so this is not blocking; if local STT proves heavy, voice slips rather than the pivot reversing. |
+
+### Previously resolved (web product)
+
+**Architecture (D1–D20), build-spec (D21–D24), detailed-spec (D25–D29), and frontend (D30) were
+all resolved as of 2026-07-23** — several now amended or retired by D31–D36 above.
 
 > **2026-07-31.** `FRONTEND_BRIEF.md` (screens, flows, style, schema) was **deleted** as
 > redundant — this file is the spec. Recoverable from git history if a screen-by-screen
@@ -550,7 +879,13 @@ Deferred to **implementation time** (not architecture blockers):
 - Full negative-example learning for feed dismissals (v1 = light down-weight only).
 - Two-layer extractive→paraphrase card display (v1 = extractive-only).
 - GROBID-as-a-service upgrade if docling's reference extraction proves insufficient.
-- Multi-tenancy / scaling widening (auth already in; single-tenant v1).
+- ~~Multi-tenancy / scaling widening~~ — **dropped 2026-08-01**, not a goal (D27 retired).
 
-*(Closed/parked: Q6 rate-limiting — dissolved by single-user; offline/desktop — moot, fully
-web-based; feed→harness wiring — feed is a D14 scheduled job.)*
+*(Closed/parked: Q6 rate-limiting — dissolved by single-user; ~~offline/desktop — moot, fully
+web-based~~ **→ reopened and resolved as D31, 2026-08-01**; feed→harness wiring — feed is a D14
+job, now catch-up-on-launch rather than cron.)*
+
+**Dead by the 2026-08-01 pivot — do not re-derive:** Supabase (D13), GoTrue auth + `owner_id` +
+RLS (D27), Cloudflare Pages / HF Space deployment (Q3), BYO Google Drive / OneDrive storage +
+the three-blob-class scheme + storage quota (Q5), browser Web Speech API as the v1 voice
+mechanism (D23), and the hosted demo URL.
