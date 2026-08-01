@@ -80,6 +80,24 @@ layer the text UI uses, so it can be swapped for realtime s2s later without touc
 
 Knowledge graph is built incrementally across slices (see D15) rather than as its own slice.
 
+> **Amended 2026-08-01 — experiments become Slice 2; everything else shifts down.** The original
+> order was written when experiments were a **text log** (Q19). After D33 they are a notebook +
+> Docker kernel + consent gate — the second-largest subsystem in the app, and **the capability
+> that justified the desktop pivot in the first place.** Building it fourth would mean the reason
+> for the rewrite arrives last. Revised order:
+>
+> | Slice | Contents |
+> |---|---|
+> | **1** | Project workspace + AI research search + reader with ask-about-highlight + notes + retrieval over everything read *(unchanged)* |
+> | **2** | **Experiments — notebook UI, Docker sandbox, kernel, consent gate, structured experiment record (D33 / Q19)** |
+> | **3** | Reader depth + literature matrix |
+> | **4** | Writing workspace (LaTeX) |
+> | **5** | Research feed |
+>
+> **Voice (D23/D38) still lands right after Slice 1**, unchanged — it only needs the tool layer,
+> and it stays behind its module boundary either way. Knowledge graph still accretes across
+> slices rather than owning one.
+
 ---
 
 ## Stack
@@ -199,7 +217,7 @@ still work on weak open-weight models that tool-call badly.
 LLM rewrites the query per source → parallel fan-out to arXiv / OpenAlex / Semantic Scholar /
 Crossref / Papers with Code / GitHub → dedupe by DOI/arXiv-id → cross-encoder rerank top ~100 →
 cache results in Postgres. No owned index (a 250M-work OpenAlex snapshot is a whole project
-before feature one works). Revisit for the Feed in slice 4.
+before feature one works). Revisit for the Feed in the Feed slice (D3 amended: Slice 5).
 
 **D7. Structured extraction — two-stage, lazy.**
 1. Results list shows **abstract summary + metadata only** (title, venue, year, citations, code
@@ -362,7 +380,7 @@ context, bidirectionally** — what's open/highlighted flows *into* the loop, an
 | 1 | **Control loop** | Single-agent tool-calling loop. Subagents exist only **as tools** (e.g. `deep_research`), never as top-level orchestration. **Hard iteration cap** (~8–10) with a graceful stop. |
 | 2 | **Context assembly** | **Hybrid.** *Ambient (always-on, deterministic):* system prompt + provenance rules, tool schemas, **live UI/workspace state**, compact working set (active items as ids/titles). *Deep memory (demand-driven):* `query_memory` tool returning **cited rows**. History **compacted** past a budget (full history stays in DB); eviction order: working set → history → per-turn retrieval; system/tools/UI-state never evicted. |
 | 3 | **Tool layer** | Reference-based `ToolResult` = `{model_view` (tiny summary)`, ui_view` (renderable, **by id**, never in LLM context)`, refs` (stable ids)`, ui_actions` (UI commands)`}`. Large results → **server-side result store**, keyed by id; model manipulates handles, not payloads. Taxonomy: **Query / Action / MCP-bridged**, one contract. **Native-first**; MCP is the extensibility lane, not the core mechanism. |
-| 4 | **Memory** | One **project-scoped BGE-M3 pgvector + tsvector index** over *all* artifacts (papers chunked, notes, experiments, conversations), tagged `{type, source_id}`; hybrid retrieval → rerank → cited rows. **Write path = C (hybrid):** explicit artifacts are **user-authored ground truth**; conversations persist **verbatim + a summary-as-index** (recall links back to verbatim turns); **no AI-invented standalone facts** in v1. **User-visible and editable.** Compaction is a *window* op, not forgetting (salient turns already in memory). |
+| 4 | **Memory** | One **project-scoped BGE-M3 pgvector + tsvector index** over *all* artifacts (papers chunked, notes, experiments, conversations), tagged `{type, source_id}`; *(**2026-08-01:** "experiments" here means the **structured experiment record**, not notebook file contents — see D33)*; hybrid retrieval → rerank → cited rows. **Write path = C (hybrid):** explicit artifacts are **user-authored ground truth**; conversations persist **verbatim + a summary-as-index** (recall links back to verbatim turns); **no AI-invented standalone facts** in v1. **User-visible and editable.** Compaction is a *window* op, not forgetting (salient turns already in memory). |
 | 5 | **Web I/O** | **WebSocket** (bidirectional, single channel). Typed event stream — *down:* `status / text_delta / tool_call / tool_result(ref) / ui_action / turn_complete / error`; *up:* `user_message / ui_state / interrupt`. **UI-state snapshot attached to each `user_message` + incremental `ui_state` pushes** mid-turn. **First-class interrupt** (cancels the turn; partial results retained). Voice stays on a separate **WebRTC** path (D2). |
 | 6 | **Model & turns** | **Pure agent** (D12 amended — no hardwired fast path). **Primary + optional auxiliary model tier:** user sets a primary chat model (BYO key via LiteLLM D10); auxiliary tasks (extraction, summarization, interest classification) default to an optional cheaper model, else fall back to primary. **Prompted-structured-output fallback** for models without native tool-calling (graceful degradation). Embeddings/rerank are non-LLM. |
 | 7 | **Runtime shape** | **In-process async** cancellable `asyncio` task per turn, bound to the WebSocket session (this is what makes interrupt real). I/O-bound steps `await`ed inline; **CPU-bound steps (embed, parse, rerank) offloaded to the D14 Postgres job queue** — never block the event loop. Turn state in-process but **persisted incrementally**. Harness is a **self-contained, extractable package** (`backend/harness/`) so a future move to a dedicated worker is extraction, not rewrite. |
@@ -552,9 +570,11 @@ The load-bearing schema decision: **what is global (shared, computed once) vs pr
   `create_highlight(paper_id, anchor)` A, `log_experiment`/`update_experiment` A.
 - **Navigation (emit `ui_actions`):** `open_paper`, `scroll_to`, `highlight_span`,
   `open_view(matrix|graph|feed|experiments)`.
-- **Later slices:** `build_matrix`/`update_cell` (S2); `get_feed`/`save_feed_item`/
-  `dismiss_feed_item`/`get_interest_profile`/`update_interest_profile` (S4); `insert_citation`/
-  `check_citations`/`find_missing_citations` (S3); `get_graph`/`find_related` (graph viz).
+- **Later slices** *(slice numbers per D3 as amended 2026-08-01)*: `propose_cell`/`run_all`/
+  `read_run` (S2, experiments); `build_matrix`/`update_cell` (S3); `insert_citation`/
+  `check_citations`/`find_missing_citations` (S4); `get_feed`/`save_feed_item`/
+  `dismiss_feed_item`/`get_interest_profile`/`update_interest_profile` (S5);
+  `get_graph`/`find_related` (graph viz, accretes across slices).
 
 Design rules: **(Fork A)** reader Q&A is **not a tool** — it's the core agent loop answering
 from ambient UI-state + retrieval tools (no redundant `ask_paper` hop). **(Fork B)**
@@ -580,7 +600,9 @@ build the adapter (extension seam), **bundle zero MCP servers in v1** — native
 - **v1 voice mechanism = browser Web Speech API** (client-side STT+TTS, **$0**, no media
   server) — **amends D2 for v1.** Server-side WebRTC STT→TTS and realtime-s2s are the
   quality/scale **upgrade path** (swap transport, harness untouched).
-- **Build order:** Slice 1 (text) → voice layer (Web Speech API) → Slices 2–4 (voice rides free).
+- **Build order:** Slice 1 (text) → voice layer → Slices 2–5 (voice rides free).
+  *(2026-08-01: the mechanism is now local STT/TTS per D38, and the slice list is D3 as amended —
+  experiments are Slice 2.)*
 
 ### D24 — Model picks
 
@@ -714,7 +736,7 @@ considered and **rejected** in favor of complete upfront setup.
   / refs / datasets / code); **toggleable extractive card** whose fields click-through to
   `scroll_to`+`highlight_span` the source span; **cross-pane quote-anchor sync** (chat citation
   ↔ card field ↔ PDF span all speak the Q33 anchor).
-- **Writing (LaTeX, Slice 3):** **CodeMirror 6** source (LaTeX highlight) + **live inline KaTeX
+- **Writing (LaTeX, Slice 4 per D3 as amended):** **CodeMirror 6** source (LaTeX highlight) + **live inline KaTeX
   math** (the Obsidian touch) + **debounced SwiftLaTeX WASM PDF preview** (~1–2s, Overleaf-
   style — full WYSIWYG for a whole LaTeX doc is impossible) + compile-error panel. GUI help:
   toolbar snippets, command + `\cite`/`\ref` autocomplete (cite pulls project refs), env
@@ -853,6 +875,23 @@ sandbox is **default-on for all execution**, agent-initiated or user-initiated.
 - **Cell execution + kernel lifecycle ride the D14 queue** — cancellable, with logs and results
   streaming to the UI over the existing WebSocket (D20 node 5). Interrupt is already first-class
   there, which is exactly what "stop this cell" needs.
+
+**Two pieces deliberately left open (decided 2026-08-01 — future scope, with consequences
+stated):**
+
+- **Sidecar ↔ kernel transport is unspecified.** The likely shape is `jupyter_client` over ZMQ to
+  a kernel inside the container, ports published to loopback only. **This is a technical spike,
+  not an architecture decision**, so deferring it is legitimate — but it is a **prerequisite of
+  Slice 2, not open-ended**: it must be resolved before experiment work starts, since everything
+  else in D33 assumes it works. It is the least-proven part of this pivot.
+- **Notebook *content* is not in the memory index in v1.** Deciding what to chunk out of a
+  `.ipynb` (code cells, markdown, text outputs — and what to exclude, like base64 images and
+  stack traces that would pollute retrieval) is deferred. **Consequence, so nothing silently
+  contradicts D20 node 4:** in v1 the **structured experiment record is indexed and retrievable**
+  (hypothesis, setup, metrics, notes, status, graph links — Q19), and the **notebook file is
+  not**. `query_memory` can find "the experiment where I tried X"; it cannot find a specific line
+  of code inside a notebook. The notebook remains a plain file in the vault, readable and
+  greppable — just not embedded.
 
 **Reconciling an interactive kernel with reproducible provenance.** A stateful kernel is the
 right tool for research and the wrong tool for evidence: out-of-order cells and hidden state mean
@@ -1062,6 +1101,15 @@ all resolved as of 2026-07-23** — several now amended or retired by D31–D38 
 *(Next, on the user's instruction only: write PRD / TRD, with user-tagged skills.)*
 
 Deferred to **implementation time** (not architecture blockers):
+- **Sidecar ↔ Jupyter kernel transport** (D33) — likely `jupyter_client`/ZMQ on loopback.
+  A spike, not a decision. **Must be settled before Slice 2 begins.**
+- **Notebook content in the memory index** (D33) — v1 indexes the *structured experiment record*
+  only; the `.ipynb` itself is not chunked or embedded.
+- **API-key encryption may be redundant now** (D26) — key and ciphertext sit on the same disk,
+  single user, no network service. Consider dropping AES-256-GCM for plain OS-keyring storage and
+  deleting the crypto layer. Not urgent; it works as specified.
+- **`UI_DESIGN.md` has no notebook screen** — it predates D33. The Experiments pane will be
+  designed freehand against the existing visual language (inspiration-rank, so not blocking).
 - Feed fetch-vs-rank tuning as the corpus grows; interest-profile refresh cadence.
 - Full negative-example learning for feed dismissals (v1 = light down-weight only).
 - Two-layer extractive→paraphrase card display (v1 = extractive-only).
