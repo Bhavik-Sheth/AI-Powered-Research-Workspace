@@ -262,7 +262,8 @@ a locked-down container is the fallback if package coverage proves insufficient.
 - **Don't let a `measured` metric come from anything but a clean restart-and-run-all** (D33/Q19).
 - **Don't route embeddings through Ollama/vLLM** just because a local server is running (D34,
   invariant #1).
-- **Don't overwrite a vault file the app didn't last write** — conflict, don't clobber (D37).
+- **Don't build a file watcher or conflict resolution** — the app is the vault's sole writer
+  (D37). But **don't key notes by file path either**; use the stable frontmatter id.
 - **Don't put logic in `desktop/`** — the Electron shell is a launcher, nothing more (D31).
 - **Don't build multi-machine sync, GPU arbitration, or auth** — all explicitly out of scope
   (Q41, Q45, D27).
@@ -809,13 +810,16 @@ Electron just attaches.
 - **Everything outside `.research-os/` is truth.** Everything inside is derived and may be
   deleted at any time; the app rebuilds it from the vault.
 - **`papers.md` per project** is the direct answer to "which papers were relevant to this
-  project, and why" — a human-readable list with the user's relevance note, readable in Obsidian
-  with the app closed. The DB row (`project_papers`) is the queryable mirror, not the source.
+  project, and why" — a human-readable list with the user's relevance note, readable in any text
+  editor with the app closed. The DB row (`project_papers`) is the queryable mirror, not the
+  source.
 - **Symlinks, not copies** — one PDF, one parse, one set of embeddings (D21 amendment).
-- **The vault is Obsidian-compatible on purpose.** Notes are plain markdown with wikilinks; the
-  user can open the same folder in Obsidian. That is the whole point of the file layout.
-- **Consequence: the app is not the only writer.** It must watch the vault and re-index on
-  external change — see **D37**.
+- **"Obsidian-inspired" means the *storage concept*, not interoperability** (clarified
+  2026-08-01). What is borrowed: **your data is plain files in a folder you own**, readable and
+  portable without the app, not locked in a database. What is **not** intended: running Obsidian
+  against this vault, or supporting Obsidian's wikilink/plugin conventions. **This app is the
+  only writer** (see D37) — the local-files property is about **ownership and portability**, not
+  about sharing the folder with another editor.
 
 ### D33 — Experiment execution: Docker sandbox, always
 
@@ -928,13 +932,8 @@ Claude/ChatGPT *subscriptions* remain ToS-forbidden as app LLM access; BYO key o
 ### Q40–Q48 — asked and answered (2026-08-01)
 
 **D31–D36 settled the shape of the desktop product and opened nine questions. All nine were
-answered the same day**; the two that needed real design became **D37** (vault watching) and
+answered the same day**; the two that needed real design became **D37** (vault writers) and
 **D38** (voice).
-
-| # | Question | Recommendation |
-|---|---|---|
-**All nine were answered later the same day. Kept here as the record of what was asked and
-decided; the two that needed real design became D37 (vault watching) and D38 (voice).**
 
 | # | Question | **Decision (2026-08-01)** |
 |---|---|---|
@@ -942,51 +941,42 @@ decided; the two that needed real design became D37 (vault watching) and D38 (vo
 | **Q41** ✅ | Multi-machine sync (laptop ↔ desktop). | **Not built. Local device only.** No sync layer, no schema accommodation. The vault is a plain folder — point Syncthing or git at it if ever wanted. |
 | **Q42** ✅ | Jupyter kernel or script runs? | **Jupyter kernel** — interactive and stateful. Overrides the script-runs recommendation; reproducibility is preserved via the restart-and-run-all capture rule in **D33**. |
 | **Q43** ✅ | Base image + per-project dependencies. | **`uv` + per-project `requirements.txt`**, layered on a pinned base image. |
-| **Q44** ✅ | Vault file-watching and external edits. | Expanded into **D37**. |
+| **Q44** ✅ | Vault file-watching and external edits. | **Dissolved, not solved** — "Obsidian-inspired" meant the local-files *concept*, not running Obsidian against the vault. **The app is the sole writer**; no watcher in v1. See **D37**. |
 | **Q45** ✅ | GPU arbitration (vLLM vs experiments). | **Deferred past v1.** No arbitration, no VRAM detection — if both want the GPU, the user sorts it out manually. |
 | **Q46** ✅ | Monaco vs CodeMirror 6. | **CodeMirror 6** — one editor stack for LaTeX *and* notebook cells. |
 | **Q47** ✅ | Distribution. | **`git clone` + `make dev`.** No AppImage, no packaging pipeline. |
 | **Q48** ✅ | Local voice, unvalidated. | Expanded into **D38**. |
 
-### D37 — Vault watching & external edits (resolves Q44)
+### D37 — The app is the sole writer of the vault (resolves Q44)
 
-**The problem, stated plainly.** D32 makes files on disk the truth, and the vault is deliberately
-Obsidian-compatible — which means **the app is not the only writer**. The user edits notes in
-Obsidian or vim, with the app open or closed; git or a sync tool may rewrite many files at once.
-Five concrete failure modes follow, and each needs an answer:
+> **Scoped down 2026-08-01 on clarification.** The original version of this decision assumed the
+> user would edit the vault in Obsidian alongside the app, and specified a watcher, conflict
+> detection, and reconciliation to survive that. **That assumption was wrong.** "Obsidian-inspired"
+> means only the **storage concept — your data is plain local files you own** — not
+> interoperability with Obsidian. **No external editor is in scope for v1.**
 
-1. **Silent staleness** — a note changes on disk, the DB still holds the old embedding, and
-   search quietly returns wrong results. This is the dangerous one: it fails invisibly.
-2. **Lost writes** — the agent saves a note (D22 `save_note`) while the user has that file open
-   elsewhere; one write clobbers the other.
-3. **Renames and moves** — if the DB keys notes by path, moving a file orphans its highlights,
-   graph edges, and history.
-4. **Deletes** — removed files leave orphan chunks that keep surfacing in retrieval.
-5. **Bulk change** — a `git checkout` or a sync burst touches 500 files and triggers a
-   re-embedding stampede.
+**Decision: the application is the only writer of the vault, and may assume so.**
 
-**Decisions:**
+- **No file watcher, no debounce, no hash-diffing, no conflict detection, no startup
+  reconciliation.** All of it was insurance against a scenario that does not exist. Dropping it
+  removes a genuinely fiddly subsystem from v1 — the largest single simplification in this pivot.
+- The app writes files and updates the index **in the same operation**, so the DB and the disk
+  cannot drift. Staleness is not a failure mode when there is one writer.
+- **D32 is unchanged:** notes stay plain `.md`, PDFs stay real PDFs, the vault stays readable and
+  portable with the app closed. **Ownership and portability were always the point**; concurrent
+  external editing never was.
 
-- **Watcher:** `watchdog` on the vault, **~2 s debounce**, coalescing bursts. Ignore
-  `.research-os/` and dotfiles entirely.
-- **Content hash gate:** compare SHA-256 before doing any work. An editor that rewrites a file
-  without changing bytes (very common) must cost **zero** re-embedding. This alone kills most of
-  failure mode 5.
-- **Note identity = a UUID in YAML frontmatter, not the file path.** Assigned on first
-  index. Renames and moves then preserve highlights, edges, and history — the watcher just
-  updates the path column. Wikilinks stay filename-based so Obsidian keeps working; the UUID is
-  the DB key, the filename is the human/Obsidian key, and the watcher reconciles the two.
-- **Write safety — the app never blind-overwrites.** Before writing any file it did not itself
-  last write, compare stored `(mtime, hash)`; if it changed externally, **abort the write and
-  surface a conflict** rather than merging or clobbering. The agent's `save_note` prefers
-  **creating a new note or appending** over rewriting a file in place.
-- **Conflict rule:** **the file on disk always wins over the DB.** The DB is rebuildable (D32);
-  the file is not.
-- **Deletes:** tombstone the row and drop its chunks immediately, so retrieval can never cite a
-  file that no longer exists (Q18 provenance depends on this).
-- **Startup reconciliation:** on launch, walk the vault and compare hashes against the DB to
-  repair anything that changed while the app was closed — cheap, because it is hashes, not
-  re-embedding. This is what makes "edit in Obsidian with the app shut" safe.
+**One piece deliberately retained** (the only part worth its cost today):
+
+- **Key notes in the DB by a stable id carried in YAML frontmatter, not by file path.** It costs
+  essentially nothing to write now, and it is the one thing here that is **painful to retrofit** —
+  path-keyed rows mean every highlight, graph edge, and citation breaks the first time a file
+  moves, and converting later is a data migration rather than a code change. This also leaves the
+  door open to external editing without redesigning identity.
+
+**Explicitly deferred, not forgotten:** if external editing is ever wanted, the dropped design
+(watchdog + SHA-256 gate, never blind-overwrite, file-beats-DB, startup reconciliation) is
+recorded in this file's git history at commit `b53bff8` and can be lifted back in wholesale.
 
 ### D38 — Voice: fully local STT/TTS (resolves Q48)
 
@@ -1019,6 +1009,36 @@ not a bug. Any Electron app doing speech ships its own engine.
 - **Sequencing unchanged (D23):** text-first, voice after Slice 1. **If local STT proves too
   heavy, voice slips — the pivot does not reverse.** Voice was never the load-bearing feature;
   the Companion is.
+
+**Build order: infrastructure now, models later (decided 2026-08-01).**
+
+Build the **plumbing** — capture, transport, playback, the module boundary — against a **stub
+engine**, and drop `faster-whisper` in behind it afterwards. The stub returns canned text for
+STT and silence (or an OS beep) for TTS, which is enough to build and test every other part of
+the path. This keeps a ~150 MB model download and any GPU/CPU tuning off the critical path while
+the interesting work happens.
+
+**The module boundary is the point of this decision — voice must be swappable in exactly one
+place.**
+
+- **`backend/voice/` is a self-contained package with a narrow interface.** Two operations, both
+  engine-agnostic:
+  - `transcribe(audio_bytes, *, lang) -> Transcript`
+  - `synthesize(text, *, voice) -> audio_bytes`
+  Plus a small engine registry so `stub`, `faster_whisper`, `whisper_cpp`, or a future cloud
+  engine are **interchangeable implementations behind that interface**, selected by config.
+- **No other module may import an STT/TTS library, name an engine, or know a model exists.**
+  The harness (D20), the WebSocket transport (D20 node 5), and the UI all talk to
+  `backend/voice/` only. If swapping the engine requires touching anything outside that package,
+  the boundary is wrong and the fix goes into the package, not the caller.
+- **`frontend/src/voice/` is the mirror module** — it owns microphone capture, push-to-talk
+  state, and audio playback, and exposes one hook to the rest of the app. No component anywhere
+  else touches `getUserMedia` or an audio element.
+- **Model files, engine config, and warm-up all live inside the module** and stay lazy (D31 cold
+  start). Nothing outside it needs to know whether a model is loaded.
+- This is D19's "thin transport over the same tool layer" enforced structurally rather than by
+  intention: **voice produces text and consumes text, and the agent cannot tell how it arrived.**
+  That property is what lets the engine change without the application noticing.
 
 ---
 
