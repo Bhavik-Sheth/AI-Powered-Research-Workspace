@@ -10,11 +10,11 @@ colors, type, spacing, layout, component shapes. It does **not** outrank `DECISI
 with them on *behaviour, data, screens, or flows*, the decisions win and the screens below have
 been **corrected** — §9 logs every correction, so nothing is lost silently. Build what §1–§8 say.
 
-> **One deliberate override — the palette.** D30 §Style says *academic & warm — warm off-white /
-> sepia neutrals*. The design is a **cool blueprint** look: light-blue gridded frame, near-white
-> panels, cyan accent, warm sand only behind the frame. The design is newer and is what the user
-> pointed at, so **build the cool palette**. Every other part of D30 (light-only, serif for
-> reading, sans for chrome, recessive chrome) stands and the design honours it.
+> **The palette lives here.** The earlier warm off-white / sepia direction is retired; the
+> palette is the **cool blueprint** look below — light-blue gridded frame, near-white panels,
+> cyan accent, warm sand only behind the frame. D32 defers to this file on colour and type, and
+> its remaining style rules (light-only, serif for reading, sans for chrome, recessive chrome)
+> are honoured by this design.
 
 > **What changed in this revision.** The redesign absorbed almost all of the previous
 > reconciliation log: the reader is now a real PDF surface, experiments are a lab notebook,
@@ -97,7 +97,7 @@ button, the user's own chat bubble, quoted evidence. Nothing else is colored.
 |---|---|---|
 | **Space Grotesk** | 500/600/700/800 | All UI chrome: nav, tabs, labels, buttons, badges, meta, graph labels, **chat bubbles**, big stat numbers |
 | **Newsreader** (serif, incl. italic) | 400/600/800 | All *reading* surfaces: paper titles, note & draft body, card titles, quotes, hypotheses, detail prose |
-| **JetBrains Mono** | 400/500 | Metric values + units, char offsets, tool names, LaTeX source (D16) |
+| **JetBrains Mono** | 400/500 | Metric values + units, char offsets, tool names, LaTeX source (D34) |
 
 Ramp:
 
@@ -147,7 +147,7 @@ copy*. Do not mix.
 
 ---
 
-## 2. Shell layout — D30
+## 2. Shell layout — D32
 
 ```
 ┌─ frame: light-blue blueprint grid, radius 22, big soft shadow ─────────────────┐
@@ -161,7 +161,7 @@ copy*. Do not mix.
 
 Three columns **on every screen** — all ten mocks now hold this. The companion is never dropped,
 never a modal, never replaced by the center pane — it is one WebSocket session per project that
-survives center-pane navigation (D30; this is the USP). Views that want a secondary list, detail
+survives center-pane navigation (D32; this is the USP). Views that want a secondary list, detail
 column, or overlay sheet (Notes, Writing, Experiments, Graph, Reader) take it out of the center
 pane's width, not the companion's.
 
@@ -173,9 +173,11 @@ ellipsized — e.g. `Papers / Scaling Sparse Retrieval`, `Notes / Why the scorin
 `Search · "retrieval heads"`) · then right-aligned: **global search** field (`height 32px`,
 `width 220px`, radius 8, `--surface-raised`, `1px --border`, placeholder "Search everything…";
 **active state = `2px solid --accent`** and it holds the query text) · **settings** `⚙`
-(`15px`, muted) · **account** avatar (22px accent circle, white `700 9px` initials).
+(`15px`, muted). **There is no account avatar or account menu** — the app is
+single-user and has no auth (D1); the mock's avatar is dropped.
 
-No window chrome. This is a browser app (D1).
+No in-app window chrome — the Electron shell owns the native window (D2). The top bar is the
+app's own, not a title bar.
 
 ### Left nav (`200px`, `min-width 170px`, `padding 14px 0`, row gap `2px`)
 
@@ -189,7 +191,7 @@ WORK        Experiments
             Writing
 DISCOVER    Graph
             Feed
-            Matrix          ← required by D28/D30; missing from the mock (§9.2 A)
+            Matrix          ← required by D27/D32; missing from the mock (§9.2 A)
 ```
 
 Every routed center view must be reachable from here; search is reachable from the top bar.
@@ -213,7 +215,7 @@ max-width:200px`, radius `10px 10px 0 0`, `700 12px`. Active = `--surface` +
 centered, ellipsized, `oklch(38%)` text. A `+` glyph (26px circle, no chrome) at the end.
 The panel below uses `border-radius: 0 12px 14px 14px` so it welds to the active tab.
 
-> **Still undecided.** D30's router owns *one* center pane per URL; multi-tab open papers remains
+> **Still undecided.** D32's router owns *one* center pane per URL; multi-tab open papers remains
 > an invention of the mock and a real interaction-model change (routing, persistence, whether the
 > companion follows the active tab). Default to single-pane-per-route until it is decided; the tab
 > styling above is ready if it goes the other way. See §8.
@@ -224,7 +226,7 @@ The panel below uses `border-radius: 0 12px 14px 14px` so it welds to the active
 
 These recur on most screens; defined once here, referenced by §4.
 
-### 3.1 Companion pane — D20 node 5 / D23 / Q18
+### 3.1 Companion pane — D18 node 5 / D36 / D24
 
 `280px`, `min-width 220px`, `padding 14px`, `gap 10px`. Top to bottom: status line → transcript
 → composer.
@@ -232,9 +234,9 @@ These recur on most screens; defined once here, referenced by §4.
 - **Status line** — `7px` accent dot + italic `11px` muted (`Companion · <project>`, or a live
   status like "reading paper…"), driven by `status` events. While a turn runs, a **stop control**
   sits right-aligned: `✕ Stop`, `700 10px` upright sans, `1px accent/0.5` outline, radius 9,
-  `padding 3px 8px`, text `--accent-text-outline`. Interrupt is first-class (D20 node 5) so it is
+  `padding 3px 8px`, text `--accent-text-outline`. Interrupt is first-class (D18 node 5) so it is
   visible, not hidden. **Idle turns hide it** (screen 09).
-- **Transcript**, five visually distinct kinds — this split *is* the Q18 provenance rule made
+- **Transcript**, five visually distinct kinds — this split *is* the D24 provenance rule made
   visible, so never collapse it:
   - *User:* accent fill, white, `radius 10px 10px 2px 10px`, right-aligned, `max-width 85%`,
     `12px` sans, `padding 8px 12px`.
@@ -248,7 +250,7 @@ These recur on most screens; defined once here, referenced by §4.
   - *Tool-result card:* what the chip collapses into — `--surface-raised`, radius 10,
     `1px --border`, `padding 9px 11px`: a `700 10px` `.06em` header (`SEARCH_LIBRARY · 3 MATCHES`),
     up to 3 result rows at `11px` sans, then an `open all` link in accent. Rendered from `ui_view`
-    by id (D19/D20 — the frontend never re-derives it).
+    by id (D17/D18 — the frontend never re-derives it).
   - *Unverified claim* (span failed the substring validator): the evidence block with
     `border-left: 2px solid var(--danger-rule)`, **no tint**, plus a `⚠ unverified` badge —
     `700 10px`, `1px --danger-badge-border`, radius 9, text `--danger-text`.
@@ -257,9 +259,9 @@ These recur on most screens; defined once here, referenced by §4.
 - **Composer** — `36px` input, radius 10, `1px --border`, white, placeholder "Ask the companion…";
   then a **mic button** (36px circle, outlined, white, drawn as a capsule + base glyph) and the
   accent **send** circle (`36px`, `800 14px ↑`, white). Reserve the mic now even while voice is
-  post-Slice-1 (D23); a typing-only composer is the thing D23 warns against.
+  post-Slice-1 (D36); a typing-only composer is the thing D36 warns against.
 
-### 3.2 Relevance — the four-value enum (D7 / D21)
+### 3.2 Relevance — the four-value enum (D22 / D25)
 
 One enum, `project_papers.relevance`: `relevant | somewhat | not | unset`. Three presentations:
 
@@ -272,7 +274,7 @@ One enum, `project_papers.relevance`: `relevant | somewhat | not | unset`. Three
 **Copy:** show `not` as "not relevant" and `unset` as "unmarked" everywhere. The mock's reader
 segment says "unset" — that leaks the enum value into the UI; use "unmarked" (§9.2 D).
 
-### 3.3 Quote / evidence treatment (Q18)
+### 3.3 Quote / evidence treatment (D24)
 
 Two intensities, used consistently across reader, extractive card, companion, notes, writing, and
 matrix:
@@ -321,9 +323,9 @@ The project's landing view. Header is the project name (`800 20px Newsreader`). 
    - *Soft nudges* — dashed card, `12px` sans, with the operative word emphasised inline
      (`4 papers are still *unmarked* for relevance`; `2 experiments sit in **remaining** with no
      next step`). These are prompts, not failures, so they get the dashed treatment (§3.4).
-   - *Real errors* — the §3.4 error card (`Semantic Scholar API key failed validation`, D26).
+   - *Real errors* — the §3.4 error card (`Semantic Scholar API key failed validation`, D13).
 
-### 4.2 Reader — `/p/:id/paper/:paperId` (screen 02; D30 / Q7 / D8 / Q18 / Q33)
+### 4.2 Reader — `/p/:id/paper/:paperId` (screen 02; D32 / D33 / D23 / D24 / D33)
 
 The center pane is **not an article view**. It renders the real PDF; the parsed structure is a
 navigation and provenance overlay on top of it. **The frame grid drops to `--frame-grid-quiet`
@@ -389,9 +391,9 @@ is the dashed `+ Import from arXiv` placeholder.
   **markdown editor** — serif `15px/1.7` at `max-width 640px`, quote blocks in the §3.3 passive
   treatment at `italic 14px/1.5`, radius 8, `max-width 600px`, mono for code spans.
 
-Content is user-authored ground truth (D20 node 4): always editable, never AI-overwritten.
+Content is user-authored ground truth (D18 node 4): always editable, never AI-overwritten.
 
-### 4.5 Experiments — `/p/:id/experiments` (screen 05; lab notebook, not a run tracker — D19 / Q19)
+### 4.5 Experiments — `/p/:id/experiments` (screen 05; lab notebook, not a run tracker — D17 / D29)
 
 Header: `Experiments` + a `11px` muted subtitle `lab notebook` + primary `+ New experiment`.
 
@@ -425,12 +427,12 @@ covered** — the board loses width, the companion never does.
 - **`NOTES`** — markdown, same serif treatment.
 - **`LINKS`** — **typed** relationship chips, outlined neutral, `radius 9px`, `padding 3px 8px`:
   `inspired by · Scaling Sparse Retrieval`, `uses dataset · HotpotQA`, `references note · Why the
-  scoring head works`. The relation name is part of the chip, because these are graph edges (D28).
+  scoring head works`. The relation name is part of the chip, because these are graph edges (D26).
 
 Status badges (§3.2 vocabulary reused): `done` = accent-tint filled · `in_progress` = outlined
 accent · `planned` / `remaining` = outlined neutral.
 
-### 4.7 Knowledge graph — `/p/:id/graph` (screen 07; D15 / D28)
+### 4.7 Knowledge graph — `/p/:id/graph` (screen 07; D26 / D26)
 
 Header (`14px 20px`): `Knowledge Graph` title, then **type filter chips** — one per node type,
 each a `700 10px` pill with its categorical color dot. *On* = `1px` solid border **in the type's
@@ -444,7 +446,7 @@ primary `Find related`.
   white on the accent. The selected node gets a `3px` ring in its own hue.
 - **Edges** — `1.5px --graph-edge`. **Solid = metadata-derived** (cites / authored_by /
   uses_dataset / has_code, from OpenAlex / S2 / PwC). **Dashed (`stroke-dasharray: 5 4`) =
-  LLM-derived** (method_of, idea→paper). That dash *is* the provenance tag (D15) — a trust graph
+  LLM-derived** (method_of, idea→paper). That dash *is* the provenance tag (D26) — a trust graph
   must show which edges were inferred. Edge labels appear on hover only.
 - **Legend** — bottom-left `--surface-raised` card, radius 10, `1px --border`, panel shadow: a
   `LEGEND` label, one `11px` swatch row per node type **rendered in that type's real shape**, then
@@ -467,12 +469,12 @@ primary `Find related`.
 - **Editor**: header with the draft title (`800 20px Newsreader`) and a right-aligned
   `Export BibTeX` action (`11px` muted). Body is serif `15px/1.7` at `max-width 640px`, and
   **inline citations are quote-tinted**: `(Sarthi et al., 2024)` on `accent/0.14`, radius 3,
-  `padding 0 3px`. A citation is evidence, so it gets the evidence treatment (Q18).
+  `padding 0 3px`. A citation is evidence, so it gets the evidence treatment (D24).
 - **Unsupported claim** — the §3.4 dashed block, `max-width 600px`, italic muted sans:
   `unsupported claim — no linked source yet`. This is the writing-side twin of "not stated": the
   UI shows you where your prose has outrun your sources.
 
-> The mock draws only the prose-and-citations layer. D16 requires an in-browser WASM LaTeX
+> The mock draws only the prose-and-citations layer. D34 requires an in-browser WASM LaTeX
 > pipeline — CodeMirror source in **JetBrains Mono**, a compiled preview, and a compile-error
 > state. Those are not drawn; see §9.2 C.
 
@@ -500,7 +502,7 @@ breadcrumb reads `Search · "retrieval heads"`. Header: `Results for "<query>"` 
 Screen 09 doubles as the state gallery (its `LOADING` / `EMPTY` / `ERROR` section labels are mock
 scaffolding, not product UI). The three states are real and belong on every list surface:
 
-- **Loading (streaming).** Search is a federated fan-out + rerank (D6/D25) and is slow, so it
+- **Loading (streaming).** Search is a federated fan-out + rerank (D20/D21) and is slow, so it
   **streams**: an `11px` ring spinner (`1.5px` accent, transparent top) beside a per-source
   progress line — `arXiv answered · Semantic Scholar, OpenAlex, local library pending`. Below it
   the normal 3-up result grid, with **real cards and shimmer skeletons side by side** as sources
@@ -512,7 +514,7 @@ scaffolding, not product UI). The three states are real and belong on every list
 - **Error.** The §3.4 error card. Note the copy pattern: name the source, say what happened, and
   **say what still worked** — "Other sources returned normally — these results are incomplete."
   Actions: `Retry source` (danger fill) + `Dismiss`. A partial federation failure degrades the
-  page; it never blanks it (D8 graceful degradation).
+  page; it never blanks it (D23 graceful degradation).
 
 The companion shows its §3.1 empty state here, with **no Stop control** — nothing is running.
 
@@ -529,13 +531,13 @@ The companion shows its §3.1 empty state here, with **no Stop control** — not
    categorical palette is the only exception, and it never leaks into chrome.
 4. **Quoted evidence always gets the accent tint** — reader page, extractive card, companion,
    notes, writing citations, matrix cells. Passive `.14`, active `.25` + left rule, one active at
-   a time (§3.3). Never render a quote as plain body text (Q18).
+   a time (§3.3). Never render a quote as plain body text (D24).
 5. **Absence is a state you draw** (§3.4): dashed border, no tint, italic muted. `not stated`,
    `unmarked`, `Unlinked`, `unsupported claim`, `+ add metric`, empty lists — all the same
    treatment, so absence reads as deliberate rather than broken.
 6. **Danger is for errors only.** Never a status value, never a "failed" experiment.
 7. **Anything the user can click, the Companion can do** — and both resolve to the same tool call
-   + route transition (D19/D20). Don't add UI-only capabilities the agent can't reach.
+   + route transition (D17/D18). Don't add UI-only capabilities the agent can't reach.
 8. **Always show provenance.** Solid vs dashed graph edges, metadata vs inferred edge groups,
    `⚠ unverified` on failed span validation, feed match reasons, mono `§section · offsets` on every
    extracted quote. If the system inferred it, the UI says so.
@@ -553,14 +555,14 @@ The companion shows its §3.1 empty state here, with **no Stop control** — not
 
 Screen 09 covers loading / empty / error for **search**. These remain:
 
-- **Per-paper processing.** PDF fetch, parse, embed, and extraction are queued jobs (D14). The
+- **Per-paper processing.** PDF fetch, parse, embed, and extraction are queued jobs (D9). The
   library card and the reader header need a visible processing state; the extractive card needs
   a "still extracting" state distinct from "not stated".
-- **Degraded full text (D8).** Paywalled or unfetchable source → "abstract only, plus a link".
+- **Degraded full text (D23).** Paywalled or unfetchable source → "abstract only, plus a link".
   Never a fabricated extractive card.
 - **Dropped WebSocket.** The companion's session is the USP; its disconnected and reconnecting
   states must exist, and the composer must say whether a queued message will send.
-- **LaTeX compile errors (D16).** See §4.8.
+- **LaTeX compile errors (D34).** See §4.8.
 - **Empty variants** for notes, experiments, graph, feed, drafts — reuse the §4.10 empty panel.
 - **Interaction states.** Hover, active, disabled, and `:focus-visible` on every interactive
   element. Keyboard navigability and WCAG-AA are standing constraints; the mock already sets a
@@ -584,20 +586,21 @@ Screen 09 covers loading / empty / error for **search**. These remain:
   signalled by color removal alone.
 - The mock's `min-width: 1380px` is a canvas convenience. The real app needs a responsive story
   for ~1280px and below: the nav collapses to icons before the companion is ever dropped, since
-  dropping the companion breaks the product's premise (D30).
+  dropping the companion breaks the product's premise (D32).
 
 ---
 
 ## 8. Not designed yet
 
-- **Four screens have no mock:** auth (D27), onboarding wizard (D29), settings / BYO-key (D26),
-  and the **literature matrix** (D28, route `/matrix/:id`). Derive from §1–§3.
-- **Matrix cell provenance treatment** — cells carry `source: extracted | user` (D28). Extracted
+- **Three screens have no mock:** onboarding wizard (D35), settings / BYO-key + local-model
+  config (D13), and the **literature matrix** (D27, route `/matrix/:id`). Derive from §1–§3.
+  *(An auth screen was previously listed here and is now **dropped** — there is no auth, D1.)*
+- **Matrix cell provenance treatment** — cells carry `source: extracted | user` (D27). Extracted
   cells get the §3.3 quote treatment and click through to the span; user cells get plain body
   type. Needs drawing.
 - **Center-pane tabs** — still open, see §2. Default to one center pane per route.
-- **Writing's LaTeX layer** — source / preview split, compile errors (D16). See §4.8.
-- **Force-graph library** — Cytoscape vs react-force-graph, pick at build (D28 leaves it open).
+- **Writing's LaTeX layer** — source / preview split, compile errors (D34). See §4.8.
+- **Force-graph library** — Cytoscape vs react-force-graph, pick at build (D26 leaves it open).
 - **Reader references list** — the sidebar shows `42 cited works` as a count; the expanded list
   is undrawn.
 
@@ -612,16 +615,16 @@ The 2026-07-31 log listed 11 corrections against the old 5-screen mock. The new 
 
 | # | Was corrected from | Now drawn as | Authority |
 |---|---|---|---|
-| 1 | Reader as reflowed article prose | PDF pages + structure sidebar + extractive side pane + selection popover | D30, Q7 |
-| 2 | Experiments as an ML run-tracker | Lab-notebook board + hypothesis / setup / user metrics / notes / typed links | D19, Q19 |
-| 3 | Fake macOS title bar, switcher in the nav | Real top bar: switcher · breadcrumb · search · settings · account | D30, D1 |
-| 4 | Companion missing on several screens | Companion on all ten screens | D30 |
-| 5 | Relevance badges `Relevant / Baseline / Related` | The real enum, in three presentations (§3.2) | D7, D21 |
-| 6 | Graph: papers only, no controls | Six typed node shapes, solid vs dashed edges, filters, legend, provenance-grouped edges | D15, D28 |
-| 7 | Extractive card as a row of chips | Collapsible side pane, verbatim quote + mono offsets per field, real "not stated" | D30, Q18, Q33 |
-| 8 | Companion = bubbles only | Stop control, tool chips, tool-result cards, mic, `⚠ unverified` | D20 node 5, D23, Q18 |
-| 10 | No mono family | JetBrains Mono for metric values, units, offsets, tool names | D30, Q19 |
-| 11 | Notes read-only | Markdown editor, user-authored | D21, D20 node 4 |
+| 1 | Reader as reflowed article prose | PDF pages + structure sidebar + extractive side pane + selection popover | D32, D33 |
+| 2 | Experiments as an ML run-tracker | Lab-notebook board + hypothesis / setup / user metrics / notes / typed links | D17, D29 |
+| 3 | Fake macOS title bar, switcher in the nav | Real top bar: switcher · breadcrumb · search · settings (no account — no auth) | D32, D1, D2 |
+| 4 | Companion missing on several screens | Companion on all ten screens | D32 |
+| 5 | Relevance badges `Relevant / Baseline / Related` | The real enum, in three presentations (§3.2) | D22, D25 |
+| 6 | Graph: papers only, no controls | Six typed node shapes, solid vs dashed edges, filters, legend, provenance-grouped edges | D26, D26 |
+| 7 | Extractive card as a row of chips | Collapsible side pane, verbatim quote + mono offsets per field, real "not stated" | D32, D24, D33 |
+| 8 | Companion = bubbles only | Stop control, tool chips, tool-result cards, mic, `⚠ unverified` | D18 node 5, D36, D24 |
+| 10 | No mono family | JetBrains Mono for metric values, units, offsets, tool names | D32, D29 |
+| 11 | Notes read-only | Markdown editor, user-authored | D25, D18 node 4 |
 
 Item 9 (nav reaching every routed view) is **partly** resolved — see §9.2 A.
 
@@ -629,15 +632,15 @@ Item 9 (nav reaching every routed view) is **partly** resolved — see §9.2 A.
 
 | # | Design shows | Build instead | Authority |
 |---|---|---|---|
-| A | Nav reaches 7 views; **Matrix is absent** | Add `Matrix` under `DISCOVER`. Every routed view must be reachable from the nav | D28, D30 (`/matrix/:id`, `open_view(matrix\|…)`) |
-| B | Three open-paper tabs + `+` in the reader | Unresolved. Default to one center pane per route; the tab styling in §2 is ready if it flips | D30 router |
-| C | Writing is prose + citation chips only | Add the LaTeX source / preview split (CodeMirror, mono) and the compile-error state | D16 |
-| D | Reader relevance segment labelled `unset` | Show `unmarked`; `unset` is the enum value, not UI copy. Keep it consistent with the library's chips | D21 |
-| E | Reader header has no source / code links | Acceptable — the repo moved into the structure sidebar's `CODE` group. Add a source `↗` link there too, for D8's "abstract only, plus a link" degradation | D8 |
-| F | Filter chip reads `Method`; legend reads `Method / concept` | Pick one vocabulary and say it once. Chips may abbreviate for space, but document that they do | D28 |
-| G | No auth, onboarding, settings, or matrix screens | Derive from §1–§3 | D26, D27, D28, D29 |
-| H | Frame grid at `0.16` on 9 of 10 screens | Dim to `0.07` on all reading-heavy screens; consider globally | §7, D30 "chrome recedes" |
-| I | Fixed `min-width: 1380px` canvas | Real responsive behaviour; collapse the nav before ever dropping the companion | D30 |
+| A | Nav reaches 7 views; **Matrix is absent** | Add `Matrix` under `DISCOVER`. Every routed view must be reachable from the nav | D27, D32 (`/matrix/:id`, `open_view(matrix\|…)`) |
+| B | Three open-paper tabs + `+` in the reader | Unresolved. Default to one center pane per route; the tab styling in §2 is ready if it flips | D32 router |
+| C | Writing is prose + citation chips only | Add the LaTeX source / preview split (CodeMirror, mono) and the compile-error state | D34 |
+| D | Reader relevance segment labelled `unset` | Show `unmarked`; `unset` is the enum value, not UI copy. Keep it consistent with the library's chips | D25 |
+| E | Reader header has no source / code links | Acceptable — the repo moved into the structure sidebar's `CODE` group. Add a source `↗` link there too, for D23's "abstract only, plus a link" degradation | D23 |
+| F | Filter chip reads `Method`; legend reads `Method / concept` | Pick one vocabulary and say it once. Chips may abbreviate for space, but document that they do | D26 |
+| G | No onboarding, settings, or matrix screens | Derive from §1–§3. No auth screen is needed (D1) | D13, D27, D35 |
+| H | Frame grid at `0.16` on 9 of 10 screens | Dim to `0.07` on all reading-heavy screens; consider globally | §7, D32 "chrome recedes" |
+| I | Fixed `min-width: 1380px` canvas | Real responsive behaviour; collapse the nav before ever dropping the companion | D32 |
 
 ### 9.3 Foundation changes to be aware of
 
