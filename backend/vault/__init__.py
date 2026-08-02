@@ -19,9 +19,9 @@ from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Highlights, Notes, Paper, Project
+from db.models import Experiments, Highlights, Notes, Paper, Project
 from settings import get_vault_path
-from vault.models import Highlight, Note, NoteInput
+from vault.models import Highlight, Note, NoteInput, RunArtifacts
 
 _LAYOUT = ("library/papers", "projects", ".research-os")
 
@@ -231,3 +231,37 @@ async def write_highlight(
         note_id=note_id,
         created_at=row.created_at,
     )
+
+
+async def write_experiment_files(
+    session: AsyncSession, experiment_id: uuid.UUID, notebook: bytes, run: RunArtifacts | None = None
+) -> None:
+    """Writes `notebook.ipynb` (+ a default `requirements.txt`) under
+    `experiments/<exp-slug>/` and updates `experiments.notebook_path` in the
+    same operation (MODULES.md, D3/D4). `run` is accepted per the documented
+    signature but not yet handled — Execution Sandbox's run-completion path
+    (Phase 2.3) is what will populate `experiments/<exp>/runs/` from it.
+    """
+    experiment = await session.get(Experiments, experiment_id)
+    if experiment is None:
+        raise ValueError(f"experiment {experiment_id} not found")
+    project = await session.get(Project, experiment.project_id)
+    if project is None:
+        raise ValueError(f"project {experiment.project_id} not found")
+
+    exp_dir = get_vault_path() / "projects" / project.slug / "experiments" / experiment.slug
+    notebook_path = f"projects/{project.slug}/experiments/{experiment.slug}/notebook.ipynb"
+    requirements_path = exp_dir / "requirements.txt"
+    try:
+        exp_dir.mkdir(parents=True, exist_ok=True)
+        (exp_dir / "notebook.ipynb").write_bytes(notebook)
+        if not requirements_path.exists():
+            requirements_path.write_text("", encoding="utf-8")
+    except OSError as exc:
+        raise VaultWriteFailed(f"could not write {notebook_path}: {exc}") from exc
+
+    try:
+        experiment.notebook_path = notebook_path
+        await session.flush()
+    except Exception as exc:
+        raise VaultWriteFailed(f"notebook file written but index update failed: {exc}") from exc

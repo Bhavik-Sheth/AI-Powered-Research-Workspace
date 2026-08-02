@@ -398,6 +398,45 @@ class PaperChunks(Base):
     tsv: Mapped[str] = mapped_column(TSVECTOR, Computed("to_tsvector('english', text)", persisted=True), nullable=False)
 
 
+class Experiments(Base):
+    """The structured experiment record — a lab notebook, not a live
+    run-tracker (Schema.md `experiments`, Phase 2, D29).
+
+    `notebook_path` stays NULL until Vault Writer's `write_experiment_files`
+    runs at least once; the vault copy at that path is truth.
+    """
+
+    __tablename__ = "experiments"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('planned', 'remaining', 'in-progress', 'done')", name="experiments_status_check"
+        ),
+        UniqueConstraint("project_id", "slug", name="experiments_project_id_slug_key"),
+    )
+    # See Notes' identical annotation: an UPDATE (every PATCH) needs
+    # `updated_at` back immediately to build the response, and asyncpg has
+    # no sync fallback to lazily reload an `onupdate`-generated value.
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    slug: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    hypothesis: Mapped[str | None] = mapped_column(String, nullable=True)
+    setup: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'planned'"))
+    notebook_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    network_optin: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    gpu_optin: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class ProjectChunks(Base):
     """The second and last memory table (Schema.md `project_chunks`, Phase
     1.7, D25) — retrieval over a project's own artifacts. Identical shape to

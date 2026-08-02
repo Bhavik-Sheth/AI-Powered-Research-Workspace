@@ -28,6 +28,7 @@ from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
 from api.health import Capability, ReadinessState
 from api.conversations import router as conversations_router
+from api.experiments import router as experiments_router
 from api.health import router as health_router
 from api.highlights import router as highlights_router
 from api.memory import router as memory_router
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(highlights_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(memory_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(conversations_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(experiments_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(voice_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(papers_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(search_router, dependencies=[Depends(require_bearer_token)])

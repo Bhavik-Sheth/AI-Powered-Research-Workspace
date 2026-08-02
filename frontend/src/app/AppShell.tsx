@@ -4,6 +4,7 @@ import { listProjectsApiProjectsGet, type ProjectResponse } from "@research-os/a
 import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
 import type { SelectionState } from "../companion/wsTypes";
 import { Dashboard } from "../dashboard/Dashboard";
+import { ExperimentsBoard } from "../experiments/ExperimentsBoard";
 import { LibraryView } from "../library/LibraryView";
 import { NotesView } from "../notes/NotesView";
 import { ReaderTab } from "../reader/ReaderTab";
@@ -23,6 +24,7 @@ const NAV_GROUPS: { label: string | null; items: string[] }[] = [
 const DASHBOARD_TAB: TabRef = { id: "dashboard", kind: "dashboard", params: {}, label: "Dashboard" };
 const LIBRARY_TAB: TabRef = { id: "library", kind: "library", params: {}, label: "Papers" };
 const NOTES_TAB: TabRef = { id: "notes", kind: "notes", params: {}, label: "Notes" };
+const EXPERIMENTS_TAB: TabRef = { id: "experiments", kind: "experiments", params: {}, label: "Experiments" };
 const SEARCH_TAB: TabRef = { id: "search", kind: "search", params: {}, label: "Search" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 
@@ -121,6 +123,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <LibraryView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "notes":
         return <NotesView projectId={projectId} />;
+      case "experiments":
+        return <ExperimentsBoard projectId={projectId} />;
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
@@ -159,6 +163,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                         if (item === "Dashboard") openTab(DASHBOARD_TAB);
                         if (item === "Papers") openTab(LIBRARY_TAB);
                         if (item === "Notes") openTab(NOTES_TAB);
+                        if (item === "Experiments") openTab(EXPERIMENTS_TAB);
                       }}
                     >
                       {item}

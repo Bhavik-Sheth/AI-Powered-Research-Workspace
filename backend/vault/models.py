@@ -96,3 +96,15 @@ class Highlight(BaseModel):
     color: str | None
     note_id: uuid.UUID | None
     created_at: datetime
+
+
+class RunArtifacts(BaseModel):
+    """What a completed run hands `write_experiment_files` to persist under
+    `experiments/<exp>/runs/` (MODULES.md). Unused this slice — Phase 2.3's
+    Execution Sandbox is the first caller to construct one; the shape here
+    is only what the signature needs to type-check against, not a built-out
+    contract yet.
+    """
+
+    stdout: bytes
+    artifacts: dict[str, bytes] = {}

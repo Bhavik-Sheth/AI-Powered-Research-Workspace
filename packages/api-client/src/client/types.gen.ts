@@ -116,6 +116,110 @@ export type DiscoverModelsResponse = {
 };
 
 /**
+ * Experiment
+ *
+ * The `experiments` row (Schema.md), returned by every experiments endpoint.
+ */
+export type Experiment = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Hypothesis
+     */
+    hypothesis: string | null;
+    /**
+     * Setup
+     */
+    setup: {
+        [key: string]: unknown;
+    };
+    /**
+     * Notes
+     */
+    notes: string | null;
+    /**
+     * Status
+     */
+    status: 'planned' | 'remaining' | 'in-progress' | 'done';
+    /**
+     * Notebook Path
+     */
+    notebook_path: string | null;
+    /**
+     * Network Optin
+     */
+    network_optin: boolean;
+    /**
+     * Gpu Optin
+     */
+    gpu_optin: boolean;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * ExperimentInput
+ *
+ * What a caller submits to create or update an experiment record.
+ *
+ * All fields are optional so `update_experiment` can patch just one; on
+ * create, `title` is the only one that must be present in practice — the
+ * module enforces that, not this shape.
+ */
+export type ExperimentInput = {
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Hypothesis
+     */
+    hypothesis?: string | null;
+    /**
+     * Setup
+     */
+    setup?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Notes
+     */
+    notes?: string | null;
+    /**
+     * Status
+     */
+    status?: 'planned' | 'remaining' | 'in-progress' | 'done' | null;
+    /**
+     * Network Optin
+     */
+    network_optin?: boolean | null;
+    /**
+     * Gpu Optin
+     */
+    gpu_optin?: boolean | null;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -1492,6 +1596,120 @@ export type GetConversationApiProjectsProjectIdConversationGetResponses = {
 };
 
 export type GetConversationApiProjectsProjectIdConversationGetResponse = GetConversationApiProjectsProjectIdConversationGetResponses[keyof GetConversationApiProjectsProjectIdConversationGetResponses];
+
+export type ListExperimentsApiProjectsProjectIdExperimentsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/experiments';
+};
+
+export type ListExperimentsApiProjectsProjectIdExperimentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListExperimentsApiProjectsProjectIdExperimentsGetError = ListExperimentsApiProjectsProjectIdExperimentsGetErrors[keyof ListExperimentsApiProjectsProjectIdExperimentsGetErrors];
+
+export type ListExperimentsApiProjectsProjectIdExperimentsGetResponses = {
+    /**
+     * Response List Experiments Api Projects  Project Id  Experiments Get
+     *
+     * Successful Response
+     */
+    200: Array<Experiment>;
+};
+
+export type ListExperimentsApiProjectsProjectIdExperimentsGetResponse = ListExperimentsApiProjectsProjectIdExperimentsGetResponses[keyof ListExperimentsApiProjectsProjectIdExperimentsGetResponses];
+
+export type CreateExperimentApiProjectsProjectIdExperimentsPostData = {
+    body: ExperimentInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/experiments';
+};
+
+export type CreateExperimentApiProjectsProjectIdExperimentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateExperimentApiProjectsProjectIdExperimentsPostError = CreateExperimentApiProjectsProjectIdExperimentsPostErrors[keyof CreateExperimentApiProjectsProjectIdExperimentsPostErrors];
+
+export type CreateExperimentApiProjectsProjectIdExperimentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Experiment;
+};
+
+export type CreateExperimentApiProjectsProjectIdExperimentsPostResponse = CreateExperimentApiProjectsProjectIdExperimentsPostResponses[keyof CreateExperimentApiProjectsProjectIdExperimentsPostResponses];
+
+export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchData = {
+    body: ExperimentInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/experiments/{experiment_id}';
+};
+
+export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchError = UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors[keyof UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors];
+
+export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: Experiment;
+};
+
+export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponse = UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses[keyof UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses];
 
 export type TranscribeAudioApiVoiceTranscribePostData = {
     body?: never;

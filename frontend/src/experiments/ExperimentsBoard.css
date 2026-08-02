@@ -1,0 +1,207 @@
+.experiments {
+  font-family: var(--font-ui);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.experiments__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.experiments__title {
+  font: 700 20px var(--font-ui);
+  color: var(--text-strong);
+  margin: 0;
+}
+
+.experiments__subtitle {
+  font: 500 11px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.experiments__new {
+  display: flex;
+  gap: 8px;
+}
+
+.experiments__new-input {
+  font: 500 12px var(--font-ui);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.experiments__new-button {
+  font: 700 11px var(--font-ui);
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-button);
+  background: var(--accent);
+  color: var(--surface-raised);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.experiments__new-button:disabled {
+  background: var(--surface-inactive);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.experiments__board {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.experiments__column {
+  flex: 1 1 0;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.experiments__column-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font: 700 10px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.experiments__column-count {
+  font: 700 10px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.experiments__column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.experiments__empty {
+  font: 500 11px var(--font-ui);
+  color: var(--text-muted);
+  padding: 8px 2px;
+}
+
+.experiments__card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.experiments__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.experiments__card-title {
+  font: 700 14px/1.3 var(--font-reading);
+  color: var(--text-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.experiments__card-hypothesis {
+  font: 500 11px/1.5 var(--font-ui);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.experiments__card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.experiments__chip {
+  font: 700 10px var(--font-ui);
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.experiments__chip--metrics {
+  background: var(--accent-tint-12);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+
+/* Status badges (UI_DESIGN.md §4.6): done = filled accent tint,
+   in-progress = outlined accent, planned/remaining = outlined neutral.
+   Never the danger family — there is no "failed" status (PRD §13). */
+.experiments__badge {
+  font: 700 10px var(--font-ui);
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.experiments__badge--done {
+  background: var(--accent-tint-12);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+
+.experiments__badge--in-progress {
+  background: transparent;
+  color: var(--accent-text-outline);
+  border-color: var(--accent);
+}
+
+/* Notebook cell preview — unrun/pending-approval marking (MODULES.md
+   Experiments Board; PRD §13: agent-written cells must be visibly marked
+   unrun and pending approval, never mistaken for something that ran). */
+.experiments__cell {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.experiments__cell-code {
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.experiments__cell-badge {
+  align-self: flex-start;
+  font: 700 10px var(--font-ui);
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px dashed var(--border-dashed);
+  color: var(--text-muted);
+  background: var(--surface-raised);
+}
