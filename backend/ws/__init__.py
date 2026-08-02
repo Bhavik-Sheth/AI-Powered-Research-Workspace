@@ -5,6 +5,7 @@ assembly, only how to authenticate the upgrade, keep one session per
 project, and shuttle events to and from `harness.run_turn`.
 """
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -33,6 +34,7 @@ class Session:
     websocket: WebSocket
     conversation_id: uuid.UUID
     ui_state: UIState = field(default_factory=UIState)
+    turn_task: asyncio.Task | None = None
 
 
 class UserMessageEvent(BaseModel):
@@ -88,7 +90,18 @@ async def handle_connect(project_id: uuid.UUID, token: str, websocket: WebSocket
 
 
 async def broadcast(session: Session, event: TurnEvent) -> None:
-    await session.websocket.send_json(event.model_dump(mode="json"))
+    try:
+        await session.websocket.send_json(event.model_dump(mode="json"))
+    except RuntimeError:
+        # The socket closed mid-turn (TRD §4.1: a dropped socket leaves the
+        # session live, transcript persistence doesn't depend on it) — the
+        # turn keeps running and persisting; there's just nobody to tell.
+        logger.info("event=ws_broadcast_after_close project_id=%s", session.project_id)
+
+
+async def _run_turn(session: Session, session_ref: SessionRef, text: str, ui_state: UIState) -> None:
+    async for turn_event in harness.run_turn(session_ref, text, ui_state):
+        await broadcast(session, turn_event)
 
 
 async def handle_message(session: Session, event: UpstreamEvent) -> None:
@@ -103,8 +116,10 @@ async def handle_message(session: Session, event: UpstreamEvent) -> None:
         return
 
     session.ui_state = event.ui_state
-    async for turn_event in harness.run_turn(session_ref, event.text, event.ui_state):
-        await broadcast(session, turn_event)
+    # Spawned, not awaited: the receive loop must keep running so a
+    # follow-up `interrupt` for *this* turn can actually be received while
+    # it streams (D18 node 7 — a cancellable task bound to the session).
+    session.turn_task = asyncio.create_task(_run_turn(session, session_ref, event.text, event.ui_state))
 
 
 def _parse_upstream(raw: dict) -> UpstreamEvent:

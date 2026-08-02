@@ -7,6 +7,7 @@ Flagged here for reconciliation against MODULES.md, not added silently.
 """
 
 import uuid
+from datetime import datetime, timezone
 
 from slugify import slugify
 from sqlalchemy import select
@@ -66,6 +67,23 @@ async def list_project_papers(session: AsyncSession, project_id: uuid.UUID) -> l
         )
     ).all()
     return [(paper, membership) for paper, membership in rows]
+
+
+async def save_tab_stack(
+    session: AsyncSession, project_id: uuid.UUID, tab_stack: list[dict], active_tab: str | None
+) -> Project | None:
+    """Persists the center-pane tab stack (Schema.md `projects.tab_stack` /
+    `active_tab`), and bumps `last_opened_at` — the same signal Dashboard's
+    "continue where you left off" tiles read, since writing the stack is
+    what every navigation change in the project already does."""
+    project = await session.get(Project, project_id)
+    if project is None:
+        return None
+    project.tab_stack = tab_stack
+    project.active_tab = active_tab
+    project.last_opened_at = datetime.now(timezone.utc)
+    await session.flush()
+    return project
 
 
 async def set_paper_relevance(

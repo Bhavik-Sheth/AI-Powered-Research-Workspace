@@ -19,6 +19,7 @@ row exists"). A tag that resolves neither way is relabelled `<unverified>`,
 never trusted from the model's own say-so.
 """
 
+import asyncio
 import re
 import uuid
 from collections.abc import AsyncIterator
@@ -37,6 +38,18 @@ from provenance import validate_and_anchor
 __all__ = ["run_turn", "interrupt"]
 
 _CITE_PATTERN = re.compile(r"<cite>(.*?)</cite>", re.DOTALL)
+
+# One in-flight turn per session (MODULES.md's Agent Harness state note).
+# Cancellation is cooperative rather than a real `asyncio.Task.cancel()`
+# handed across the transport boundary: `run_turn` checks the flag between
+# streamed chunks, which arrive often enough that a check-and-stop reads as
+# immediate to the user, without Session Transport ever needing a task
+# reference (it "must not know" harness internals — MODULES.md).
+_in_flight: dict[tuple[uuid.UUID, uuid.UUID], asyncio.Event] = {}
+
+
+def _turn_key(session_ref: SessionRef) -> tuple[uuid.UUID, uuid.UUID]:
+    return (session_ref.project_id, session_ref.conversation_id)
 
 _SYSTEM_PROMPT = (
     "You are the Research Companion, helping a researcher with their project. "
@@ -128,70 +141,96 @@ async def _validate_citations(
 
 
 async def run_turn(session_ref: SessionRef, message: str, ui_state: UIState) -> AsyncIterator[TurnEvent]:
-    turn_id = uuid.uuid4()
-    paper_id = ui_state.selection.paper_id if ui_state.selection is not None else None
-
-    async with db.session() as db_session:
-        history = await _history(db_session, session_ref.conversation_id)
-        seq = await _next_seq(db_session, session_ref.conversation_id)
-        db_session.add(
-            Messages(conversation_id=session_ref.conversation_id, seq=seq, turn_id=turn_id, role="user", content=message, citations=[])
+    key = _turn_key(session_ref)
+    if key in _in_flight:
+        yield ErrorEvent(
+            code="turn_in_progress",
+            message="A turn is already running for this session — interrupt it first.",
+            recoverable=True,
+            what_still_worked="the turn already in progress",
         )
+        return
 
-    memory_rows = await _maybe_retrieve(session_ref.project_id, message)
-    if memory_rows:
-        yield StatusEvent(text="searching your project…")
-
-    llm_messages = [Message(role="system", content=_SYSTEM_PROMPT)]
-    if ui_state.selection is not None:
-        llm_messages.append(
-            Message(role="system", content=f'The user has highlighted this passage from the paper:\n"{ui_state.selection.anchor.quote}"')
-        )
-    if memory_rows:
-        llm_messages.append(Message(role="system", content=_format_memory_rows(memory_rows)))
-    llm_messages += history
-    llm_messages.append(Message(role="user", content=message))
-
-    yield StatusEvent(text="thinking…")
-
-    full_text = ""
+    cancel_flag = asyncio.Event()
+    _in_flight[key] = cancel_flag
     try:
-        async for chunk in complete(llm_messages, tier="primary"):
-            full_text += chunk.delta
-    except LLMError as exc:
-        yield ErrorEvent(code=type(exc).__name__, message=str(exc), recoverable=True, what_still_worked="nothing — the turn produced no answer")
-        yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
-        return
-    except RuntimeError as exc:
-        yield ErrorEvent(code="not_configured", message=str(exc), recoverable=True, what_still_worked=None)
-        yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
-        return
+        turn_id = uuid.uuid4()
+        paper_id = ui_state.selection.paper_id if ui_state.selection is not None else None
 
-    async with db.session() as db_session:
-        cleaned_text, citations = await _validate_citations(db_session, paper_id, memory_rows, full_text)
-        seq = await _next_seq(db_session, session_ref.conversation_id)
-        db_session.add(
-            Messages(
-                conversation_id=session_ref.conversation_id,
-                seq=seq,
-                turn_id=turn_id,
-                role="assistant",
-                content=cleaned_text,
-                citations=citations,
+        async with db.session() as db_session:
+            history = await _history(db_session, session_ref.conversation_id)
+            seq = await _next_seq(db_session, session_ref.conversation_id)
+            db_session.add(
+                Messages(
+                    conversation_id=session_ref.conversation_id, seq=seq, turn_id=turn_id, role="user", content=message, citations=[]
+                )
             )
-        )
 
-    # Sent post-validation, never raw model output (D24) — split on the tag
-    # boundaries already computed above so a chunk never splits a tag.
-    for piece in re.split(r"(</?(?:cite|unverified)>)", cleaned_text):
-        if piece:
-            yield TextDeltaEvent(delta=piece)
+        memory_rows = await _maybe_retrieve(session_ref.project_id, message)
+        if memory_rows:
+            yield StatusEvent(text="searching your project…")
 
-    yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
+        llm_messages = [Message(role="system", content=_SYSTEM_PROMPT)]
+        if ui_state.selection is not None:
+            llm_messages.append(
+                Message(role="system", content=f'The user has highlighted this passage from the paper:\n"{ui_state.selection.anchor.quote}"')
+            )
+        if memory_rows:
+            llm_messages.append(Message(role="system", content=_format_memory_rows(memory_rows)))
+        llm_messages += history
+        llm_messages.append(Message(role="user", content=message))
+
+        yield StatusEvent(text="thinking…")
+
+        full_text = ""
+        interrupted = False
+        try:
+            async for chunk in complete(llm_messages, tier="primary"):
+                full_text += chunk.delta
+                if cancel_flag.is_set():
+                    interrupted = True
+                    break
+        except LLMError as exc:
+            yield ErrorEvent(code=type(exc).__name__, message=str(exc), recoverable=True, what_still_worked="nothing — the turn produced no answer")
+            yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
+            return
+        except RuntimeError as exc:
+            yield ErrorEvent(code="not_configured", message=str(exc), recoverable=True, what_still_worked=None)
+            yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
+            return
+
+        async with db.session() as db_session:
+            cleaned_text, citations = await _validate_citations(db_session, paper_id, memory_rows, full_text)
+            seq = await _next_seq(db_session, session_ref.conversation_id)
+            db_session.add(
+                Messages(
+                    conversation_id=session_ref.conversation_id,
+                    seq=seq,
+                    turn_id=turn_id,
+                    role="assistant",
+                    content=cleaned_text,
+                    citations=citations,
+                    interrupted=interrupted,
+                )
+            )
+
+        # Sent post-validation, never raw model output (D24) — split on the
+        # tag boundaries already computed above so a chunk never splits one.
+        # An interrupted turn's trailing unclosed tag simply won't match and
+        # passes through as literal text — partial results, not well-formed
+        # ones, is the only guarantee (TRD §3).
+        for piece in re.split(r"(</?(?:cite|unverified)>)", cleaned_text):
+            if piece:
+                yield TextDeltaEvent(delta=piece)
+
+        yield TurnCompleteEvent(turn_id=turn_id, interrupted=interrupted, iterations=1)
+    finally:
+        _in_flight.pop(key, None)
 
 
 async def interrupt(session_ref: SessionRef) -> None:
-    """No-op in Phase 1.5. `run_turn` is awaited synchronously per turn, so
-    there is no concurrent `asyncio.Task` yet to cancel — the cancellable
-    per-turn task (D18 node 7) lands with Phase 1.8's iteration-cap graceful
-    stop, the phase that needs a turn in flight while another arrives."""
+    """Sets the in-flight turn's cancel flag, if one is running (D18 node 5:
+    first-class interrupt, partial results retained)."""
+    flag = _in_flight.get(_turn_key(session_ref))
+    if flag is not None:
+        flag.set()

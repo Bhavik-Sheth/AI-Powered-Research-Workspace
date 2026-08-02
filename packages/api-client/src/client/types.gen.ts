@@ -590,6 +590,14 @@ export type ProjectResponse = {
      * Last Opened At
      */
     last_opened_at: string | null;
+    /**
+     * Tab Stack
+     */
+    tab_stack: Array<TabRef>;
+    /**
+     * Active Tab
+     */
+    active_tab: string | null;
 };
 
 /**
@@ -707,6 +715,20 @@ export type SaveProviderRequest = {
 };
 
 /**
+ * SaveTabStackRequest
+ */
+export type SaveTabStackRequest = {
+    /**
+     * Tab Stack
+     */
+    tab_stack: Array<TabRef>;
+    /**
+     * Active Tab
+     */
+    active_tab?: string | null;
+};
+
+/**
  * SearchFilters
  */
 export type SearchFilters = {
@@ -791,6 +813,34 @@ export type SourceIds = {
      * S2 Id
      */
     s2_id?: string | null;
+};
+
+/**
+ * TabRef
+ *
+ * One entry in the persisted center-pane tab stack (TRD §4.1's
+ * `TabRef`) — a routed view instance, e.g. two open papers are two
+ * entries with the same `kind` and different `params`.
+ */
+export type TabRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Params
+     */
+    params?: {
+        [key: string]: string;
+    };
+    /**
+     * Label
+     */
+    label: string;
 };
 
 /**
@@ -1120,6 +1170,42 @@ export type GetProjectApiProjectsProjectIdGetResponses = {
 };
 
 export type GetProjectApiProjectsProjectIdGetResponse = GetProjectApiProjectsProjectIdGetResponses[keyof GetProjectApiProjectsProjectIdGetResponses];
+
+export type SaveTabStackApiProjectsProjectIdTabStackPutData = {
+    body: SaveTabStackRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/tab-stack';
+};
+
+export type SaveTabStackApiProjectsProjectIdTabStackPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveTabStackApiProjectsProjectIdTabStackPutError = SaveTabStackApiProjectsProjectIdTabStackPutErrors[keyof SaveTabStackApiProjectsProjectIdTabStackPutErrors];
+
+export type SaveTabStackApiProjectsProjectIdTabStackPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectResponse;
+};
+
+export type SaveTabStackApiProjectsProjectIdTabStackPutResponse = SaveTabStackApiProjectsProjectIdTabStackPutResponses[keyof SaveTabStackApiProjectsProjectIdTabStackPutResponses];
 
 export type ListNotesApiProjectsProjectIdNotesGetData = {
     body?: never;

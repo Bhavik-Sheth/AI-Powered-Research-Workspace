@@ -11,16 +11,26 @@ interface TranscriptEntry {
   content: string;
 }
 
+interface QueuedMessage {
+  text: string;
+  selection: SelectionState | null;
+}
+
 export interface PendingAsk {
   text: string;
   nonce: number;
 }
 
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 10_000;
+
 /** The Companion pane (MODULES.md Session Transport + Agent Harness,
  * UI_DESIGN.md §3.1) — one WebSocket session per project, streaming a
  * turn's `status` / `text_delta` / `turn_complete` / `error` events into a
  * transcript that keeps cited evidence visually distinct from reasoning
- * (D24), the split the UI must never collapse.
+ * (D24), the split the UI must never collapse. Reconnects with backoff on
+ * a dropped socket (TRD §4.1); a send while disconnected queues and the
+ * composer says so, rather than silently failing.
  */
 export function CompanionPane({
   projectId,
@@ -32,32 +42,23 @@ export function CompanionPane({
   pendingAsk: PendingAsk | null;
 }) {
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [turnInFlight, setTurnInFlight] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [draft, setDraft] = useState("");
+  const [queued, setQueued] = useState<QueuedMessage | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const assistantBufferRef = useRef("");
   const nextIdRef = useRef(0);
   const handledNonceRef = useRef<number | null>(null);
   const selectionRef = useRef(selection);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closedByUsRef = useRef(false);
+  const queuedRef = useRef<QueuedMessage | null>(null);
   selectionRef.current = selection;
-
-  useEffect(() => {
-    const ws = new WebSocket(wsSessionUrl(projectId));
-    wsRef.current = ws;
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-    ws.onmessage = (event) => {
-      const parsed: DownstreamEvent = JSON.parse(event.data);
-      handleDownstream(parsed);
-    };
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  queuedRef.current = queued;
 
   function nextId(): number {
     nextIdRef.current += 1;
@@ -84,9 +85,57 @@ export function CompanionPane({
     }
   }
 
+  useEffect(() => {
+    closedByUsRef.current = false;
+    reconnectAttemptRef.current = 0;
+
+    function connect(): void {
+      const ws = new WebSocket(wsSessionUrl(projectId));
+      wsRef.current = ws;
+      ws.onopen = () => {
+        setConnected(true);
+        setReconnecting(false);
+        reconnectAttemptRef.current = 0;
+        const pending = queuedRef.current;
+        if (pending) {
+          setQueued(null);
+          ws.send(JSON.stringify({ event: "user_message", text: pending.text, ui_state: { selection: pending.selection } }));
+          setTurnInFlight(true);
+        }
+      };
+      ws.onclose = () => {
+        setConnected(false);
+        wsRef.current = null;
+        if (closedByUsRef.current) return;
+        setReconnecting(true);
+        const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttemptRef.current, RECONNECT_MAX_MS);
+        reconnectAttemptRef.current += 1;
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      };
+      ws.onmessage = (event) => {
+        const parsed: DownstreamEvent = JSON.parse(event.data);
+        handleDownstream(parsed);
+      };
+    }
+
+    connect();
+    return () => {
+      closedByUsRef.current = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
   function sendMessage(text: string, withSelection: SelectionState | null): void {
+    if (turnInFlight || !text.trim()) return;
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || turnInFlight || !text.trim()) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setQueued({ text, selection: withSelection });
+      setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
+      return;
+    }
     setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
     setTurnInFlight(true);
     ws.send(JSON.stringify({ event: "user_message", text, ui_state: { selection: withSelection } }));
@@ -105,11 +154,15 @@ export function CompanionPane({
     setDraft("");
   }
 
+  const statusLine = queued
+    ? "Disconnected — your message will send once reconnected…"
+    : (statusText ?? (connected ? "Companion" : reconnecting ? "Reconnecting…" : "Connecting…"));
+
   return (
     <aside className="companion">
       <div className="companion__status">
         <span className={`companion__status-dot ${connected ? "companion__status-dot--live" : ""}`} />
-        <span className="companion__status-text">{statusText ?? (connected ? "Companion" : "Connecting…")}</span>
+        <span className="companion__status-text">{statusLine}</span>
         {turnInFlight && (
           <button type="button" className="companion__stop" onClick={() => wsRef.current?.send(JSON.stringify({ event: "interrupt", turn_id: "" }))}>
             ✕ Stop
@@ -151,7 +204,7 @@ export function CompanionPane({
       <div className="companion__composer">
         <input
           className="companion__input"
-          placeholder="Ask the companion…"
+          placeholder={connected ? "Ask the companion…" : "Message will queue until reconnected…"}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {

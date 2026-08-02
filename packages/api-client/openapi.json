@@ -475,6 +475,72 @@
         }
       }
     },
+    "/api/projects/{project_id}/tab-stack": {
+      "put": {
+        "summary": "Save Tab Stack",
+        "operationId": "save_tab_stack_api_projects__project_id__tab_stack_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveTabStackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/notes": {
       "get": {
         "summary": "List Notes",
@@ -2279,6 +2345,24 @@
               }
             ],
             "title": "Last Opened At"
+          },
+          "tab_stack": {
+            "items": {
+              "$ref": "#/components/schemas/TabRef"
+            },
+            "type": "array",
+            "title": "Tab Stack"
+          },
+          "active_tab": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Tab"
           }
         },
         "type": "object",
@@ -2287,7 +2371,9 @@
           "name",
           "slug",
           "focus_seed",
-          "last_opened_at"
+          "last_opened_at",
+          "tab_stack",
+          "active_tab"
         ],
         "title": "ProjectResponse"
       },
@@ -2491,6 +2577,33 @@
         ],
         "title": "SaveProviderRequest"
       },
+      "SaveTabStackRequest": {
+        "properties": {
+          "tab_stack": {
+            "items": {
+              "$ref": "#/components/schemas/TabRef"
+            },
+            "type": "array",
+            "title": "Tab Stack"
+          },
+          "active_tab": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Tab"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tab_stack"
+        ],
+        "title": "SaveTabStackRequest"
+      },
       "SearchFilters": {
         "properties": {
           "year_min": {
@@ -2658,6 +2771,38 @@
         "type": "object",
         "title": "SourceIds",
         "description": "Whatever source ids a literature API returned for one paper."
+      },
+      "TabRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params",
+            "default": {}
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "title": "TabRef",
+        "description": "One entry in the persisted center-pane tab stack (TRD \u00a74.1's\n`TabRef`) \u2014 a routed view instance, e.g. two open papers are two\nentries with the same `kind` and different `params`."
       },
       "ValidationError": {
         "properties": {
