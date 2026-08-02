@@ -1,0 +1,31 @@
+.error-card {
+  background: var(--surface-raised);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--danger-border);
+  border-left: 3px solid var(--danger-rule);
+  padding: 14px 16px;
+}
+
+.error-card__title {
+  font: 700 12px var(--font-ui);
+  color: var(--danger-title);
+  margin: 0 0 6px;
+}
+
+.error-card__body {
+  font: 11px/1.6 var(--font-ui);
+  color: var(--danger-body);
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+
+.error-card__retry {
+  height: 32px;
+  border-radius: var(--radius-button);
+  padding: 0 14px;
+  font: 700 12px var(--font-ui);
+  background: var(--danger-fill);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}

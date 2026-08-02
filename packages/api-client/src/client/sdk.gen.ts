@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses } from './types.gen';
+import type { CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -22,3 +22,75 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * Get Health
  */
 export const getHealthApiHealthGet = <ThrowOnError extends boolean = false>(options?: Options<GetHealthApiHealthGetData, ThrowOnError>): RequestResult<GetHealthApiHealthGetResponses, GetHealthApiHealthGetErrors, ThrowOnError> => (options?.client ?? client).get<GetHealthApiHealthGetResponses, GetHealthApiHealthGetErrors, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * Get Models
+ */
+export const getModelsApiSettingsModelsGet = <ThrowOnError extends boolean = false>(options?: Options<GetModelsApiSettingsModelsGetData, ThrowOnError>): RequestResult<GetModelsApiSettingsModelsGetResponses, GetModelsApiSettingsModelsGetErrors, ThrowOnError> => (options?.client ?? client).get<GetModelsApiSettingsModelsGetResponses, GetModelsApiSettingsModelsGetErrors, ThrowOnError>({ url: '/api/settings/models', ...options });
+
+/**
+ * Put Models
+ */
+export const putModelsApiSettingsModelsPut = <ThrowOnError extends boolean = false>(options: Options<PutModelsApiSettingsModelsPutData, ThrowOnError>): RequestResult<PutModelsApiSettingsModelsPutResponses, PutModelsApiSettingsModelsPutErrors, ThrowOnError> => (options.client ?? client).put<PutModelsApiSettingsModelsPutResponses, PutModelsApiSettingsModelsPutErrors, ThrowOnError>({
+    url: '/api/settings/models',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Discover Models
+ */
+export const discoverModelsApiSettingsModelsDiscoverPost = <ThrowOnError extends boolean = false>(options: Options<DiscoverModelsApiSettingsModelsDiscoverPostData, ThrowOnError>): RequestResult<DiscoverModelsApiSettingsModelsDiscoverPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostErrors, ThrowOnError> => (options.client ?? client).post<DiscoverModelsApiSettingsModelsDiscoverPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostErrors, ThrowOnError>({
+    url: '/api/settings/models/discover',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Put Vault Path
+ *
+ * Onboarding step 2. Takes effect on the *next* launch (see settings.set_vault_path).
+ */
+export const putVaultPathApiSettingsVaultPathPut = <ThrowOnError extends boolean = false>(options: Options<PutVaultPathApiSettingsVaultPathPutData, ThrowOnError>): RequestResult<PutVaultPathApiSettingsVaultPathPutResponses, PutVaultPathApiSettingsVaultPathPutErrors, ThrowOnError> => (options.client ?? client).put<PutVaultPathApiSettingsVaultPathPutResponses, PutVaultPathApiSettingsVaultPathPutErrors, ThrowOnError>({
+    url: '/api/settings/vault-path',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Put Onboarding Complete
+ *
+ * The wizard's last step; the app returns to step 1 while this is unset (D35).
+ */
+export const putOnboardingCompleteApiSettingsOnboardingCompletePut = <ThrowOnError extends boolean = false>(options?: Options<PutOnboardingCompleteApiSettingsOnboardingCompletePutData, ThrowOnError>): RequestResult<PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, ThrowOnError> => (options?.client ?? client).put<PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, ThrowOnError>({ url: '/api/settings/onboarding-complete', ...options });
+
+/**
+ * List Projects
+ */
+export const listProjectsApiProjectsGet = <ThrowOnError extends boolean = false>(options?: Options<ListProjectsApiProjectsGetData, ThrowOnError>): RequestResult<ListProjectsApiProjectsGetResponses, ListProjectsApiProjectsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListProjectsApiProjectsGetResponses, ListProjectsApiProjectsGetErrors, ThrowOnError>({ url: '/api/projects', ...options });
+
+/**
+ * Create Project
+ */
+export const createProjectApiProjectsPost = <ThrowOnError extends boolean = false>(options: Options<CreateProjectApiProjectsPostData, ThrowOnError>): RequestResult<CreateProjectApiProjectsPostResponses, CreateProjectApiProjectsPostErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectApiProjectsPostResponses, CreateProjectApiProjectsPostErrors, ThrowOnError>({
+    url: '/api/projects',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Project
+ */
+export const getProjectApiProjectsProjectIdGet = <ThrowOnError extends boolean = false>(options: Options<GetProjectApiProjectsProjectIdGetData, ThrowOnError>): RequestResult<GetProjectApiProjectsProjectIdGetResponses, GetProjectApiProjectsProjectIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetProjectApiProjectsProjectIdGetResponses, GetProjectApiProjectsProjectIdGetErrors, ThrowOnError>({ url: '/api/projects/{project_id}', ...options });

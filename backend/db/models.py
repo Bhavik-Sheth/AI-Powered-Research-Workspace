@@ -3,15 +3,21 @@
 Table shapes are Schema.md's, byte-for-byte (column names, CHECK value lists,
 naming conventions). This module only maps them — see Alembic revisions for
 DDL and FK/CHECK constraints, which are the authoritative contract at the DB
-gate (Rules.md).
+gate (Rules.md). Every `server_default` here mirrors one already set in a
+migration; it does not itself define the default, it just tells the ORM one
+exists, so an INSERT that leaves the column unset omits it rather than
+sending an explicit NULL.
 """
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, SmallInteger, String
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import CheckConstraint, SmallInteger, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+EMBEDDING_DIM = 768
 
 
 class Base(DeclarativeBase):
@@ -24,15 +30,17 @@ class ApiKeys(Base):
     __tablename__ = "api_keys"
     __table_args__ = (CheckConstraint("id = 1", name="api_keys_single_row"),)
 
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
-    providers: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
+    providers: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     primary_model: Mapped[str | None] = mapped_column(String, nullable=True)
     auxiliary_model: Mapped[str | None] = mapped_column(String, nullable=True)
     vault_path: Mapped[str | None] = mapped_column(String, nullable=True)
-    voice_engine: Mapped[str] = mapped_column(String, nullable=False, default="stub")
+    voice_engine: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'stub'"))
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class ScheduledJobs(Base):
@@ -44,13 +52,13 @@ class ScheduledJobs(Base):
 
     __tablename__ = "scheduled_jobs"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     job_kind: Mapped[str] = mapped_column(String, nullable=False)
     project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     interval_seconds: Mapped[int] = mapped_column(nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     next_due_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
 
 class ResultStore(Base):
@@ -68,4 +76,31 @@ class ResultStore(Base):
     ui_view: Mapped[dict] = mapped_column(JSONB, nullable=False)
     model_view: Mapped[str] = mapped_column(String, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
+class Project(Base):
+    """One research project (Schema.md `projects`, Phase 1).
+
+    `tab_stack`/`active_tab` are exercised starting Phase 1.8, and
+    `corpus_centroid` starting Phase 5 — the full row shape is created now
+    because Schema.md assigns the whole table to Phase 1, not per column.
+    """
+
+    __tablename__ = "projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    focus_seed: Mapped[str | None] = mapped_column(String, nullable=True)
+    interest_profile: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("""'{"categories":[],"keywords":[]}'::jsonb""")
+    )
+    corpus_centroid: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    tab_stack: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    active_tab: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

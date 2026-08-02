@@ -11,6 +11,12 @@ dependencies = [
     "asyncpg>=0.30",
     "alembic>=1.14",
     "saq[postgres]>=0.26",
+    "litellm>=1.95",
+    "keyring>=25.5",
+    "cryptography>=43.0",
+    "httpx>=0.28",
+    "pgvector>=0.5.0",
+    "python-slugify>=8.0.4",
 ]
 
 [dependency-groups]

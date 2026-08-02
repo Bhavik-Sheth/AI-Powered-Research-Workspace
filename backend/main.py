@@ -17,14 +17,18 @@ from typing import AsyncIterator
 
 import uvicorn
 from fastapi import Depends, FastAPI
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import db
 import jobs
 import vault
 from api.deps import require_bearer_token
-from api.errors import handle_exception
+from api.errors import handle_exception, handle_http_exception, handle_validation_error
 from api.health import Capability, ReadinessState
 from api.health import router as health_router
+from api.projects import router as projects_router
+from api.settings import router as settings_router
 from config import get_config
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(levelname)s %(message)s")
@@ -126,8 +130,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Research Companion OS", version="0.1.0", lifespan=lifespan)
+    app.add_exception_handler(StarletteHTTPException, handle_http_exception)
+    app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(Exception, handle_exception)
     app.include_router(health_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(settings_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(projects_router, dependencies=[Depends(require_bearer_token)])
     return app
 
 

@@ -5,6 +5,44 @@ export type ClientOptions = {
 };
 
 /**
+ * CreateProjectRequest
+ */
+export type CreateProjectRequest = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Focus Seed
+     */
+    focus_seed?: string | null;
+};
+
+/**
+ * DiscoverModelsRequest
+ */
+export type DiscoverModelsRequest = {
+    /**
+     * Provider
+     */
+    provider: 'ollama' | 'vllm';
+    /**
+     * Base Url
+     */
+    base_url: string;
+};
+
+/**
+ * DiscoverModelsResponse
+ */
+export type DiscoverModelsResponse = {
+    /**
+     * Models
+     */
+    models: Array<string>;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -24,6 +62,111 @@ export type HealthResponse = {
     capabilities: {
         [key: string]: 'pending' | 'ready' | 'failed';
     };
+};
+
+/**
+ * ModelSettings
+ */
+export type ModelSettings = {
+    /**
+     * Providers
+     */
+    providers: {
+        [key: string]: ProviderInfo;
+    };
+    /**
+     * Primary Model
+     */
+    primary_model?: string | null;
+    /**
+     * Auxiliary Model
+     */
+    auxiliary_model?: string | null;
+    /**
+     * Onboarding Completed At
+     */
+    onboarding_completed_at?: string | null;
+};
+
+/**
+ * ProjectResponse
+ */
+export type ProjectResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Focus Seed
+     */
+    focus_seed: string | null;
+    /**
+     * Last Opened At
+     */
+    last_opened_at: string | null;
+};
+
+/**
+ * ProviderCredentials
+ *
+ * What the user submits to save and validate one provider.
+ */
+export type ProviderCredentials = {
+    /**
+     * Api Key
+     */
+    api_key?: string | null;
+    /**
+     * Base Url
+     */
+    base_url?: string | null;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Tier
+     */
+    tier?: 'primary' | 'auxiliary';
+};
+
+/**
+ * ProviderInfo
+ *
+ * What is ever read back — never ciphertext, nonce, or plaintext key.
+ */
+export type ProviderInfo = {
+    /**
+     * Last4
+     */
+    last4?: string | null;
+    /**
+     * Base Url
+     */
+    base_url?: string | null;
+    /**
+     * Validated At
+     */
+    validated_at?: string | null;
+};
+
+/**
+ * SaveProviderRequest
+ */
+export type SaveProviderRequest = {
+    /**
+     * Provider
+     */
+    provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
+    credentials: ProviderCredentials;
 };
 
 /**
@@ -52,6 +195,16 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * VaultPathRequest
+ */
+export type VaultPathRequest = {
+    /**
+     * Path
+     */
+    path: string;
 };
 
 export type GetHealthApiHealthGetData = {
@@ -84,3 +237,262 @@ export type GetHealthApiHealthGetResponses = {
 };
 
 export type GetHealthApiHealthGetResponse = GetHealthApiHealthGetResponses[keyof GetHealthApiHealthGetResponses];
+
+export type GetModelsApiSettingsModelsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/models';
+};
+
+export type GetModelsApiSettingsModelsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetModelsApiSettingsModelsGetError = GetModelsApiSettingsModelsGetErrors[keyof GetModelsApiSettingsModelsGetErrors];
+
+export type GetModelsApiSettingsModelsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ModelSettings;
+};
+
+export type GetModelsApiSettingsModelsGetResponse = GetModelsApiSettingsModelsGetResponses[keyof GetModelsApiSettingsModelsGetResponses];
+
+export type PutModelsApiSettingsModelsPutData = {
+    body: SaveProviderRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/models';
+};
+
+export type PutModelsApiSettingsModelsPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutModelsApiSettingsModelsPutError = PutModelsApiSettingsModelsPutErrors[keyof PutModelsApiSettingsModelsPutErrors];
+
+export type PutModelsApiSettingsModelsPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: ModelSettings;
+};
+
+export type PutModelsApiSettingsModelsPutResponse = PutModelsApiSettingsModelsPutResponses[keyof PutModelsApiSettingsModelsPutResponses];
+
+export type DiscoverModelsApiSettingsModelsDiscoverPostData = {
+    body: DiscoverModelsRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/models/discover';
+};
+
+export type DiscoverModelsApiSettingsModelsDiscoverPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscoverModelsApiSettingsModelsDiscoverPostError = DiscoverModelsApiSettingsModelsDiscoverPostErrors[keyof DiscoverModelsApiSettingsModelsDiscoverPostErrors];
+
+export type DiscoverModelsApiSettingsModelsDiscoverPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DiscoverModelsResponse;
+};
+
+export type DiscoverModelsApiSettingsModelsDiscoverPostResponse = DiscoverModelsApiSettingsModelsDiscoverPostResponses[keyof DiscoverModelsApiSettingsModelsDiscoverPostResponses];
+
+export type PutVaultPathApiSettingsVaultPathPutData = {
+    body: VaultPathRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/vault-path';
+};
+
+export type PutVaultPathApiSettingsVaultPathPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutVaultPathApiSettingsVaultPathPutError = PutVaultPathApiSettingsVaultPathPutErrors[keyof PutVaultPathApiSettingsVaultPathPutErrors];
+
+export type PutVaultPathApiSettingsVaultPathPutResponses = {
+    /**
+     * Response Put Vault Path Api Settings Vault Path Put
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type PutVaultPathApiSettingsVaultPathPutResponse = PutVaultPathApiSettingsVaultPathPutResponses[keyof PutVaultPathApiSettingsVaultPathPutResponses];
+
+export type PutOnboardingCompleteApiSettingsOnboardingCompletePutData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/onboarding-complete';
+};
+
+export type PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutOnboardingCompleteApiSettingsOnboardingCompletePutError = PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors[keyof PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors];
+
+export type PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: ModelSettings;
+};
+
+export type PutOnboardingCompleteApiSettingsOnboardingCompletePutResponse = PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses[keyof PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses];
+
+export type ListProjectsApiProjectsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects';
+};
+
+export type ListProjectsApiProjectsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectsApiProjectsGetError = ListProjectsApiProjectsGetErrors[keyof ListProjectsApiProjectsGetErrors];
+
+export type ListProjectsApiProjectsGetResponses = {
+    /**
+     * Response List Projects Api Projects Get
+     *
+     * Successful Response
+     */
+    200: Array<ProjectResponse>;
+};
+
+export type ListProjectsApiProjectsGetResponse = ListProjectsApiProjectsGetResponses[keyof ListProjectsApiProjectsGetResponses];
+
+export type CreateProjectApiProjectsPostData = {
+    body: CreateProjectRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/projects';
+};
+
+export type CreateProjectApiProjectsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateProjectApiProjectsPostError = CreateProjectApiProjectsPostErrors[keyof CreateProjectApiProjectsPostErrors];
+
+export type CreateProjectApiProjectsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectResponse;
+};
+
+export type CreateProjectApiProjectsPostResponse = CreateProjectApiProjectsPostResponses[keyof CreateProjectApiProjectsPostResponses];
+
+export type GetProjectApiProjectsProjectIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}';
+};
+
+export type GetProjectApiProjectsProjectIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetProjectApiProjectsProjectIdGetError = GetProjectApiProjectsProjectIdGetErrors[keyof GetProjectApiProjectsProjectIdGetErrors];
+
+export type GetProjectApiProjectsProjectIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectResponse;
+};
+
+export type GetProjectApiProjectsProjectIdGetResponse = GetProjectApiProjectsProjectIdGetResponses[keyof GetProjectApiProjectsProjectIdGetResponses];
