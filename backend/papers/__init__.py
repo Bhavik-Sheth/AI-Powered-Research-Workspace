@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import db
 import jobs
+import memory
 import settings
 from db.models import Paper as PaperRow
 from db.models import PaperCards, PaperContent, QuoteAnchors
@@ -42,6 +43,7 @@ _S2_CORPUS_PREFIX = re.compile(r"^\s*corpusid:\s*", re.IGNORECASE)
 _PARSE_JOB_TIMEOUT_S = 600
 _EXTRACT_JOB_TIMEOUT_S = 180
 _ENRICH_JOB_TIMEOUT_S = 30
+_EMBED_JOB_TIMEOUT_S = 120
 
 _FIELD_KEYS = ("problem", "method", "datasets", "results", "limitations")
 
@@ -218,6 +220,7 @@ async def parse_paper_job(_ctx: dict, *, paper_id: str) -> None:
         paper.parse_state = "done"
 
     await jobs.enqueue("extract_card_job", paper_id=paper_id, timeout=_EXTRACT_JOB_TIMEOUT_S)
+    await jobs.enqueue("embed_paper_job", paper_id=paper_id, timeout=_EMBED_JOB_TIMEOUT_S)
 
 
 _EXTRACTION_PROMPT = (
@@ -254,6 +257,29 @@ async def _set_extract_state(pid: uuid.UUID, state: str) -> None:
         paper = await session.get(PaperRow, pid)
         if paper is not None:
             paper.extract_state = state
+
+
+async def _set_embed_state(pid: uuid.UUID, state: str) -> None:
+    async with db.session() as session:
+        paper = await session.get(PaperRow, pid)
+        if paper is not None:
+            paper.embed_state = state
+
+
+async def embed_paper_job(_ctx: dict, *, paper_id: str) -> None:
+    """Chunks and embeds the paper's abstract and sections into `paper_chunks`
+    (Memory Index's `chunk_and_embed_job`, called directly rather than
+    enqueued twice — one job here avoids a two-job completion race over
+    `embed_state`)."""
+    pid = uuid.UUID(paper_id)
+    await _set_embed_state(pid, "running")
+    try:
+        await memory.chunk_and_embed_job({}, source_type="abstract", source_id=paper_id)
+        await memory.chunk_and_embed_job({}, source_type="paper_section", source_id=paper_id)
+    except Exception:
+        await _set_embed_state(pid, "failed")
+        raise
+    await _set_embed_state(pid, "done")
 
 
 async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:

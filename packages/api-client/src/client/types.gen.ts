@@ -26,6 +26,48 @@ export type AnchorHint = {
 };
 
 /**
+ * CitedRow
+ *
+ * One retrieval hit, always traceable back to the row it came from
+ * (MODULES.md `query_memory`) — the paper it's from when it has one, the
+ * verbatim text, and the span within the source artifact.
+ */
+export type CitedRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Source Type
+     */
+    source_type: 'paper_section' | 'abstract' | 'note' | 'experiment' | 'conversation_summary';
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Paper Id
+     */
+    paper_id: string | null;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Section Heading
+     */
+    section_heading: string | null;
+    /**
+     * Char Start
+     */
+    char_start: number;
+    /**
+     * Char End
+     */
+    char_end: number;
+};
+
+/**
  * CreateProjectRequest
  */
 export type CreateProjectRequest = {
@@ -179,6 +221,30 @@ export type LibraryEntry = {
      * Why Relevant
      */
     why_relevant: string | null;
+};
+
+/**
+ * MemoryQueryRequest
+ */
+export type MemoryQueryRequest = {
+    /**
+     * Query
+     */
+    query: string;
+    /**
+     * Types
+     */
+    types?: Array<string> | null;
+};
+
+/**
+ * MemoryQueryResponse
+ */
+export type MemoryQueryResponse = {
+    /**
+     * Rows
+     */
+    rows: Array<CitedRow>;
 };
 
 /**
@@ -1200,6 +1266,42 @@ export type CreateHighlightApiProjectsProjectIdHighlightsPostResponses = {
 };
 
 export type CreateHighlightApiProjectsProjectIdHighlightsPostResponse = CreateHighlightApiProjectsProjectIdHighlightsPostResponses[keyof CreateHighlightApiProjectsProjectIdHighlightsPostResponses];
+
+export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostData = {
+    body: MemoryQueryRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/memory/query';
+};
+
+export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostError = QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostErrors[keyof QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostErrors];
+
+export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: MemoryQueryResponse;
+};
+
+export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponse = QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses[keyof QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses];
 
 export type ListProjectPapersApiProjectsProjectIdPapersGetData = {
     body?: never;

@@ -36,9 +36,10 @@ def _job_functions() -> list:
     # `enqueue` from within its own job handlers), so a top-level import
     # here would cycle. By the time `start()` runs (Sidecar Bootstrap's
     # lifespan), papers/ is already fully loaded via main.py's own imports.
-    from papers import enrich_paper_job, extract_card_job, parse_paper_job
+    from memory import chunk_and_embed_job
+    from papers import embed_paper_job, enrich_paper_job, extract_card_job, parse_paper_job
 
-    return [parse_paper_job, extract_card_job, enrich_paper_job]
+    return [parse_paper_job, extract_card_job, enrich_paper_job, embed_paper_job, chunk_and_embed_job]
 
 
 async def start() -> None:

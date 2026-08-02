@@ -1,27 +1,37 @@
 """Agent Harness — assembles context, calls the LLM, streams typed turn
 events, and persists the transcript for one agent turn (MODULES.md, D18).
 
-Phase 1.5 ships the reader-Q&A path only (D19: "Reader Q&A is not a tool —
-it is the core agent loop answering from ambient UI-state"), so `run_turn`
-is a single LLM pass with no tool-calling loop; the iteration cap and tool
-dispatch land with later phases as tools are added. Citations are enforced
-structurally (D24): the model is asked to wrap every quoted claim in
-`<cite>` tags, and every tag is independently re-validated against the
-paper's parsed text via Provenance before the turn completes — a tag that
-does not resolve is relabelled `<unverified>`, never trusted from the
-model's own say-so.
+Phase 1.5 shipped the reader-Q&A path (D19: "Reader Q&A is not a tool — it
+is the core agent loop answering from ambient UI-state"). Phase 1.7 adds
+the first real tool, `query_memory` (D19 Memory), wired as a lightweight
+decide-then-retrieve step via `complete_structured` rather than a full
+streamed function-calling loop — with exactly one tool and a query-only
+contract, a structured yes/no-plus-query decision is the same capability
+with far less machinery, and the iteration cap this would otherwise need
+lands with Phase 1.8 once a second tool actually requires looping.
+
+Citations are enforced structurally either way (D24): the model wraps every
+quoted claim in `<cite>` tags, and every tag is independently re-verified
+before the turn completes — against Provenance for the open paper's text,
+or by checking it is a substring of a row `query_memory` actually returned
+(D24: "memory recall cites source row ids; verification is trivial — the
+row exists"). A tag that resolves neither way is relabelled `<unverified>`,
+never trusted from the model's own say-so.
 """
 
 import re
 import uuid
 from collections.abc import AsyncIterator
 
+from pydantic import BaseModel
 from sqlalchemy import func, select
 
 import db
 from db.models import Messages
 from harness.models import ErrorEvent, SessionRef, StatusEvent, TextDeltaEvent, TurnCompleteEvent, TurnEvent, UIState
-from llm import LLMError, Message, complete
+from llm import LLMError, Message, complete, complete_structured
+from memory import query_memory
+from memory.models import CitedRow
 from provenance import validate_and_anchor
 
 __all__ = ["run_turn", "interrupt"]
@@ -29,11 +39,47 @@ __all__ = ["run_turn", "interrupt"]
 _CITE_PATTERN = re.compile(r"<cite>(.*?)</cite>", re.DOTALL)
 
 _SYSTEM_PROMPT = (
-    "You are the Research Companion, helping a researcher who is reading a paper. "
-    "Wrap every verbatim quote that supports a factual claim about the paper in <cite></cite> "
-    "tags, copying the paper's exact wording inside the tags. Put your own reasoning and "
-    "commentary outside the tags. Make no factual claim about the paper without a supporting quote."
+    "You are the Research Companion, helping a researcher with their project. "
+    "Wrap every verbatim quote or specific fact drawn from the paper, a retrieved note, or a "
+    "retrieved past conversation in <cite></cite> tags, copying the source's exact wording "
+    "inside the tags. Put your own reasoning and commentary outside the tags. Make no factual "
+    "claim from a source without a supporting quote."
 )
+
+
+class _MemoryDecision(BaseModel):
+    use_memory: bool
+    query: str = ""
+
+
+_MEMORY_DECISION_PROMPT = (
+    "Decide whether answering the user's message needs searching the project's own notes, "
+    "papers, and past conversations (query_memory). Say yes only if the conversation so far and "
+    "any highlighted passage are not already enough to answer. If yes, give a short search query."
+)
+
+
+async def _maybe_retrieve(project_id: uuid.UUID, message: str) -> list[CitedRow]:
+    try:
+        decision = await complete_structured(
+            messages=[Message(role="system", content=_MEMORY_DECISION_PROMPT), Message(role="user", content=message)],
+            schema=_MemoryDecision,
+            tier="auxiliary",
+            timeout=20,
+        )
+    except (*LLMError, RuntimeError):
+        return []  # No memory context beats failing the whole turn over an optional step.
+    if not decision.use_memory or not decision.query:
+        return []
+    return await query_memory(project_id, decision.query)
+
+
+def _format_memory_rows(rows: list[CitedRow]) -> str:
+    lines = ["Retrieved from the project's memory:"]
+    for row in rows:
+        label = f"§{row.section_heading}" if row.section_heading else row.source_type
+        lines.append(f'- ({label}) "{row.text}"')
+    return "\n".join(lines)
 
 
 async def _history(session, conversation_id: uuid.UUID) -> list[Message]:
@@ -48,10 +94,18 @@ async def _next_seq(session, conversation_id: uuid.UUID) -> int:
     return (last or 0) + 1
 
 
-async def _validate_citations(session, paper_id: uuid.UUID | None, text: str) -> tuple[str, list[dict]]:
+def _matching_memory_row(quote: str, memory_rows: list[CitedRow]) -> CitedRow | None:
+    return next((row for row in memory_rows if quote in row.text), None)
+
+
+async def _validate_citations(
+    session, paper_id: uuid.UUID | None, memory_rows: list[CitedRow], text: str
+) -> tuple[str, list[dict]]:
     """D24's substring validator, applied to every `<cite>` span the model
-    produced. Returns the text with failed tags relabelled `<unverified>`,
-    plus the structured citation list `messages.citations` stores."""
+    produced — against the open paper via Provenance, or against a row
+    `query_memory` actually retrieved. Returns the text with failed tags
+    relabelled `<unverified>`, plus the structured citation list
+    `messages.citations` stores."""
     citations: list[dict] = []
     pieces: list[str] = []
     cursor = 0
@@ -59,11 +113,15 @@ async def _validate_citations(session, paper_id: uuid.UUID | None, text: str) ->
         pieces.append(text[cursor : match.start()])
         quote = match.group(1)
         anchor = await validate_and_anchor(session, paper_id, quote, "", "") if paper_id is not None else None
-        if anchor is None:
-            pieces.append(f"<unverified>{quote}</unverified>")
-        else:
-            citations.append({"anchor_id": str(anchor.id), "quote": quote})
+        memory_row = None if anchor is not None else _matching_memory_row(quote, memory_rows)
+        if anchor is not None:
+            citations.append({"kind": "anchor", "anchor_id": str(anchor.id), "quote": quote})
             pieces.append(f"<cite>{quote}</cite>")
+        elif memory_row is not None:
+            citations.append({"kind": "memory", "row_id": str(memory_row.id), "source_type": memory_row.source_type, "quote": quote})
+            pieces.append(f"<cite>{quote}</cite>")
+        else:
+            pieces.append(f"<unverified>{quote}</unverified>")
         cursor = match.end()
     pieces.append(text[cursor:])
     return "".join(pieces), citations
@@ -80,11 +138,17 @@ async def run_turn(session_ref: SessionRef, message: str, ui_state: UIState) -> 
             Messages(conversation_id=session_ref.conversation_id, seq=seq, turn_id=turn_id, role="user", content=message, citations=[])
         )
 
+    memory_rows = await _maybe_retrieve(session_ref.project_id, message)
+    if memory_rows:
+        yield StatusEvent(text="searching your project…")
+
     llm_messages = [Message(role="system", content=_SYSTEM_PROMPT)]
     if ui_state.selection is not None:
         llm_messages.append(
             Message(role="system", content=f'The user has highlighted this passage from the paper:\n"{ui_state.selection.anchor.quote}"')
         )
+    if memory_rows:
+        llm_messages.append(Message(role="system", content=_format_memory_rows(memory_rows)))
     llm_messages += history
     llm_messages.append(Message(role="user", content=message))
 
@@ -104,7 +168,7 @@ async def run_turn(session_ref: SessionRef, message: str, ui_state: UIState) -> 
         return
 
     async with db.session() as db_session:
-        cleaned_text, citations = await _validate_citations(db_session, paper_id, full_text)
+        cleaned_text, citations = await _validate_citations(db_session, paper_id, memory_rows, full_text)
         seq = await _next_seq(db_session, session_ref.conversation_id)
         db_session.add(
             Messages(

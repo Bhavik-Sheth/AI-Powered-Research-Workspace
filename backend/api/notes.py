@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 import db
+import jobs
 import notes
 import vault
 from vault.models import Note, NoteInput
@@ -24,11 +25,13 @@ async def create_note(project_id: uuid.UUID, body: NoteInput) -> Note:
         raise HTTPException(status_code=422, detail="a new note must not carry frontmatter_id; use PATCH to update")
     async with db.session() as session:
         try:
-            return await vault.write_note(session, project_id, body)
+            note = await vault.write_note(session, project_id, body)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except vault.VaultWriteFailed as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+    await jobs.enqueue("chunk_and_embed_job", source_type="note", source_id=str(note.id))
+    return note
 
 
 @router.patch("/api/projects/{project_id}/notes", response_model=Note)

@@ -729,6 +729,72 @@
         }
       }
     },
+    "/api/projects/{project_id}/memory/query": {
+      "post": {
+        "summary": "Query Project Memory",
+        "operationId": "query_project_memory_api_projects__project_id__memory_query_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryQueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/papers": {
       "post": {
         "summary": "Add Paper",
@@ -1198,6 +1264,78 @@
         "title": "AnchorHint",
         "description": "A cached rendering hint only \u2014 never identity (TRD \u00a74.1)."
       },
+      "CitedRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "paper_section",
+              "abstract",
+              "note",
+              "experiment",
+              "conversation_summary"
+            ],
+            "title": "Source Type"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "paper_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paper Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "section_heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Heading"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_type",
+          "source_id",
+          "paper_id",
+          "text",
+          "section_heading",
+          "char_start",
+          "char_end"
+        ],
+        "title": "CitedRow",
+        "description": "One retrieval hit, always traceable back to the row it came from\n(MODULES.md `query_memory`) \u2014 the paper it's from when it has one, the\nverbatim text, and the span within the source artifact."
+      },
       "CreateProjectRequest": {
         "properties": {
           "name": {
@@ -1490,6 +1628,49 @@
           "why_relevant"
         ],
         "title": "LibraryEntry"
+      },
+      "MemoryQueryRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "MemoryQueryRequest"
+      },
+      "MemoryQueryResponse": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CitedRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows"
+        ],
+        "title": "MemoryQueryResponse"
       },
       "ModelSettings": {
         "properties": {

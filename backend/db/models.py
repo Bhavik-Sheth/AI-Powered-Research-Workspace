@@ -15,6 +15,7 @@ from datetime import datetime
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     Float,
     ForeignKey,
     Integer,
@@ -25,7 +26,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import INT4RANGE, JSONB, TIMESTAMP, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 EMBEDDING_DIM = 768
@@ -376,3 +377,42 @@ class Messages(Base):
     interrupted: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
     input_modality: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'text'"))
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
+class PaperChunks(Base):
+    """Global retrieval memory over paper content (Schema.md `paper_chunks`,
+    Phase 1.7, D25) — one of exactly two memory tables. No `project_id`;
+    project scoping is a query-time membership filter (`query_memory`'s arm A)."""
+
+    __tablename__ = "paper_chunks"
+    __table_args__ = (CheckConstraint("source_type IN ('paper_section', 'abstract')", name="paper_chunks_source_type_check"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    paper_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("papers.id", ondelete="CASCADE"), nullable=False)
+    source_type: Mapped[str] = mapped_column(String, nullable=False)
+    source_id: Mapped[str] = mapped_column(String, nullable=False)
+    char_span: Mapped[str] = mapped_column(INT4RANGE, nullable=False)
+    section_heading: Mapped[str | None] = mapped_column(String, nullable=True)
+    text_: Mapped[str] = mapped_column("text", String, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    tsv: Mapped[str] = mapped_column(TSVECTOR, Computed("to_tsvector('english', text)", persisted=True), nullable=False)
+
+
+class ProjectChunks(Base):
+    """The second and last memory table (Schema.md `project_chunks`, Phase
+    1.7, D25) — retrieval over a project's own artifacts. Identical shape to
+    `PaperChunks` plus `project_id`."""
+
+    __tablename__ = "project_chunks"
+    __table_args__ = (
+        CheckConstraint("source_type IN ('note', 'experiment', 'conversation_summary')", name="project_chunks_source_type_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    source_type: Mapped[str] = mapped_column(String, nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    char_span: Mapped[str] = mapped_column(INT4RANGE, nullable=False)
+    text_: Mapped[str] = mapped_column("text", String, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    tsv: Mapped[str] = mapped_column(TSVECTOR, Computed("to_tsvector('english', text)", persisted=True), nullable=False)
