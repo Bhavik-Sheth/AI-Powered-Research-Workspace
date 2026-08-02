@@ -322,3 +322,57 @@ class ProjectPapers(Base):
     why_relevant: Mapped[str | None] = mapped_column(String, nullable=True)
     added_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     resume_position: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class Highlights(Base):
+    """A reader highlight (Schema.md `highlights`, Phase 1.5) — the same
+    anchor object an extractive card field uses (D33), mirrored to the vault."""
+
+    __tablename__ = "highlights"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    paper_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("papers.id", ondelete="CASCADE"), nullable=False)
+    anchor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("quote_anchors.id", ondelete="CASCADE"), nullable=False)
+    note_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("notes.id", ondelete="SET NULL"), nullable=True)
+    comment: Mapped[str | None] = mapped_column(String, nullable=True)
+    color: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
+class Conversations(Base):
+    """One Companion thread, per project (Schema.md `conversations`, Phase 1.5)."""
+
+    __tablename__ = "conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    summarised_through_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_message_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
+class Messages(Base):
+    """The transcript, held verbatim (Schema.md `messages`, Phase 1.5, D18 node 2)."""
+
+    __tablename__ = "messages"
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'assistant', 'tool_call', 'tool_result')", name="messages_role_check"),
+        CheckConstraint("input_modality IN ('text', 'voice')", name="messages_input_modality_check"),
+        UniqueConstraint("conversation_id", "seq", name="messages_conversation_id_seq_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    turn_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(String, nullable=False)
+    tool_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    result_id: Mapped[str | None] = mapped_column(String, ForeignKey("result_store.result_id", ondelete="SET NULL"), nullable=True)
+    citations: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    interrupted: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    input_modality: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'text'"))
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

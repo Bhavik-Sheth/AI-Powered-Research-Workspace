@@ -18,6 +18,7 @@ from typing import AsyncIterator
 import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import db
@@ -27,12 +28,14 @@ from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
 from api.health import Capability, ReadinessState
 from api.health import router as health_router
+from api.highlights import router as highlights_router
 from api.notes import router as notes_router
 from api.papers import router as papers_router
 from api.projects import router as projects_router
 from api.search import router as search_router
 from api.settings import router as settings_router
 from config import get_config
+from ws import router as ws_router
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -133,6 +136,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Research Companion OS", version="0.1.0", lifespan=lifespan)
+    # The renderer's origin (Vite's dev server, or Electron's `file://` in
+    # production — `webSecurity` is not disabled there) is otherwise unable
+    # to read any response. The bearer token (D2), not origin, is the access
+    # boundary here, so allowing every origin adds no real exposure.
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(Exception, handle_exception)
@@ -140,8 +148,10 @@ def create_app() -> FastAPI:
     app.include_router(settings_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(projects_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(notes_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(highlights_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(papers_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(search_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(ws_router)
     return app
 
 

@@ -1,10 +1,35 @@
 import { useEffect, useRef, useState } from "react";
-import { getPaperApiPapersPaperIdGet, type PaperCardField, type PaperDetail } from "@research-os/api-client";
+import { createHighlightApiProjectsProjectIdHighlightsPost, getPaperApiPapersPaperIdGet, type PaperCardField, type PaperDetail } from "@research-os/api-client";
 
+import type { SelectionState } from "../companion/wsTypes";
 import { fetchBinary } from "../state/bridge";
 import { loadDocument, TextLayer, type PDFDocumentProxy } from "./pdf";
 import "./ReaderTab.css";
 import { useAnchorSync } from "./useAnchorSync";
+
+const CONTEXT_WINDOW = 40;
+
+interface SelectionPopover {
+  quote: string;
+  prefix: string;
+  suffix: string;
+  x: number;
+  y: number;
+}
+
+/** Real prefix/suffix from the paper's own parsed text, not the PDF.js text
+ * layer's — the two text streams differ in whitespace/hyphenation (D33),
+ * and the harness's substring validator checks against parsed text. An
+ * `indexOf` miss just means weaker disambiguation context, not a failure —
+ * the quote itself is still independently re-validated server-side. */
+function contextFor(fullText: string, quote: string): { prefix: string; suffix: string } {
+  const at = fullText.indexOf(quote);
+  if (at === -1) return { prefix: "", suffix: "" };
+  return {
+    prefix: fullText.slice(Math.max(0, at - CONTEXT_WINDOW), at),
+    suffix: fullText.slice(at + quote.length, at + quote.length + CONTEXT_WINDOW),
+  };
+}
 
 const FIELD_LABEL: Record<string, string> = {
   problem: "Problem",
@@ -26,6 +51,7 @@ function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPag
 
   useEffect(() => {
     let cancelled = false;
+    let renderTask: ReturnType<import("./pdf").PDFPageProxy["render"]> | null = null;
     (async () => {
       const viewport = page.getViewport({ scale: 1.4 });
       const canvas = canvasRef.current;
@@ -34,7 +60,12 @@ function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPag
       canvas.height = viewport.height;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+      renderTask = page.render({ canvas, canvasContext: ctx, viewport });
+      try {
+        await renderTask.promise;
+      } catch {
+        return; // cancelled — the effect's own cleanup already tore this render down
+      }
 
       if (textLayerRef.current && !cancelled) {
         textLayerRef.current.style.width = `${viewport.width}px`;
@@ -46,6 +77,7 @@ function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPag
     })();
     return () => {
       cancelled = true;
+      renderTask?.cancel();
     };
   }, [page]);
 
@@ -58,11 +90,21 @@ function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPag
 }
 
 /** The Reader (MODULES.md) — real PDF.js pages, structure sidebar, extractive card. */
-export function ReaderTab({ paperId }: { paperId: string }) {
+export function ReaderTab({
+  paperId,
+  projectId,
+  onAskCompanion,
+}: {
+  paperId: string;
+  projectId: string;
+  onAskCompanion: (selection: SelectionState, question: string) => void;
+}) {
   const [detail, setDetail] = useState<PaperDetail | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [pages, setPages] = useState<import("./pdf").PDFPageProxy[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [popover, setPopover] = useState<SelectionPopover | null>(null);
+  const [highlightState, setHighlightState] = useState<"idle" | "saving" | "saved">("idle");
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const { activeAnchor, focusAnchor } = useAnchorSync();
 
@@ -115,6 +157,49 @@ export function ReaderTab({ paperId }: { paperId: string }) {
     void scrollToQuote(field.value);
   }
 
+  function handleTextSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+      setPopover(null);
+      return;
+    }
+    const quote = sel.toString().trim();
+    const anchorEl = sel.getRangeAt(0).startContainer.parentElement;
+    if (!quote || !detail?.content || !anchorEl?.closest(".reader__text-layer")) {
+      return;
+    }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const { prefix, suffix } = contextFor(detail.content.full_text, quote);
+    setHighlightState("idle");
+    setPopover({ quote, prefix, suffix, x: rect.left + rect.width / 2, y: rect.top });
+  }
+
+  function closePopover() {
+    setPopover(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
+  async function handleHighlight() {
+    if (!popover) return;
+    setHighlightState("saving");
+    try {
+      await createHighlightApiProjectsProjectIdHighlightsPost({
+        path: { project_id: projectId },
+        body: { paper_id: paperId, anchor: { quote: popover.quote, prefix: popover.prefix, suffix: popover.suffix } },
+        throwOnError: true,
+      });
+      setHighlightState("saved");
+    } catch {
+      setHighlightState("idle");
+    }
+  }
+
+  function handleAsk(question: string) {
+    if (!popover) return;
+    onAskCompanion({ paper_id: paperId, anchor: { quote: popover.quote, prefix: popover.prefix, suffix: popover.suffix } }, question);
+    closePopover();
+  }
+
   if (error) {
     return <div className="reader__degraded">{error}</div>;
   }
@@ -161,7 +246,7 @@ export function ReaderTab({ paperId }: { paperId: string }) {
         <h4>Code ({detail.content?.code_links.length ?? 0})</h4>
       </nav>
 
-      <div className="reader__pages">
+      <div className="reader__pages" onMouseUp={handleTextSelection}>
         {pages.map((page) => (
           <Page
             key={page.pageNumber}
@@ -202,6 +287,20 @@ export function ReaderTab({ paperId }: { paperId: string }) {
           );
         })}
       </aside>
+
+      {popover && (
+        <div className="reader__popover" style={{ left: popover.x, top: popover.y }}>
+          <button type="button" onClick={handleHighlight} disabled={highlightState === "saving"}>
+            {highlightState === "saved" ? "Highlighted ✓" : highlightState === "saving" ? "Saving…" : "Highlight"}
+          </button>
+          <button type="button" onClick={() => handleAsk(`What does this mean: "${popover.quote}"?`)}>
+            Ask about this
+          </button>
+          <button type="button" onClick={() => handleAsk(`Explain this in simple terms: "${popover.quote}"`)}>
+            Explain
+          </button>
+        </div>
+      )}
     </div>
   );
 }

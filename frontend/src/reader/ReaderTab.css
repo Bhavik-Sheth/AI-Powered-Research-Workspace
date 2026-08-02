@@ -118,3 +118,36 @@
   font: 13px/1.6 var(--font-ui);
   color: var(--text);
 }
+
+/* Selection popover (D33): "Ask about this" / "Highlight" / "Explain". */
+.reader__popover {
+  position: fixed;
+  transform: translate(-50%, -100%) translateY(-8px);
+  display: flex;
+  gap: 4px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-button);
+  box-shadow: 0 4px 16px oklch(26% 0.079 210 / 0.24);
+  padding: 6px;
+  z-index: 20;
+}
+
+.reader__popover button {
+  font: 700 11px var(--font-ui);
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  border-radius: var(--radius-button);
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reader__popover button:hover {
+  background: var(--accent-tint-10);
+}
+
+.reader__popover button:disabled {
+  cursor: default;
+  color: var(--text-muted);
+}

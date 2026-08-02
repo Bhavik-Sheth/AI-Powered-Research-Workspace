@@ -10,6 +10,7 @@ this module only knows the folder shapes inside it.
 
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -18,9 +19,9 @@ from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Notes, Paper, Project
+from db.models import Highlights, Notes, Paper, Project
 from settings import get_vault_path
-from vault.models import Note, NoteInput
+from vault.models import Highlight, Note, NoteInput
 
 _LAYOUT = ("library/papers", "projects", ".research-os")
 
@@ -147,3 +148,86 @@ async def write_paper_asset(session: AsyncSession, paper_id: uuid.UUID, kind: Li
         path.write_text(json.dumps(content, indent=2), encoding="utf-8")
 
     return path
+
+
+async def write_highlight(
+    session: AsyncSession,
+    project_id: uuid.UUID,
+    paper_id: uuid.UUID,
+    anchor_id: uuid.UUID,
+    quote: str,
+    prefix: str,
+    suffix: str,
+    section_heading: str | None,
+    char_start: int,
+    char_end: int,
+    comment: str | None = None,
+    color: str | None = None,
+    note_id: uuid.UUID | None = None,
+) -> Highlight:
+    """Writes the vault mirror file and the `highlights` + `quote_anchors`
+    rows together (D4). The anchor itself is validated by the caller
+    (Provenance's `validate_and_anchor`) before this is called — Vault
+    Writer sits *before* Provenance in MODULES.md's dependency order, so it
+    cannot call back into it; this takes an already-anchored quote.
+    """
+    project = await session.get(Project, project_id)
+    paper = await session.get(Paper, paper_id)
+    if project is None or paper is None:
+        raise ValueError("project or paper not found")
+
+    mirror_path = get_vault_path() / "projects" / project.slug / "papers" / "highlights" / f"{paper.canonical_id}.json"
+    mirror_path.parent.mkdir(parents=True, exist_ok=True)
+    entries = json.loads(mirror_path.read_text(encoding="utf-8")) if mirror_path.exists() else []
+
+    highlight_id = uuid.uuid4()
+    created_at = datetime.now(timezone.utc)
+    entries.append(
+        {
+            "id": str(highlight_id),
+            "quote": quote,
+            "prefix": prefix,
+            "suffix": suffix,
+            "char_offsets": [char_start, char_end],
+            "section_heading": section_heading,
+            "comment": comment,
+            "color": color,
+            "note_id": str(note_id) if note_id else None,
+            "created_at": created_at.isoformat(),
+        }
+    )
+    try:
+        mirror_path.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    except OSError as exc:
+        raise VaultWriteFailed(f"could not write {mirror_path}: {exc}") from exc
+
+    try:
+        row = Highlights(
+            id=highlight_id,
+            project_id=project_id,
+            paper_id=paper_id,
+            anchor_id=anchor_id,
+            note_id=note_id,
+            comment=comment,
+            color=color,
+            created_at=created_at,
+        )
+        session.add(row)
+        await session.flush()
+    except Exception as exc:
+        raise VaultWriteFailed(f"highlight file written but index update failed: {exc}") from exc
+
+    return Highlight(
+        id=row.id,
+        project_id=project_id,
+        paper_id=paper_id,
+        anchor_id=anchor_id,
+        quote=quote,
+        char_start=char_start,
+        char_end=char_end,
+        section_heading=section_heading,
+        comment=comment,
+        color=color,
+        note_id=note_id,
+        created_at=row.created_at,
+    )

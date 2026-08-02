@@ -52,3 +52,13 @@ export async function fetchBinary(path: string): Promise<ArrayBuffer> {
   }
   return response.arrayBuffer();
 }
+
+/**
+ * `ws://127.0.0.1:<port>/ws/session/:projectId?token=...` — the WebSocket
+ * upgrade carries the bearer token as a query param (D2), since the
+ * browser `WebSocket` constructor cannot set an `Authorization` header.
+ */
+export function wsSessionUrl(projectId: string): string {
+  const bridge = resolveBridge();
+  return `ws://127.0.0.1:${bridge.port}/ws/session/${projectId}?token=${encodeURIComponent(bridge.token)}`;
+}

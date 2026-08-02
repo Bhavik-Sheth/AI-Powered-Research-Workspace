@@ -5,6 +5,27 @@ export type ClientOptions = {
 };
 
 /**
+ * AnchorHint
+ *
+ * A cached rendering hint only — never identity (TRD §4.1).
+ */
+export type AnchorHint = {
+    /**
+     * Page
+     */
+    page: number;
+    /**
+     * Bbox
+     */
+    bbox: [
+        number,
+        number,
+        number,
+        number
+    ];
+};
+
+/**
  * CreateProjectRequest
  */
 export type CreateProjectRequest = {
@@ -62,6 +83,87 @@ export type HealthResponse = {
     capabilities: {
         [key: string]: 'pending' | 'ready' | 'failed';
     };
+};
+
+/**
+ * Highlight
+ *
+ * The `highlights` row (Schema.md), returned by the highlights endpoint.
+ */
+export type Highlight = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Paper Id
+     */
+    paper_id: string;
+    /**
+     * Anchor Id
+     */
+    anchor_id: string;
+    /**
+     * Quote
+     */
+    quote: string;
+    /**
+     * Char Start
+     */
+    char_start: number;
+    /**
+     * Char End
+     */
+    char_end: number;
+    /**
+     * Section Heading
+     */
+    section_heading: string | null;
+    /**
+     * Comment
+     */
+    comment: string | null;
+    /**
+     * Color
+     */
+    color: string | null;
+    /**
+     * Note Id
+     */
+    note_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * HighlightInput
+ *
+ * `POST /api/projects/:id/highlights` request body (TRD §4.2).
+ */
+export type HighlightInput = {
+    /**
+     * Paper Id
+     */
+    paper_id: string;
+    anchor: QuoteAnchorInput;
+    /**
+     * Comment
+     */
+    comment?: string | null;
+    /**
+     * Color
+     */
+    color?: string | null;
+    /**
+     * Note Id
+     */
+    note_id?: string | null;
 };
 
 /**
@@ -466,6 +568,29 @@ export type ProviderInfo = {
      * Validated At
      */
     validated_at?: string | null;
+};
+
+/**
+ * QuoteAnchorInput
+ *
+ * The wire shape of `QuoteAnchor` in TRD §4.1 — what a caller submits
+ * to be validated and anchored fresh (D24), same as an extractive card
+ * field.
+ */
+export type QuoteAnchorInput = {
+    /**
+     * Quote
+     */
+    quote: string;
+    /**
+     * Prefix
+     */
+    prefix: string;
+    /**
+     * Suffix
+     */
+    suffix: string;
+    hint?: AnchorHint | null;
 };
 
 /**
@@ -1039,6 +1164,42 @@ export type CreateNoteApiProjectsProjectIdNotesPostResponses = {
 };
 
 export type CreateNoteApiProjectsProjectIdNotesPostResponse = CreateNoteApiProjectsProjectIdNotesPostResponses[keyof CreateNoteApiProjectsProjectIdNotesPostResponses];
+
+export type CreateHighlightApiProjectsProjectIdHighlightsPostData = {
+    body: HighlightInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/highlights';
+};
+
+export type CreateHighlightApiProjectsProjectIdHighlightsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateHighlightApiProjectsProjectIdHighlightsPostError = CreateHighlightApiProjectsProjectIdHighlightsPostErrors[keyof CreateHighlightApiProjectsProjectIdHighlightsPostErrors];
+
+export type CreateHighlightApiProjectsProjectIdHighlightsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Highlight;
+};
+
+export type CreateHighlightApiProjectsProjectIdHighlightsPostResponse = CreateHighlightApiProjectsProjectIdHighlightsPostResponses[keyof CreateHighlightApiProjectsProjectIdHighlightsPostResponses];
 
 export type ListProjectPapersApiProjectsProjectIdPapersGetData = {
     body?: never;

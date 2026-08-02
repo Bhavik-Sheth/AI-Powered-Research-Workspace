@@ -663,6 +663,72 @@
         }
       }
     },
+    "/api/projects/{project_id}/highlights": {
+      "post": {
+        "summary": "Create Highlight",
+        "operationId": "create_highlight_api_projects__project_id__highlights_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HighlightInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Highlight"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/papers": {
       "post": {
         "summary": "Add Paper",
@@ -1097,6 +1163,41 @@
   },
   "components": {
     "schemas": {
+      "AnchorHint": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "bbox": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Bbox"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "bbox"
+        ],
+        "title": "AnchorHint",
+        "description": "A cached rendering hint only \u2014 never identity (TRD \u00a74.1)."
+      },
       "CreateProjectRequest": {
         "properties": {
           "name": {
@@ -1204,6 +1305,162 @@
           "capabilities"
         ],
         "title": "HealthResponse"
+      },
+      "Highlight": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "anchor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anchor Id"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          },
+          "section_heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Heading"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "note_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "paper_id",
+          "anchor_id",
+          "quote",
+          "char_start",
+          "char_end",
+          "section_heading",
+          "comment",
+          "color",
+          "note_id",
+          "created_at"
+        ],
+        "title": "Highlight",
+        "description": "The `highlights` row (Schema.md), returned by the highlights endpoint."
+      },
+      "HighlightInput": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/QuoteAnchorInput"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "note_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "anchor"
+        ],
+        "title": "HighlightInput",
+        "description": "`POST /api/projects/:id/highlights` request body (TRD \u00a74.2)."
       },
       "LibraryEntry": {
         "properties": {
@@ -1938,6 +2195,40 @@
         "type": "object",
         "title": "ProviderInfo",
         "description": "What is ever read back \u2014 never ciphertext, nonce, or plaintext key."
+      },
+      "QuoteAnchorInput": {
+        "properties": {
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "prefix": {
+            "type": "string",
+            "title": "Prefix"
+          },
+          "suffix": {
+            "type": "string",
+            "title": "Suffix"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnchorHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "quote",
+          "prefix",
+          "suffix"
+        ],
+        "title": "QuoteAnchorInput",
+        "description": "The wire shape of `QuoteAnchor` in TRD \u00a74.1 \u2014 what a caller submits\nto be validated and anchored fresh (D24), same as an extractive card\nfield."
       },
       "ReferenceInfo": {
         "properties": {

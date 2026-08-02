@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
+import type { SelectionState } from "../companion/wsTypes";
 import { LibraryView } from "../library/LibraryView";
 import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
@@ -22,10 +24,19 @@ const DEMO_PROJECT_ID = "0a436e50-9b2d-4501-9298-22ca11a900a5";
 
 /**
  * Top bar + nav shell + routed center pane (MODULES.md App Shell). Real
- * routing/tab-stack persistence lands in Phase 1.8.
+ * routing/tab-stack persistence lands in Phase 1.8. The Companion pane sits
+ * on every screen (UI_DESIGN.md §3.1/D32) — the reader's selection popover
+ * feeds it a question plus the D33 anchor as ambient `ui_state`.
  */
 export function AppShell() {
   const [view, setView] = useState<View>({ kind: "readiness" });
+  const [selection, setSelection] = useState<SelectionState | null>(null);
+  const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
+
+  function askCompanion(newSelection: SelectionState, question: string) {
+    setSelection(newSelection);
+    setPendingAsk({ text: question, nonce: Date.now() });
+  }
 
   return (
     <div className="app-frame">
@@ -64,8 +75,11 @@ export function AppShell() {
           {view.kind === "library" && (
             <LibraryView projectId={view.projectId} onOpenPaper={(paperId) => setView({ kind: "reader", paperId })} />
           )}
-          {view.kind === "reader" && <ReaderTab paperId={view.paperId} />}
+          {view.kind === "reader" && (
+            <ReaderTab paperId={view.paperId} projectId={DEMO_PROJECT_ID} onAskCompanion={askCompanion} />
+          )}
         </main>
+        <CompanionPane projectId={DEMO_PROJECT_ID} selection={selection} pendingAsk={pendingAsk} />
       </div>
     </div>
   );
