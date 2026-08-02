@@ -35,3 +35,20 @@ export function configureApiClient(): void {
     headers: { Authorization: `Bearer ${bridge.token}` },
   });
 }
+
+/**
+ * Authenticated fetch for binary responses (the PDF endpoint) — every REST
+ * request carries the bearer token (D2), which a plain `<iframe src>` or
+ * `<embed>` cannot attach, so this is the one place a reader tab fetches
+ * PDF bytes directly instead of going through the generated JSON client.
+ */
+export async function fetchBinary(path: string): Promise<ArrayBuffer> {
+  const bridge = resolveBridge();
+  const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+    headers: { Authorization: `Bearer ${bridge.token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`${path} failed: ${response.status}`);
+  }
+  return response.arrayBuffer();
+}

@@ -56,6 +56,7 @@ def _dedupe(hits: list[RawHit]) -> list[RawHit]:
 def _to_summary(hit: RawHit) -> PaperSummary:
     return PaperSummary(
         canonical_id=resolve_canonical_id(hit.source_ids),
+        source_ids=hit.source_ids,
         title=hit.title,
         abstract=hit.abstract,
         authors=hit.authors,

@@ -1,0 +1,120 @@
+.reader {
+  display: flex;
+  gap: 12px;
+  height: 100%;
+  font-family: var(--font-ui);
+}
+
+.reader__sidebar {
+  width: 220px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  padding: 14px;
+}
+
+.reader__sidebar h4 {
+  font: 700 10px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+
+.reader__section-link {
+  display: block;
+  font: 12px var(--font-ui);
+  color: var(--link);
+  cursor: pointer;
+  padding: 3px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+}
+
+.reader__pages {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--surface-muted);
+  border-radius: var(--radius-panel);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.reader__page {
+  position: relative;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 3px oklch(26% 0.079 210 / 0.16);
+}
+
+.reader__page canvas {
+  display: block;
+}
+
+.reader__text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  opacity: 0.2;
+}
+
+.reader__card {
+  width: 280px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  padding: 14px;
+}
+
+.reader__card-field {
+  margin-bottom: 14px;
+  cursor: pointer;
+}
+
+.reader__card-field h5 {
+  font: 700 10px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.reader__card-quote {
+  font: italic 12px/1.5 var(--font-reading);
+  color: var(--text-strong);
+  background: var(--accent-tint-14);
+  border-radius: var(--radius-card);
+  padding: 8px 10px;
+  margin: 0;
+}
+
+.reader__card-quote--active {
+  background: var(--accent-tint-25);
+}
+
+.reader__card-offset {
+  font: 10px var(--font-mono);
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.reader__not-stated {
+  font: italic 12px var(--font-ui);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-dashed);
+  border-radius: var(--radius-card);
+  padding: 8px 10px;
+}
+
+.reader__degraded {
+  padding: 24px;
+  font: 13px/1.6 var(--font-ui);
+  color: var(--text);
+}

@@ -19,6 +19,7 @@ dependencies = [
     "python-slugify>=8.0.4",
     "pyyaml>=6.0",
     "sentence-transformers>=5.6.1",
+    "docling>=2.117.0",
 ]
 
 [dependency-groups]

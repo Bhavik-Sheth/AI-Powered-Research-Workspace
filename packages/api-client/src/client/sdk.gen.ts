@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateNoteApiProjectsProjectIdNotesPostData, CreateNoteApiProjectsProjectIdNotesPostErrors, CreateNoteApiProjectsProjectIdNotesPostResponses, CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, GetResultApiResultsResultIdGetData, GetResultApiResultsResultIdGetErrors, GetResultApiResultsResultIdGetResponses, ListNotesApiProjectsProjectIdNotesGetData, ListNotesApiProjectsProjectIdNotesGetErrors, ListNotesApiProjectsProjectIdNotesGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PostSearchApiSearchPostData, PostSearchApiSearchPostErrors, PostSearchApiSearchPostResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses, UpdateNoteApiProjectsProjectIdNotesPatchData, UpdateNoteApiProjectsProjectIdNotesPatchErrors, UpdateNoteApiProjectsProjectIdNotesPatchResponses } from './types.gen';
+import type { AddPaperApiProjectsProjectIdPapersPostData, AddPaperApiProjectsProjectIdPapersPostErrors, AddPaperApiProjectsProjectIdPapersPostResponses, CreateNoteApiProjectsProjectIdNotesPostData, CreateNoteApiProjectsProjectIdNotesPostErrors, CreateNoteApiProjectsProjectIdNotesPostResponses, CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetPaperApiPapersPaperIdGetData, GetPaperApiPapersPaperIdGetErrors, GetPaperApiPapersPaperIdGetResponses, GetPaperPdfApiPapersPaperIdPdfGetData, GetPaperPdfApiPapersPaperIdPdfGetErrors, GetPaperPdfApiPapersPaperIdPdfGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, GetResultApiResultsResultIdGetData, GetResultApiResultsResultIdGetErrors, GetResultApiResultsResultIdGetResponses, ListNotesApiProjectsProjectIdNotesGetData, ListNotesApiProjectsProjectIdNotesGetErrors, ListNotesApiProjectsProjectIdNotesGetResponses, ListProjectPapersApiProjectsProjectIdPapersGetData, ListProjectPapersApiProjectsProjectIdPapersGetErrors, ListProjectPapersApiProjectsProjectIdPapersGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses, PostSearchApiSearchPostData, PostSearchApiSearchPostErrors, PostSearchApiSearchPostResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses, UpdateNoteApiProjectsProjectIdNotesPatchData, UpdateNoteApiProjectsProjectIdNotesPatchErrors, UpdateNoteApiProjectsProjectIdNotesPatchResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -117,6 +117,45 @@ export const updateNoteApiProjectsProjectIdNotesPatch = <ThrowOnError extends bo
  */
 export const createNoteApiProjectsProjectIdNotesPost = <ThrowOnError extends boolean = false>(options: Options<CreateNoteApiProjectsProjectIdNotesPostData, ThrowOnError>): RequestResult<CreateNoteApiProjectsProjectIdNotesPostResponses, CreateNoteApiProjectsProjectIdNotesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateNoteApiProjectsProjectIdNotesPostResponses, CreateNoteApiProjectsProjectIdNotesPostErrors, ThrowOnError>({
     url: '/api/projects/{project_id}/notes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Project Papers
+ */
+export const listProjectPapersApiProjectsProjectIdPapersGet = <ThrowOnError extends boolean = false>(options: Options<ListProjectPapersApiProjectsProjectIdPapersGetData, ThrowOnError>): RequestResult<ListProjectPapersApiProjectsProjectIdPapersGetResponses, ListProjectPapersApiProjectsProjectIdPapersGetErrors, ThrowOnError> => (options.client ?? client).get<ListProjectPapersApiProjectsProjectIdPapersGetResponses, ListProjectPapersApiProjectsProjectIdPapersGetErrors, ThrowOnError>({ url: '/api/projects/{project_id}/papers', ...options });
+
+/**
+ * Add Paper
+ */
+export const addPaperApiProjectsProjectIdPapersPost = <ThrowOnError extends boolean = false>(options: Options<AddPaperApiProjectsProjectIdPapersPostData, ThrowOnError>): RequestResult<AddPaperApiProjectsProjectIdPapersPostResponses, AddPaperApiProjectsProjectIdPapersPostErrors, ThrowOnError> => (options.client ?? client).post<AddPaperApiProjectsProjectIdPapersPostResponses, AddPaperApiProjectsProjectIdPapersPostErrors, ThrowOnError>({
+    url: '/api/projects/{project_id}/papers',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Paper
+ */
+export const getPaperApiPapersPaperIdGet = <ThrowOnError extends boolean = false>(options: Options<GetPaperApiPapersPaperIdGetData, ThrowOnError>): RequestResult<GetPaperApiPapersPaperIdGetResponses, GetPaperApiPapersPaperIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetPaperApiPapersPaperIdGetResponses, GetPaperApiPapersPaperIdGetErrors, ThrowOnError>({ url: '/api/papers/{paper_id}', ...options });
+
+/**
+ * Get Paper Pdf
+ */
+export const getPaperPdfApiPapersPaperIdPdfGet = <ThrowOnError extends boolean = false>(options: Options<GetPaperPdfApiPapersPaperIdPdfGetData, ThrowOnError>): RequestResult<GetPaperPdfApiPapersPaperIdPdfGetResponses, GetPaperPdfApiPapersPaperIdPdfGetErrors, ThrowOnError> => (options.client ?? client).get<GetPaperPdfApiPapersPaperIdPdfGetResponses, GetPaperPdfApiPapersPaperIdPdfGetErrors, ThrowOnError>({ url: '/api/papers/{paper_id}/pdf', ...options });
+
+/**
+ * Patch Project Paper
+ */
+export const patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch = <ThrowOnError extends boolean = false>(options: Options<PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData, ThrowOnError>): RequestResult<PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors, ThrowOnError>({
+    url: '/api/projects/{project_id}/papers/{paper_id}',
     ...options,
     headers: {
         'Content-Type': 'application/json',

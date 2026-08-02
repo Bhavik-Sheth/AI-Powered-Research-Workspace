@@ -65,6 +65,21 @@ export type HealthResponse = {
 };
 
 /**
+ * LibraryEntry
+ */
+export type LibraryEntry = {
+    paper: Paper;
+    /**
+     * Relevance
+     */
+    relevance: string;
+    /**
+     * Why Relevant
+     */
+    why_relevant: string | null;
+};
+
+/**
  * ModelSettings
  */
 export type ModelSettings = {
@@ -155,6 +170,156 @@ export type NoteInput = {
 };
 
 /**
+ * Paper
+ */
+export type Paper = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Canonical Id
+     */
+    canonical_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Abstract
+     */
+    abstract?: string | null;
+    /**
+     * Source Url
+     */
+    source_url?: string | null;
+    /**
+     * Pdf Origin
+     */
+    pdf_origin?: string | null;
+    /**
+     * Fetch State
+     */
+    fetch_state: string;
+    /**
+     * Parse State
+     */
+    parse_state: string;
+    /**
+     * Embed State
+     */
+    embed_state: string;
+    /**
+     * Extract State
+     */
+    extract_state: string;
+};
+
+/**
+ * PaperCardField
+ */
+export type PaperCardField = {
+    /**
+     * Field Key
+     */
+    field_key: string;
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Anchor Id
+     */
+    anchor_id: string;
+    /**
+     * Section Heading
+     */
+    section_heading?: string | null;
+    /**
+     * Char Start
+     */
+    char_start: number;
+    /**
+     * Char End
+     */
+    char_end: number;
+};
+
+/**
+ * PaperContentView
+ */
+export type PaperContentView = {
+    /**
+     * Full Text
+     */
+    full_text: string;
+    /**
+     * Sections
+     */
+    sections: Array<SectionInfo>;
+    /**
+     * References
+     */
+    references: Array<ReferenceInfo>;
+    /**
+     * Datasets
+     */
+    datasets: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Code Links
+     */
+    code_links: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Parsed At
+     */
+    parsed_at: string;
+};
+
+/**
+ * PaperDetail
+ */
+export type PaperDetail = {
+    paper: Paper;
+    content?: PaperContentView | null;
+    /**
+     * Card
+     */
+    card?: Array<PaperCardField> | null;
+};
+
+/**
+ * PaperInput
+ *
+ * What the caller submits to add a paper — from a search result or a
+ * pasted link/id. A pure upload with no resolvable id is out of scope for
+ * v1: `canonical_id_source` (Schema.md) has no "upload" value, so at least
+ * one of doi/arxiv_id/openalex_id/s2_id is required.
+ */
+export type PaperInput = {
+    source_ids: SourceIds;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Abstract
+     */
+    abstract?: string | null;
+    /**
+     * Source Url
+     */
+    source_url?: string | null;
+    /**
+     * Pdf Url
+     */
+    pdf_url?: string | null;
+};
+
+/**
  * PaperSummary
  */
 export type PaperSummary = {
@@ -162,6 +327,7 @@ export type PaperSummary = {
      * Canonical Id
      */
     canonical_id: string;
+    source_ids: SourceIds;
     /**
      * Title
      */
@@ -194,6 +360,42 @@ export type PaperSummary = {
      * Pdf Url
      */
     pdf_url?: string | null;
+};
+
+/**
+ * PatchProjectPaperRequest
+ */
+export type PatchProjectPaperRequest = {
+    /**
+     * Relevance
+     */
+    relevance?: 'relevant' | 'somewhat' | 'not' | 'unset' | null;
+    /**
+     * Why Relevant
+     */
+    why_relevant?: string | null;
+};
+
+/**
+ * ProjectPaperResponse
+ */
+export type ProjectPaperResponse = {
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Paper Id
+     */
+    paper_id: string;
+    /**
+     * Relevance
+     */
+    relevance: string;
+    /**
+     * Why Relevant
+     */
+    why_relevant: string | null;
 };
 
 /**
@@ -267,6 +469,20 @@ export type ProviderInfo = {
 };
 
 /**
+ * ReferenceInfo
+ */
+export type ReferenceInfo = {
+    /**
+     * Ref Id
+     */
+    ref_id: string;
+    /**
+     * Raw
+     */
+    raw: string;
+};
+
+/**
  * ResultSet
  */
 export type ResultSet = {
@@ -334,6 +550,56 @@ export type SearchRequest = {
      */
     query: string;
     filters?: SearchFilters | null;
+};
+
+/**
+ * SectionInfo
+ */
+export type SectionInfo = {
+    /**
+     * Section Id
+     */
+    section_id: string;
+    /**
+     * Heading
+     */
+    heading: string;
+    /**
+     * Level
+     */
+    level: number;
+    /**
+     * Char Start
+     */
+    char_start: number;
+    /**
+     * Char End
+     */
+    char_end: number;
+};
+
+/**
+ * SourceIds
+ *
+ * Whatever source ids a literature API returned for one paper.
+ */
+export type SourceIds = {
+    /**
+     * Doi
+     */
+    doi?: string | null;
+    /**
+     * Arxiv Id
+     */
+    arxiv_id?: string | null;
+    /**
+     * Openalex Id
+     */
+    openalex_id?: string | null;
+    /**
+     * S2 Id
+     */
+    s2_id?: string | null;
 };
 
 /**
@@ -773,6 +1039,195 @@ export type CreateNoteApiProjectsProjectIdNotesPostResponses = {
 };
 
 export type CreateNoteApiProjectsProjectIdNotesPostResponse = CreateNoteApiProjectsProjectIdNotesPostResponses[keyof CreateNoteApiProjectsProjectIdNotesPostResponses];
+
+export type ListProjectPapersApiProjectsProjectIdPapersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/papers';
+};
+
+export type ListProjectPapersApiProjectsProjectIdPapersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListProjectPapersApiProjectsProjectIdPapersGetError = ListProjectPapersApiProjectsProjectIdPapersGetErrors[keyof ListProjectPapersApiProjectsProjectIdPapersGetErrors];
+
+export type ListProjectPapersApiProjectsProjectIdPapersGetResponses = {
+    /**
+     * Response List Project Papers Api Projects  Project Id  Papers Get
+     *
+     * Successful Response
+     */
+    200: Array<LibraryEntry>;
+};
+
+export type ListProjectPapersApiProjectsProjectIdPapersGetResponse = ListProjectPapersApiProjectsProjectIdPapersGetResponses[keyof ListProjectPapersApiProjectsProjectIdPapersGetResponses];
+
+export type AddPaperApiProjectsProjectIdPapersPostData = {
+    body: PaperInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/papers';
+};
+
+export type AddPaperApiProjectsProjectIdPapersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddPaperApiProjectsProjectIdPapersPostError = AddPaperApiProjectsProjectIdPapersPostErrors[keyof AddPaperApiProjectsProjectIdPapersPostErrors];
+
+export type AddPaperApiProjectsProjectIdPapersPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Paper;
+};
+
+export type AddPaperApiProjectsProjectIdPapersPostResponse = AddPaperApiProjectsProjectIdPapersPostResponses[keyof AddPaperApiProjectsProjectIdPapersPostResponses];
+
+export type GetPaperApiPapersPaperIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Paper Id
+         */
+        paper_id: string;
+    };
+    query?: {
+        /**
+         * Include
+         */
+        include?: string;
+    };
+    url: '/api/papers/{paper_id}';
+};
+
+export type GetPaperApiPapersPaperIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPaperApiPapersPaperIdGetError = GetPaperApiPapersPaperIdGetErrors[keyof GetPaperApiPapersPaperIdGetErrors];
+
+export type GetPaperApiPapersPaperIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaperDetail;
+};
+
+export type GetPaperApiPapersPaperIdGetResponse = GetPaperApiPapersPaperIdGetResponses[keyof GetPaperApiPapersPaperIdGetResponses];
+
+export type GetPaperPdfApiPapersPaperIdPdfGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Paper Id
+         */
+        paper_id: string;
+    };
+    query?: never;
+    url: '/api/papers/{paper_id}/pdf';
+};
+
+export type GetPaperPdfApiPapersPaperIdPdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPaperPdfApiPapersPaperIdPdfGetError = GetPaperPdfApiPapersPaperIdPdfGetErrors[keyof GetPaperPdfApiPapersPaperIdPdfGetErrors];
+
+export type GetPaperPdfApiPapersPaperIdPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData = {
+    body: PatchProjectPaperRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Paper Id
+         */
+        paper_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/papers/{paper_id}';
+};
+
+export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchError = PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors[keyof PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors];
+
+export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectPaperResponse;
+};
+
+export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponse = PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses[keyof PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses];
 
 export type PostSearchApiSearchPostData = {
     body: SearchRequest;

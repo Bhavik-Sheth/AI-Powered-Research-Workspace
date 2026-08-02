@@ -10,9 +10,10 @@ import uuid
 
 from slugify import slugify
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Project
+from db.models import Paper, Project, ProjectPapers
 
 
 async def _unique_slug(session: AsyncSession, name: str) -> str:
@@ -39,3 +40,44 @@ async def list_projects(session: AsyncSession) -> list[Project]:
 
 async def get_project(session: AsyncSession, project_id: uuid.UUID) -> Project | None:
     return await session.get(Project, project_id)
+
+
+async def add_paper_to_project(session: AsyncSession, project_id: uuid.UUID, paper_id: uuid.UUID) -> ProjectPapers:
+    """Membership only — a paper's content is global and computed once (D25)."""
+    stmt = (
+        insert(ProjectPapers)
+        .values(project_id=project_id, paper_id=paper_id)
+        .on_conflict_do_nothing(index_elements=["project_id", "paper_id"])
+    )
+    await session.execute(stmt)
+    row = await session.get(ProjectPapers, {"project_id": project_id, "paper_id": paper_id})
+    assert row is not None
+    return row
+
+
+async def list_project_papers(session: AsyncSession, project_id: uuid.UUID) -> list[tuple[Paper, ProjectPapers]]:
+    """Every paper in a project's library, with this project's own membership row."""
+    rows = (
+        await session.execute(
+            select(Paper, ProjectPapers)
+            .join(ProjectPapers, ProjectPapers.paper_id == Paper.id)
+            .where(ProjectPapers.project_id == project_id)
+            .order_by(ProjectPapers.added_at.desc())
+        )
+    ).all()
+    return [(paper, membership) for paper, membership in rows]
+
+
+async def set_paper_relevance(
+    session: AsyncSession, project_id: uuid.UUID, paper_id: uuid.UUID, relevance: str | None, why_relevant: str | None
+) -> ProjectPapers | None:
+    """A partial update: only fields actually given (non-`None`) change."""
+    row = await session.get(ProjectPapers, {"project_id": project_id, "paper_id": paper_id})
+    if row is None:
+        return None
+    if relevance is not None:
+        row.relevance = relevance
+    if why_relevant is not None:
+        row.why_relevant = why_relevant
+    await session.flush()
+    return row

@@ -1,9 +1,13 @@
 """Job Queue — cancellable background work off the request path (MODULES.md).
 
-Phase 1.1 ships the worker lifecycle and the catch-up pass only. `enqueue`
-and `cancel` land in Phase 1.3 with the first real job kind (search/parse
-dispatch) — that is also when the transactional-enqueue guarantee (D9: the
-job row commits in the same transaction as the row it concerns) gets wired.
+`enqueue` and the registered job kinds landed in Phase 1.4 with Paper
+Pipeline's fetch/parse/extract/enrich chain, the first real dispatch. The
+transactional-enqueue guarantee (D9: the job row commits in the same
+transaction as the row it concerns) is not wired — SAQ's Postgres queue
+owns its own connection pool, separate from SQLAlchemy's; `enqueue` runs
+immediately after the caller's own transaction commits, which is a known,
+narrow gap (a crash in between drops the job, not the row), not a silent
+best-effort dressed up as the real guarantee.
 """
 
 import asyncio
@@ -12,6 +16,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+from saq.job import Job
 from saq.queue.postgres import PostgresQueue
 from saq.worker import Worker
 
@@ -26,12 +31,22 @@ _worker: Worker | None = None
 _worker_task: asyncio.Task[None] | None = None
 
 
+def _job_functions() -> list:
+    # Imported locally, not at module top: papers/ imports jobs/ (to call
+    # `enqueue` from within its own job handlers), so a top-level import
+    # here would cycle. By the time `start()` runs (Sidecar Bootstrap's
+    # lifespan), papers/ is already fully loaded via main.py's own imports.
+    from papers import enrich_paper_job, extract_card_job, parse_paper_job
+
+    return [parse_paper_job, extract_card_job, enrich_paper_job]
+
+
 async def start() -> None:
     """Connects the queue and starts the worker loop as a background task."""
     global _queue, _worker, _worker_task
     _queue = PostgresQueue.from_url(get_config().libpq_dsn)
     await _queue.connect()
-    _worker = Worker(_queue, functions=[], shutdown_grace_period_s=5)
+    _worker = Worker(_queue, functions=_job_functions(), shutdown_grace_period_s=5)
     # saq.Worker.start() unconditionally installs its own SIGINT/SIGTERM
     # handlers, which would steal the signal from uvicorn's (Sidecar
     # Bootstrap owns process shutdown, not the worker). Shutdown is already
@@ -50,12 +65,20 @@ async def stop() -> None:
         await _queue.disconnect()
 
 
+async def enqueue(job_kind: str, **payload: object) -> Job | None:
+    """Enqueues one job by its registered name (a function passed to `start`)."""
+    if _queue is None:
+        raise RuntimeError("job queue is not started")
+    return await _queue.enqueue(job_kind, **payload)
+
+
 async def run_catchup_pass() -> None:
     """Runs any `scheduled_jobs` overdue since `last_run_at`, once, at startup.
 
-    No `job_kind` has a registered handler yet — the first one (`feed_poll`)
-    arrives in Phase 5. Until then this legitimately finds nothing to do; it
-    exists now so the mechanism (table + startup pass) is proven end to end.
+    No `job_kind` in `scheduled_jobs` has a registered handler yet — the
+    first one (`feed_poll`) arrives in Phase 5. Until then this legitimately
+    finds nothing to do; it exists now so the mechanism (table + startup
+    pass) is proven end to end.
     """
     now = datetime.now(timezone.utc)
     async with session() as db_session:

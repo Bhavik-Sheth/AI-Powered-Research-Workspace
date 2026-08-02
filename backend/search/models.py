@@ -29,6 +29,7 @@ class RawHit(BaseModel):
 
 class PaperSummary(BaseModel):
     canonical_id: str
+    source_ids: SourceIds
     title: str
     abstract: str | None = None
     authors: list[str] = []

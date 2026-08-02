@@ -28,6 +28,7 @@ from api.errors import handle_exception, handle_http_exception, handle_validatio
 from api.health import Capability, ReadinessState
 from api.health import router as health_router
 from api.notes import router as notes_router
+from api.papers import router as papers_router
 from api.projects import router as projects_router
 from api.search import router as search_router
 from api.settings import router as settings_router
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(projects_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(notes_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(papers_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(search_router, dependencies=[Depends(require_bearer_token)])
     return app
 

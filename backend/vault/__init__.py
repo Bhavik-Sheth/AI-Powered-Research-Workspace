@@ -8,15 +8,17 @@ the phases that need them. The vault root itself is owned by Settings Store —
 this module only knows the folder shapes inside it.
 """
 
+import json
 import uuid
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Notes, Project
+from db.models import Notes, Paper, Project
 from settings import get_vault_path
 from vault.models import Note, NoteInput
 
@@ -125,3 +127,23 @@ async def write_note(session: AsyncSession, project_id: uuid.UUID, note: NoteInp
         raise VaultWriteFailed(f"note file written but index update failed: {exc}") from exc
 
     return Note.from_row(row)
+
+
+async def write_paper_asset(session: AsyncSession, paper_id: uuid.UUID, kind: Literal["pdf", "parsed"], content: bytes | dict) -> Path:
+    """Writes into `library/papers/<canonical-id>/` — global, shared across
+    every project the paper is a member of (D25)."""
+    paper = await session.get(Paper, paper_id)
+    if paper is None:
+        raise ValueError(f"paper {paper_id} not found")
+
+    paper_dir = get_vault_path() / "library" / "papers" / paper.canonical_id
+    paper_dir.mkdir(parents=True, exist_ok=True)
+
+    if kind == "pdf":
+        path = paper_dir / "paper.pdf"
+        path.write_bytes(content if isinstance(content, bytes) else bytes(content))
+    else:
+        path = paper_dir / "parsed.json"
+        path.write_text(json.dumps(content, indent=2), encoding="utf-8")
+
+    return path

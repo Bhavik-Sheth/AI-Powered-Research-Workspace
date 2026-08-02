@@ -1,3 +1,8 @@
+import { useState } from "react";
+
+import { LibraryView } from "../library/LibraryView";
+import { ReaderTab } from "../reader/ReaderTab";
+import { SearchResults } from "../search/SearchResults";
 import "./AppShell.css";
 import { ReadinessStrip } from "./ReadinessStrip";
 
@@ -8,12 +13,20 @@ const NAV_GROUPS: { label: string | null; items: string[] }[] = [
   { label: "Discover", items: ["Graph", "Feed", "Matrix"] },
 ];
 
+// TODO(Phase 1.8): replace with the real tab-stack router (App Shell's
+// `useTabStack`) — this local switch exists only so each phase's views are
+// reachable for manual verification before real routing lands.
+type View = { kind: "readiness" } | { kind: "search" } | { kind: "library"; projectId: string } | { kind: "reader"; paperId: string };
+
+const DEMO_PROJECT_ID = "0a436e50-9b2d-4501-9298-22ca11a900a5";
+
 /**
- * Top bar + nav shell + routed center pane (MODULES.md App Shell). Phase 1.1
- * ships the shell and the readiness strip only — nav items are not yet
- * routable and the center pane has no real view until Phase 1.2 onward.
+ * Top bar + nav shell + routed center pane (MODULES.md App Shell). Real
+ * routing/tab-stack persistence lands in Phase 1.8.
  */
 export function AppShell() {
+  const [view, setView] = useState<View>({ kind: "readiness" });
+
   return (
     <div className="app-frame">
       <header className="top-bar">Research Companion OS</header>
@@ -24,17 +37,34 @@ export function AppShell() {
               {group.label && <div className="left-nav__group-label">{group.label}</div>}
               <ul style={{ margin: 0, padding: 0 }}>
                 {group.items.map((item) => (
-                  <li key={item} className="left-nav__item">
+                  <li key={item} className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => {
+                    if (item === "Papers") setView({ kind: "library", projectId: DEMO_PROJECT_ID });
+                  }}>
                     {item}
                   </li>
                 ))}
               </ul>
             </div>
           ))}
+          <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => setView({ kind: "search" })}>
+            Search
+          </div>
+          <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => setView({ kind: "readiness" })}>
+            Readiness
+          </div>
         </nav>
         <main className="center-pane">
-          <h1 className="center-pane__title">Readiness</h1>
-          <ReadinessStrip />
+          {view.kind === "readiness" && (
+            <>
+              <h1 className="center-pane__title">Readiness</h1>
+              <ReadinessStrip />
+            </>
+          )}
+          {view.kind === "search" && <SearchResults />}
+          {view.kind === "library" && (
+            <LibraryView projectId={view.projectId} onOpenPaper={(paperId) => setView({ kind: "reader", paperId })} />
+          )}
+          {view.kind === "reader" && <ReaderTab paperId={view.paperId} />}
         </main>
       </div>
     </div>

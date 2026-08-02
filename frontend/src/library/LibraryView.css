@@ -1,0 +1,52 @@
+.library {
+  font-family: var(--font-ui);
+}
+
+.library__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.library__title {
+  flex: 1;
+  font: 700 13px var(--font-reading);
+  color: var(--text-strong);
+}
+
+.library__badge {
+  font: 700 10px var(--font-ui);
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.library__badge--done {
+  background: var(--accent-tint-12);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+
+.library__relevance {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  overflow: hidden;
+}
+
+.library__relevance button {
+  border: none;
+  background: var(--surface-raised);
+  font: 700 10px var(--font-ui);
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.library__relevance button.library__relevance--active {
+  background: var(--accent-tint-15);
+  color: var(--accent-text);
+}

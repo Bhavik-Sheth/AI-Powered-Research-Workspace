@@ -663,6 +663,326 @@
         }
       }
     },
+    "/api/projects/{project_id}/papers": {
+      "post": {
+        "summary": "Add Paper",
+        "operationId": "add_paper_api_projects__project_id__papers_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paper"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Project Papers",
+        "operationId": "list_project_papers_api_projects__project_id__papers_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryEntry"
+                  },
+                  "title": "Response List Project Papers Api Projects  Project Id  Papers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/papers/{paper_id}": {
+      "get": {
+        "summary": "Get Paper",
+        "operationId": "get_paper_api_papers__paper_id__get",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Include"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/papers/{paper_id}/pdf": {
+      "get": {
+        "summary": "Get Paper Pdf",
+        "operationId": "get_paper_pdf_api_papers__paper_id__pdf_get",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/papers/{paper_id}": {
+      "patch": {
+        "summary": "Patch Project Paper",
+        "operationId": "patch_project_paper_api_projects__project_id__papers__paper_id__patch",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchProjectPaperRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPaperResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/search": {
       "post": {
         "summary": "Post Search",
@@ -885,6 +1205,35 @@
         ],
         "title": "HealthResponse"
       },
+      "LibraryEntry": {
+        "properties": {
+          "paper": {
+            "$ref": "#/components/schemas/Paper"
+          },
+          "relevance": {
+            "type": "string",
+            "title": "Relevance"
+          },
+          "why_relevant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why Relevant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper",
+          "relevance",
+          "why_relevant"
+        ],
+        "title": "LibraryEntry"
+      },
       "ModelSettings": {
         "properties": {
           "providers": {
@@ -1020,11 +1369,282 @@
         "title": "NoteInput",
         "description": "What a caller submits to create or update a note.\n\n`frontmatter_id` is absent to create (Vault Writer assigns one) and\npresent to update \u2014 the id carried in the note's own YAML frontmatter,\nnever the file path (D4)."
       },
+      "Paper": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "canonical_id": {
+            "type": "string",
+            "title": "Canonical Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "pdf_origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Origin"
+          },
+          "fetch_state": {
+            "type": "string",
+            "title": "Fetch State"
+          },
+          "parse_state": {
+            "type": "string",
+            "title": "Parse State"
+          },
+          "embed_state": {
+            "type": "string",
+            "title": "Embed State"
+          },
+          "extract_state": {
+            "type": "string",
+            "title": "Extract State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "canonical_id",
+          "title",
+          "fetch_state",
+          "parse_state",
+          "embed_state",
+          "extract_state"
+        ],
+        "title": "Paper"
+      },
+      "PaperCardField": {
+        "properties": {
+          "field_key": {
+            "type": "string",
+            "title": "Field Key"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "anchor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anchor Id"
+          },
+          "section_heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Heading"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_key",
+          "value",
+          "anchor_id",
+          "char_start",
+          "char_end"
+        ],
+        "title": "PaperCardField"
+      },
+      "PaperContentView": {
+        "properties": {
+          "full_text": {
+            "type": "string",
+            "title": "Full Text"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionInfo"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceInfo"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "datasets": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Datasets"
+          },
+          "code_links": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Code Links"
+          },
+          "parsed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Parsed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "full_text",
+          "sections",
+          "references",
+          "datasets",
+          "code_links",
+          "parsed_at"
+        ],
+        "title": "PaperContentView"
+      },
+      "PaperDetail": {
+        "properties": {
+          "paper": {
+            "$ref": "#/components/schemas/Paper"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperContentView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "card": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PaperCardField"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper"
+        ],
+        "title": "PaperDetail"
+      },
+      "PaperInput": {
+        "properties": {
+          "source_ids": {
+            "$ref": "#/components/schemas/SourceIds"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "pdf_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_ids"
+        ],
+        "title": "PaperInput",
+        "description": "What the caller submits to add a paper \u2014 from a search result or a\npasted link/id. A pure upload with no resolvable id is out of scope for\nv1: `canonical_id_source` (Schema.md) has no \"upload\" value, so at least\none of doi/arxiv_id/openalex_id/s2_id is required."
+      },
       "PaperSummary": {
         "properties": {
           "canonical_id": {
             "type": "string",
             "title": "Canonical Id"
+          },
+          "source_ids": {
+            "$ref": "#/components/schemas/SourceIds"
           },
           "title": {
             "type": "string",
@@ -1108,9 +1728,81 @@
         "type": "object",
         "required": [
           "canonical_id",
+          "source_ids",
           "title"
         ],
         "title": "PaperSummary"
+      },
+      "PatchProjectPaperRequest": {
+        "properties": {
+          "relevance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "relevant",
+                  "somewhat",
+                  "not",
+                  "unset"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "why_relevant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why Relevant"
+          }
+        },
+        "type": "object",
+        "title": "PatchProjectPaperRequest"
+      },
+      "ProjectPaperResponse": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "relevance": {
+            "type": "string",
+            "title": "Relevance"
+          },
+          "why_relevant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why Relevant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "paper_id",
+          "relevance",
+          "why_relevant"
+        ],
+        "title": "ProjectPaperResponse"
       },
       "ProjectResponse": {
         "properties": {
@@ -1246,6 +1938,24 @@
         "type": "object",
         "title": "ProviderInfo",
         "description": "What is ever read back \u2014 never ciphertext, nonce, or plaintext key."
+      },
+      "ReferenceInfo": {
+        "properties": {
+          "ref_id": {
+            "type": "string",
+            "title": "Ref Id"
+          },
+          "raw": {
+            "type": "string",
+            "title": "Raw"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref_id",
+          "raw"
+        ],
+        "title": "ReferenceInfo"
       },
       "ResultSet": {
         "properties": {
@@ -1392,6 +2102,90 @@
           "query"
         ],
         "title": "SearchRequest"
+      },
+      "SectionInfo": {
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "title": "Section Id"
+          },
+          "heading": {
+            "type": "string",
+            "title": "Heading"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section_id",
+          "heading",
+          "level",
+          "char_start",
+          "char_end"
+        ],
+        "title": "SectionInfo"
+      },
+      "SourceIds": {
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "arxiv_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arxiv Id"
+          },
+          "openalex_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalex Id"
+          },
+          "s2_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S2 Id"
+          }
+        },
+        "type": "object",
+        "title": "SourceIds",
+        "description": "Whatever source ids a literature API returned for one paper."
       },
       "ValidationError": {
         "properties": {
