@@ -1,15 +1,14 @@
 """LLM Gateway — the only place LiteLLM is imported (MODULES.md, Rules.md).
 
-Phase 1.2 ships `complete` with the `override` parameter Settings Store
-needs to validate a provider *before* it is saved (D13) — `tier` alone
-cannot express "not-yet-saved" credentials, so this is a deliberate, narrow
-widening of MODULES.md's stated signature, called out here rather than
-added silently. `complete_structured` and the tier-resolved path below land
-with Search Federation (Phase 1.3), the first caller that needs them.
+`complete` carries the `override` parameter Settings Store needs to
+validate a provider *before* it is saved (D13, added Phase 1.2) — `tier`
+alone cannot express "not-yet-saved" credentials, so this is a deliberate,
+narrow widening of MODULES.md's stated signature, called out here rather
+than added silently.
 """
 
 from collections.abc import AsyncIterator
-from typing import Literal
+from typing import Literal, TypeVar
 
 import litellm
 from pydantic import BaseModel
@@ -65,14 +64,69 @@ class ProviderOverride(BaseModel):
 
 
 async def _resolve_tier(tier: Literal["primary", "auxiliary"]) -> tuple[str, str | None, str | None]:
-    # Phase 1.3 (Search Federation is the first tier-based caller): read
-    # `api_keys.primary_model` / `auxiliary_model`, stored as "<our-provider-
-    # name>/<model>" (e.g. "google/gemini-2.5-flash" — see settings.save_provider),
-    # split on the first "/", map through PROVIDER_PREFIX for the real litellm
-    # model string, and decrypt that provider's key via settings.crypto.
-    # Import settings locally, not at module top — settings/ imports this
-    # module for the override path, so a top-level import here would cycle.
-    raise NotImplementedError("tier-resolved completion is wired in Phase 1.3 by Search Federation")
+    """Resolves a tier to a real litellm model string + credentials.
+
+    Imports `db`/`settings` locally, not at module top: `settings/` imports
+    this module for the override path, so a top-level import here would
+    cycle (see settings/__init__.py's architecture note).
+    """
+    import db
+    from db.models import ApiKeys
+    from settings import crypto
+
+    async with db.session() as session:
+        row = await session.get(ApiKeys, 1)
+        model_string = row.primary_model if row else None
+        if row and tier == "auxiliary" and row.auxiliary_model:
+            model_string = row.auxiliary_model
+        if not model_string:
+            reason = "no primary model configured" if not (row and row.primary_model) else f"no {tier} model configured"
+            raise RuntimeError(reason)
+
+        our_provider, _, model = model_string.partition("/")
+        provider_info = (row.providers if row else {}).get(our_provider)
+        if provider_info is None:
+            raise RuntimeError(f"no credentials stored for provider {our_provider}")
+
+        api_key = None
+        if "ciphertext" in provider_info:
+            api_key = crypto.decrypt(provider_info["ciphertext"], provider_info["nonce"])
+        base_url = provider_info.get("base_url")
+
+    return f"{PROVIDER_PREFIX[our_provider]}/{model}", api_key, base_url
+
+
+async def _resolve(
+    tier: Literal["primary", "auxiliary"], override: ProviderOverride | None
+) -> tuple[str, str | None, str | None]:
+    if override is not None:
+        return f"{PROVIDER_PREFIX[override.provider]}/{override.model}", override.api_key, override.base_url
+    return await _resolve_tier(tier)
+
+
+ResponseSchema = TypeVar("ResponseSchema", bound=BaseModel)
+
+
+async def complete_structured(
+    messages: list[Message],
+    schema: type[ResponseSchema],
+    *,
+    tier: Literal["primary", "auxiliary"] = "primary",
+    override: ProviderOverride | None = None,
+    timeout: float | None = None,
+) -> ResponseSchema:
+    """Structured extraction; the prompted-JSON fallback for models without
+    native structured output is LiteLLM's own concern, not this wrapper's."""
+    model, api_key, base_url = await _resolve(tier, override)
+    response = await litellm.acompletion(
+        model=model,
+        messages=[m.model_dump() for m in messages],
+        api_key=api_key,
+        base_url=base_url,
+        response_format=schema,
+        timeout=timeout,
+    )
+    return schema.model_validate_json(response.choices[0].message.content)
 
 
 async def complete(
@@ -85,11 +139,7 @@ async def complete(
     timeout: float | None = None,
 ) -> AsyncIterator[LLMChunk]:
     """Streaming completion; auxiliary falls back to primary when unset (D11)."""
-    if override is not None:
-        model = f"{PROVIDER_PREFIX[override.provider]}/{override.model}"
-        api_key, base_url = override.api_key, override.base_url
-    else:
-        model, api_key, base_url = await _resolve_tier(tier)
+    model, api_key, base_url = await _resolve(tier, override)
 
     response = await litellm.acompletion(
         model=model,

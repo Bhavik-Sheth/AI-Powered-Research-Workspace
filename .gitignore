@@ -22,3 +22,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Tool artifacts
+.playwright-mcp/

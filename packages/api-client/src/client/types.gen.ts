@@ -155,6 +155,48 @@ export type NoteInput = {
 };
 
 /**
+ * PaperSummary
+ */
+export type PaperSummary = {
+    /**
+     * Canonical Id
+     */
+    canonical_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Abstract
+     */
+    abstract?: string | null;
+    /**
+     * Authors
+     */
+    authors?: Array<string>;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Venue
+     */
+    venue?: string | null;
+    /**
+     * Citation Count
+     */
+    citation_count?: number | null;
+    /**
+     * Source Url
+     */
+    source_url?: string | null;
+    /**
+     * Pdf Url
+     */
+    pdf_url?: string | null;
+};
+
+/**
  * ProjectResponse
  */
 export type ProjectResponse = {
@@ -225,6 +267,28 @@ export type ProviderInfo = {
 };
 
 /**
+ * ResultSet
+ */
+export type ResultSet = {
+    /**
+     * Result Id
+     */
+    result_id: string;
+    /**
+     * Query
+     */
+    query: string;
+    /**
+     * Results
+     */
+    results: Array<PaperSummary>;
+    /**
+     * Sources Failed
+     */
+    sources_failed?: Array<string>;
+};
+
+/**
  * SaveProviderRequest
  */
 export type SaveProviderRequest = {
@@ -233,6 +297,43 @@ export type SaveProviderRequest = {
      */
     provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
     credentials: ProviderCredentials;
+};
+
+/**
+ * SearchFilters
+ */
+export type SearchFilters = {
+    /**
+     * Year Min
+     */
+    year_min?: number | null;
+    /**
+     * Year Max
+     */
+    year_max?: number | null;
+    /**
+     * Venue
+     */
+    venue?: string | null;
+    /**
+     * Has Code
+     */
+    has_code?: boolean | null;
+    /**
+     * Author
+     */
+    author?: string | null;
+};
+
+/**
+ * SearchRequest
+ */
+export type SearchRequest = {
+    /**
+     * Query
+     */
+    query: string;
+    filters?: SearchFilters | null;
 };
 
 /**
@@ -672,3 +773,70 @@ export type CreateNoteApiProjectsProjectIdNotesPostResponses = {
 };
 
 export type CreateNoteApiProjectsProjectIdNotesPostResponse = CreateNoteApiProjectsProjectIdNotesPostResponses[keyof CreateNoteApiProjectsProjectIdNotesPostResponses];
+
+export type PostSearchApiSearchPostData = {
+    body: SearchRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/search';
+};
+
+export type PostSearchApiSearchPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostSearchApiSearchPostError = PostSearchApiSearchPostErrors[keyof PostSearchApiSearchPostErrors];
+
+export type PostSearchApiSearchPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ResultSet;
+};
+
+export type PostSearchApiSearchPostResponse = PostSearchApiSearchPostResponses[keyof PostSearchApiSearchPostResponses];
+
+export type GetResultApiResultsResultIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Result Id
+         */
+        result_id: string;
+    };
+    query?: never;
+    url: '/api/results/{result_id}';
+};
+
+export type GetResultApiResultsResultIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetResultApiResultsResultIdGetError = GetResultApiResultsResultIdGetErrors[keyof GetResultApiResultsResultIdGetErrors];
+
+export type GetResultApiResultsResultIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ResultSet;
+};
+
+export type GetResultApiResultsResultIdGetResponse = GetResultApiResultsResultIdGetResponses[keyof GetResultApiResultsResultIdGetResponses];
