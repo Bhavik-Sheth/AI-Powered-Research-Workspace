@@ -62,3 +62,31 @@ export function wsSessionUrl(projectId: string): string {
   const bridge = resolveBridge();
   return `ws://127.0.0.1:${bridge.port}/ws/session/${projectId}?token=${encodeURIComponent(bridge.token)}`;
 }
+
+/** Posts a raw binary body (recorded audio), returns the parsed JSON reply. */
+export async function postBinaryForJson<T>(path: string, body: ArrayBuffer): Promise<T> {
+  const bridge = resolveBridge();
+  const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/octet-stream" },
+    body,
+  });
+  if (!response.ok) {
+    throw new Error(`${path} failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/** Posts a JSON body, returns the raw binary reply (synthesized audio). */
+export async function postJsonForBinary(path: string, body: unknown): Promise<ArrayBuffer> {
+  const bridge = resolveBridge();
+  const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${path} failed: ${response.status}`);
+  }
+  return response.arrayBuffer();
+}

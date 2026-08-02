@@ -861,6 +861,116 @@
         }
       }
     },
+    "/api/voice/transcribe": {
+      "post": {
+        "summary": "Transcribe Audio",
+        "operationId": "transcribe_audio_api_voice_transcribe_post",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "en",
+              "title": "Lang"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcript"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/voice/synthesize": {
+      "post": {
+        "summary": "Synthesize Speech",
+        "operationId": "synthesize_speech_api_voice_synthesize_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SynthesizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/papers": {
       "post": {
         "summary": "Add Paper",
@@ -2772,6 +2882,24 @@
         "title": "SourceIds",
         "description": "Whatever source ids a literature API returned for one paper."
       },
+      "SynthesizeRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "voice": {
+            "type": "string",
+            "title": "Voice",
+            "default": "default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "SynthesizeRequest"
+      },
       "TabRef": {
         "properties": {
           "id": {
@@ -2803,6 +2931,19 @@
         ],
         "title": "TabRef",
         "description": "One entry in the persisted center-pane tab stack (TRD \u00a74.1's\n`TabRef`) \u2014 a routed view instance, e.g. two open papers are two\nentries with the same `kind` and different `params`."
+      },
+      "Transcript": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Transcript"
       },
       "ValidationError": {
         "properties": {

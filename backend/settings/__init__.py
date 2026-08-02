@@ -138,3 +138,8 @@ async def set_voice_engine(session: AsyncSession, engine: str) -> None:
     row = await _get_or_create_row(session)
     row.voice_engine = engine
     await session.flush()
+
+
+async def get_voice_engine(session: AsyncSession) -> str:
+    row = await _get_or_create_row(session)
+    return row.voice_engine

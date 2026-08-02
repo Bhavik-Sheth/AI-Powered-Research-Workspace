@@ -41,6 +41,7 @@ class UserMessageEvent(BaseModel):
     event: Literal["user_message"] = "user_message"
     text: str
     ui_state: UIState
+    input_modality: Literal["text", "voice"] = "text"
 
 
 class UIStateEvent(BaseModel):
@@ -99,8 +100,8 @@ async def broadcast(session: Session, event: TurnEvent) -> None:
         logger.info("event=ws_broadcast_after_close project_id=%s", session.project_id)
 
 
-async def _run_turn(session: Session, session_ref: SessionRef, text: str, ui_state: UIState) -> None:
-    async for turn_event in harness.run_turn(session_ref, text, ui_state):
+async def _run_turn(session: Session, session_ref: SessionRef, text: str, ui_state: UIState, input_modality: str) -> None:
+    async for turn_event in harness.run_turn(session_ref, text, ui_state, input_modality):
         await broadcast(session, turn_event)
 
 
@@ -119,7 +120,7 @@ async def handle_message(session: Session, event: UpstreamEvent) -> None:
     # Spawned, not awaited: the receive loop must keep running so a
     # follow-up `interrupt` for *this* turn can actually be received while
     # it streams (D18 node 7 — a cancellable task bound to the session).
-    session.turn_task = asyncio.create_task(_run_turn(session, session_ref, event.text, event.ui_state))
+    session.turn_task = asyncio.create_task(_run_turn(session, session_ref, event.text, event.ui_state, event.input_modality))
 
 
 def _parse_upstream(raw: dict) -> UpstreamEvent:

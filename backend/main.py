@@ -35,6 +35,7 @@ from api.papers import router as papers_router
 from api.projects import router as projects_router
 from api.search import router as search_router
 from api.settings import router as settings_router
+from api.voice import router as voice_router
 from config import get_config
 from ws import router as ws_router
 
@@ -151,6 +152,7 @@ def create_app() -> FastAPI:
     app.include_router(notes_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(highlights_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(memory_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(voice_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(papers_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(search_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(ws_router)

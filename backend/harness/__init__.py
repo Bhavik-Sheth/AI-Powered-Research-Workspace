@@ -140,7 +140,9 @@ async def _validate_citations(
     return "".join(pieces), citations
 
 
-async def run_turn(session_ref: SessionRef, message: str, ui_state: UIState) -> AsyncIterator[TurnEvent]:
+async def run_turn(
+    session_ref: SessionRef, message: str, ui_state: UIState, input_modality: str = "text"
+) -> AsyncIterator[TurnEvent]:
     key = _turn_key(session_ref)
     if key in _in_flight:
         yield ErrorEvent(
@@ -162,7 +164,13 @@ async def run_turn(session_ref: SessionRef, message: str, ui_state: UIState) -> 
             seq = await _next_seq(db_session, session_ref.conversation_id)
             db_session.add(
                 Messages(
-                    conversation_id=session_ref.conversation_id, seq=seq, turn_id=turn_id, role="user", content=message, citations=[]
+                    conversation_id=session_ref.conversation_id,
+                    seq=seq,
+                    turn_id=turn_id,
+                    role="user",
+                    content=message,
+                    citations=[],
+                    input_modality=input_modality,
                 )
             )
 

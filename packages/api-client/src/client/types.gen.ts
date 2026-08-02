@@ -816,6 +816,20 @@ export type SourceIds = {
 };
 
 /**
+ * SynthesizeRequest
+ */
+export type SynthesizeRequest = {
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Voice
+     */
+    voice?: string;
+};
+
+/**
  * TabRef
  *
  * One entry in the persisted center-pane tab stack (TRD §4.1's
@@ -841,6 +855,16 @@ export type TabRef = {
      * Label
      */
     label: string;
+};
+
+/**
+ * Transcript
+ */
+export type Transcript = {
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -1388,6 +1412,71 @@ export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses = {
 };
 
 export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponse = QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses[keyof QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses];
+
+export type TranscribeAudioApiVoiceTranscribePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Lang
+         */
+        lang?: string;
+    };
+    url: '/api/voice/transcribe';
+};
+
+export type TranscribeAudioApiVoiceTranscribePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TranscribeAudioApiVoiceTranscribePostError = TranscribeAudioApiVoiceTranscribePostErrors[keyof TranscribeAudioApiVoiceTranscribePostErrors];
+
+export type TranscribeAudioApiVoiceTranscribePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Transcript;
+};
+
+export type TranscribeAudioApiVoiceTranscribePostResponse = TranscribeAudioApiVoiceTranscribePostResponses[keyof TranscribeAudioApiVoiceTranscribePostResponses];
+
+export type SynthesizeSpeechApiVoiceSynthesizePostData = {
+    body: SynthesizeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/voice/synthesize';
+};
+
+export type SynthesizeSpeechApiVoiceSynthesizePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SynthesizeSpeechApiVoiceSynthesizePostError = SynthesizeSpeechApiVoiceSynthesizePostErrors[keyof SynthesizeSpeechApiVoiceSynthesizePostErrors];
+
+export type SynthesizeSpeechApiVoiceSynthesizePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ListProjectPapersApiProjectsProjectIdPapersGetData = {
     body?: never;

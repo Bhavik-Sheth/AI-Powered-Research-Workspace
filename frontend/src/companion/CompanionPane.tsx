@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { wsSessionUrl } from "../state/bridge";
+import { useVoice } from "../voice/useVoice";
 import "./CompanionPane.css";
 import { renderAssistantContent } from "./parseCitations";
 import type { DownstreamEvent, SelectionState } from "./wsTypes";
@@ -14,6 +15,7 @@ interface TranscriptEntry {
 interface QueuedMessage {
   text: string;
   selection: SelectionState | null;
+  inputModality: "text" | "voice";
 }
 
 export interface PendingAsk {
@@ -99,7 +101,14 @@ export function CompanionPane({
         const pending = queuedRef.current;
         if (pending) {
           setQueued(null);
-          ws.send(JSON.stringify({ event: "user_message", text: pending.text, ui_state: { selection: pending.selection } }));
+          ws.send(
+            JSON.stringify({
+              event: "user_message",
+              text: pending.text,
+              ui_state: { selection: pending.selection },
+              input_modality: pending.inputModality,
+            }),
+          );
           setTurnInFlight(true);
         }
       };
@@ -128,17 +137,17 @@ export function CompanionPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  function sendMessage(text: string, withSelection: SelectionState | null): void {
+  function sendMessage(text: string, withSelection: SelectionState | null, inputModality: "text" | "voice" = "text"): void {
     if (turnInFlight || !text.trim()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      setQueued({ text, selection: withSelection });
+      setQueued({ text, selection: withSelection, inputModality });
       setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
       return;
     }
     setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
     setTurnInFlight(true);
-    ws.send(JSON.stringify({ event: "user_message", text, ui_state: { selection: withSelection } }));
+    ws.send(JSON.stringify({ event: "user_message", text, ui_state: { selection: withSelection }, input_modality: inputModality }));
   }
 
   useEffect(() => {
@@ -152,6 +161,14 @@ export function CompanionPane({
   function handleSubmit(): void {
     sendMessage(draft, selection);
     setDraft("");
+  }
+
+  const { recording, startRecording, transcribeOnRelease } = useVoice();
+
+  async function handleMicRelease(): Promise<void> {
+    if (!recording) return;
+    const text = await transcribeOnRelease();
+    if (text) sendMessage(text, selection, "voice");
   }
 
   const statusLine = queued
@@ -211,7 +228,14 @@ export function CompanionPane({
             if (event.key === "Enter") handleSubmit();
           }}
         />
-        <button type="button" className="companion__mic" aria-label="Voice input (coming in Voice.1)" disabled />
+        <button
+          type="button"
+          className={`companion__mic ${recording ? "companion__mic--recording" : ""}`}
+          aria-label="Hold to talk"
+          onMouseDown={() => void startRecording()}
+          onMouseUp={() => void handleMicRelease()}
+          onMouseLeave={() => recording && void handleMicRelease()}
+        />
         <button type="button" className="companion__send" aria-label="Send" onClick={handleSubmit}>
           ↑
         </button>

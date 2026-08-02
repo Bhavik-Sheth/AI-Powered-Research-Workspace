@@ -172,7 +172,12 @@
   border-radius: 50%;
   border: 1px solid var(--border);
   background: #fff;
-  cursor: not-allowed;
+  cursor: pointer;
+}
+
+.companion__mic--recording {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .companion__send {
