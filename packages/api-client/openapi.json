@@ -861,6 +861,62 @@
         }
       }
     },
+    "/api/projects/{project_id}/conversation": {
+      "get": {
+        "summary": "Get Conversation",
+        "operationId": "get_conversation_api_projects__project_id__conversation_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/voice/transcribe": {
       "post": {
         "summary": "Transcribe Audio",
@@ -1512,6 +1568,22 @@
         "title": "CitedRow",
         "description": "One retrieval hit, always traceable back to the row it came from\n(MODULES.md `query_memory`) \u2014 the paper it's from when it has one, the\nverbatim text, and the span within the source artifact."
       },
+      "ConversationResponse": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageOut"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "ConversationResponse"
+      },
       "CreateProjectRequest": {
         "properties": {
           "name": {
@@ -1847,6 +1919,52 @@
           "rows"
         ],
         "title": "MemoryQueryResponse"
+      },
+      "MessageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "citations": {
+            "items": {},
+            "type": "array",
+            "title": "Citations"
+          },
+          "interrupted": {
+            "type": "boolean",
+            "title": "Interrupted"
+          },
+          "input_modality": {
+            "type": "string",
+            "title": "Input Modality"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "citations",
+          "interrupted",
+          "input_modality",
+          "created_at"
+        ],
+        "title": "MessageOut"
       },
       "ModelSettings": {
         "properties": {

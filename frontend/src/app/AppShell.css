@@ -43,6 +43,46 @@ body {
   min-height: 0;
 }
 
+/* Collapsible left nav / Companion pane wrapper. The wrapper owns the flex
+   width and clips; the child (`.left-nav` / `.companion`) keeps its own
+   natural width unchanged, so collapsing never touches that component's
+   own CSS. */
+.pane-shell {
+  flex: none;
+  display: flex;
+  overflow: hidden;
+  transition: width 0.15s ease;
+}
+
+.pane-shell--left {
+  width: 200px;
+}
+
+.pane-shell--right {
+  width: 280px;
+}
+
+.pane-shell--collapsed {
+  width: 0;
+}
+
+.pane-toggle {
+  flex: none;
+  align-self: stretch;
+  width: 14px;
+  background: var(--surface);
+  border: none;
+  border-radius: var(--radius-button);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: 700 11px var(--font-ui);
+  box-shadow: var(--panel-shadow);
+}
+
+.pane-toggle:hover {
+  color: var(--accent-text);
+}
+
 .left-nav {
   width: 200px;
   min-width: 170px;

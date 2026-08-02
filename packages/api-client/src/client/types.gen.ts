@@ -68,6 +68,16 @@ export type CitedRow = {
 };
 
 /**
+ * ConversationResponse
+ */
+export type ConversationResponse = {
+    /**
+     * Messages
+     */
+    messages: Array<MessageOut>;
+};
+
+/**
  * CreateProjectRequest
  */
 export type CreateProjectRequest = {
@@ -245,6 +255,40 @@ export type MemoryQueryResponse = {
      * Rows
      */
     rows: Array<CitedRow>;
+};
+
+/**
+ * MessageOut
+ */
+export type MessageOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Citations
+     */
+    citations: Array<unknown>;
+    /**
+     * Interrupted
+     */
+    interrupted: boolean;
+    /**
+     * Input Modality
+     */
+    input_modality: string;
+    /**
+     * Created At
+     */
+    created_at: string;
 };
 
 /**
@@ -1412,6 +1456,42 @@ export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses = {
 };
 
 export type QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponse = QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses[keyof QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses];
+
+export type GetConversationApiProjectsProjectIdConversationGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/conversation';
+};
+
+export type GetConversationApiProjectsProjectIdConversationGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetConversationApiProjectsProjectIdConversationGetError = GetConversationApiProjectsProjectIdConversationGetErrors[keyof GetConversationApiProjectsProjectIdConversationGetErrors];
+
+export type GetConversationApiProjectsProjectIdConversationGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationResponse;
+};
+
+export type GetConversationApiProjectsProjectIdConversationGetResponse = GetConversationApiProjectsProjectIdConversationGetResponses[keyof GetConversationApiProjectsProjectIdConversationGetResponses];
 
 export type TranscribeAudioApiVoiceTranscribePostData = {
     body?: never;

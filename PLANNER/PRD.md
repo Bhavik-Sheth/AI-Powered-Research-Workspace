@@ -718,6 +718,15 @@ extending the phase.
 - **Risk:** Local voice is unprototyped (D37) — *Mitigation: spike `faster-whisper` before voice
   work starts; the stub engine already satisfies the v1 scope floor, and the engines are the one
   droppable piece.*
+- **Risk:** A one-shot background job (`backend/jobs/`) killed mid-execution — e.g. the sidecar
+  process dying while `parse_paper_job`'s docling step is running — leaves its row's state (e.g.
+  `papers.parse_state`) stuck at `"running"` forever, with nothing to detect or requeue it.
+  `run_catchup_pass()` only recovers overdue `scheduled_jobs` (recurring polls, D-nothing-yet
+  since Phase 5), not orphaned one-shot jobs. Found live: a paper's `parse_state` was stuck
+  `"running"` with no `paper_content` row after a sidecar restart interrupted its parse, and the
+  reader's section navigation silently rendered empty with no error surfaced. *Mitigation: none
+  yet — recovered by hand (reset state, re-enqueue). Worth a startup sweep that requeues any job
+  stuck `"running"` past a TTL, before this is hit by a real crash instead of manual testing.*
 - **Q:** What should be chunked out of a `.ipynb` when notebook content eventually enters the
   memory index — code cells, markdown, text outputs; excluding base64 images and stack traces that
   would pollute retrieval? *Owner: Eng. Not blocking — v1 indexes the structured record only.*

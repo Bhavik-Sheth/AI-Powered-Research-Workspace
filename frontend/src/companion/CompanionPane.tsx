@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getConversationApiProjectsProjectIdConversationGet } from "@research-os/api-client";
 
 import { wsSessionUrl } from "../state/bridge";
 import { useVoice } from "../voice/useVoice";
@@ -90,6 +91,7 @@ export function CompanionPane({
   useEffect(() => {
     closedByUsRef.current = false;
     reconnectAttemptRef.current = 0;
+    let cancelled = false;
 
     function connect(): void {
       const ws = new WebSocket(wsSessionUrl(projectId));
@@ -127,8 +129,29 @@ export function CompanionPane({
       };
     }
 
-    connect();
+    // Rehydrate the verbatim transcript (TRD §4.1) before opening the
+    // socket — seeding after a live message could arrive would clobber it.
+    async function loadHistoryThenConnect(): Promise<void> {
+      try {
+        const { data } = await getConversationApiProjectsProjectIdConversationGet({
+          path: { project_id: projectId },
+          throwOnError: true,
+        });
+        if (cancelled) return;
+        const seeded = data.messages
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .map((message) => ({ id: nextId(), role: message.role as "user" | "assistant", content: message.content }));
+        setTranscript(seeded);
+      } catch {
+        // A history-load failure shouldn't block the live connection —
+        // worst case the transcript starts empty, same as before this.
+      }
+      if (!cancelled) connect();
+    }
+
+    void loadHistoryThenConnect();
     return () => {
+      cancelled = true;
       closedByUsRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
@@ -181,7 +204,7 @@ export function CompanionPane({
         <span className={`companion__status-dot ${connected ? "companion__status-dot--live" : ""}`} />
         <span className="companion__status-text">{statusLine}</span>
         {turnInFlight && (
-          <button type="button" className="companion__stop" onClick={() => wsRef.current?.send(JSON.stringify({ event: "interrupt", turn_id: "" }))}>
+          <button type="button" className="companion__stop" onClick={() => wsRef.current?.send(JSON.stringify({ event: "interrupt" }))}>
             ✕ Stop
           </button>
         )}

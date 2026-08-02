@@ -46,6 +46,12 @@ async def handle_validation_error(request: Request, exc: RequestValidationError)
 
 
 async def handle_exception(request: Request, exc: Exception) -> JSONResponse:
+    # Starlette dispatches the base-`Exception` handler from its outermost
+    # ServerErrorMiddleware, which sits *outside* the CORSMiddleware layer
+    # (app.add_middleware) — unlike the two handlers above, this response
+    # never passes back through CORS, so the origin header has to be set by
+    # hand here or the renderer sees a same-origin-policy failure instead of
+    # the real error (D2: bearer token, not origin, is the access boundary).
     logger.exception("event=unhandled_exception path=%s", request.url.path)
     envelope = ErrorEnvelope(code=type(exc).__name__, message=str(exc), recoverable=False)
-    return JSONResponse(status_code=500, content=envelope.model_dump())
+    return JSONResponse(status_code=500, content=envelope.model_dump(), headers={"Access-Control-Allow-Origin": "*"})

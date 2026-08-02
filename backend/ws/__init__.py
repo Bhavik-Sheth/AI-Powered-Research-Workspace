@@ -19,7 +19,7 @@ import db
 import harness
 from config import get_config
 from db.models import Conversations
-from harness.models import SelectionState, SessionRef, TurnEvent, UIState
+from harness.models import ErrorEvent, SelectionState, SessionRef, TurnEvent, UIState
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,13 @@ class UIStateEvent(BaseModel):
 
 class InterruptEvent(BaseModel):
     event: Literal["interrupt"] = "interrupt"
-    turn_id: uuid.UUID
+    # Optional: `harness.interrupt` cancels by session, not by turn (only one
+    # turn per session may ever be in flight — MODULES.md), so this isn't
+    # read yet. Required-but-unfillable was a real bug: the frontend had no
+    # real turn_id to send between turns and sent "" as a placeholder, which
+    # fails UUID validation and gets silently dropped by the receive loop's
+    # error handler — the Stop button never actually reached the backend.
+    turn_id: uuid.UUID | None = None
 
 
 UpstreamEvent = UserMessageEvent | UIStateEvent | InterruptEvent
@@ -100,8 +106,10 @@ async def broadcast(session: Session, event: TurnEvent) -> None:
         logger.info("event=ws_broadcast_after_close project_id=%s", session.project_id)
 
 
-async def _run_turn(session: Session, session_ref: SessionRef, text: str, ui_state: UIState, input_modality: str) -> None:
-    async for turn_event in harness.run_turn(session_ref, text, ui_state, input_modality):
+async def _run_turn(
+    session: Session, session_ref: SessionRef, text: str, ui_state: UIState, input_modality: str, cancel_flag: asyncio.Event
+) -> None:
+    async for turn_event in harness.run_turn(session_ref, text, ui_state, input_modality, cancel_flag):
         await broadcast(session, turn_event)
 
 
@@ -117,10 +125,27 @@ async def handle_message(session: Session, event: UpstreamEvent) -> None:
         return
 
     session.ui_state = event.ui_state
+    # Reserved synchronously, in this same call, before the task is even
+    # scheduled — an `interrupt` arriving right after this returns must see
+    # the reservation already in place (harness.begin_turn's docstring).
+    cancel_flag = harness.begin_turn(session_ref)
+    if cancel_flag is None:
+        await broadcast(
+            session,
+            ErrorEvent(
+                code="turn_in_progress",
+                message="A turn is already running for this session — interrupt it first.",
+                recoverable=True,
+                what_still_worked="the turn already in progress",
+            ),
+        )
+        return
     # Spawned, not awaited: the receive loop must keep running so a
     # follow-up `interrupt` for *this* turn can actually be received while
     # it streams (D18 node 7 — a cancellable task bound to the session).
-    session.turn_task = asyncio.create_task(_run_turn(session, session_ref, event.text, event.ui_state, event.input_modality))
+    session.turn_task = asyncio.create_task(
+        _run_turn(session, session_ref, event.text, event.ui_state, event.input_modality, cancel_flag)
+    )
 
 
 def _parse_upstream(raw: dict) -> UpstreamEvent:

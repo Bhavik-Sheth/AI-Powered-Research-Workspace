@@ -35,7 +35,7 @@ from memory import query_memory
 from memory.models import CitedRow
 from provenance import validate_and_anchor
 
-__all__ = ["run_turn", "interrupt"]
+__all__ = ["begin_turn", "run_turn", "interrupt"]
 
 _CITE_PATTERN = re.compile(r"<cite>(.*?)</cite>", re.DOTALL)
 
@@ -50,6 +50,22 @@ _in_flight: dict[tuple[uuid.UUID, uuid.UUID], asyncio.Event] = {}
 
 def _turn_key(session_ref: SessionRef) -> tuple[uuid.UUID, uuid.UUID]:
     return (session_ref.project_id, session_ref.conversation_id)
+
+
+def begin_turn(session_ref: SessionRef) -> asyncio.Event | None:
+    """Reserves the in-flight slot *synchronously*, in the same call stack
+    as the `user_message` that starts a turn — before Session Transport
+    schedules `run_turn` as a task. `asyncio.create_task` only schedules a
+    coroutine, it does not run any of it; without this, an `interrupt`
+    arriving in the same instant could reach `_in_flight` before the task
+    ever gets a turn on the event loop and find nothing there, silently
+    no-op. Returns `None` if a turn is already in flight for this session."""
+    key = _turn_key(session_ref)
+    if key in _in_flight:
+        return None
+    cancel_flag = asyncio.Event()
+    _in_flight[key] = cancel_flag
+    return cancel_flag
 
 _SYSTEM_PROMPT = (
     "You are the Research Companion, helping a researcher with their project. "
@@ -141,10 +157,19 @@ async def _validate_citations(
 
 
 async def run_turn(
-    session_ref: SessionRef, message: str, ui_state: UIState, input_modality: str = "text"
+    session_ref: SessionRef,
+    message: str,
+    ui_state: UIState,
+    input_modality: str = "text",
+    cancel_flag: asyncio.Event | None = None,
 ) -> AsyncIterator[TurnEvent]:
+    """`cancel_flag` is normally the `Event` `begin_turn` already reserved
+    (the caller closes the race against `interrupt`); passed as `None` only
+    by tests/direct callers, in which case this reserves its own."""
     key = _turn_key(session_ref)
-    if key in _in_flight:
+    if cancel_flag is None:
+        cancel_flag = begin_turn(session_ref)
+    if cancel_flag is None:
         yield ErrorEvent(
             code="turn_in_progress",
             message="A turn is already running for this session — interrupt it first.",
@@ -153,8 +178,6 @@ async def run_turn(
         )
         return
 
-    cancel_flag = asyncio.Event()
-    _in_flight[key] = cancel_flag
     try:
         turn_id = uuid.uuid4()
         paper_id = ui_state.selection.paper_id if ui_state.selection is not None else None

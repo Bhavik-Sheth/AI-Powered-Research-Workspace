@@ -5,8 +5,10 @@ import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
 import type { SelectionState } from "../companion/wsTypes";
 import { Dashboard } from "../dashboard/Dashboard";
 import { LibraryView } from "../library/LibraryView";
+import { NotesView } from "../notes/NotesView";
 import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
+import { useCollapsible } from "../state/useCollapsible";
 import { type TabRef, useTabStack } from "../state/useTabStack";
 import "./AppShell.css";
 import { ReadinessStrip } from "./ReadinessStrip";
@@ -20,6 +22,7 @@ const NAV_GROUPS: { label: string | null; items: string[] }[] = [
 
 const DASHBOARD_TAB: TabRef = { id: "dashboard", kind: "dashboard", params: {}, label: "Dashboard" };
 const LIBRARY_TAB: TabRef = { id: "library", kind: "library", params: {}, label: "Papers" };
+const NOTES_TAB: TabRef = { id: "notes", kind: "notes", params: {}, label: "Notes" };
 const SEARCH_TAB: TabRef = { id: "search", kind: "search", params: {}, label: "Search" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 
@@ -84,6 +87,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   const [projectName, setProjectName] = useState("");
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
+  const [navCollapsed, toggleNav] = useCollapsible("leftNavCollapsed");
+  const [companionCollapsed, toggleCompanion] = useCollapsible("companionCollapsed");
 
   useEffect(() => {
     void (async () => {
@@ -114,10 +119,12 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <Dashboard projectId={projectId} projectName={projectName} tabs={tabs} onResume={activateTab} />;
       case "library":
         return <LibraryView projectId={projectId} onOpenPaper={openReaderTab} />;
+      case "notes":
+        return <NotesView projectId={projectId} />;
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
-        return <SearchResults />;
+        return <SearchResults projectId={projectId} />;
       case "readiness":
         return (
           <>
@@ -137,34 +144,45 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         <ProjectSwitcher projectId={projectId} onSwitch={onSwitchProject} />
       </header>
       <div className="shell-body">
-        <nav className="left-nav">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label ?? "root"}>
-              {group.label && <div className="left-nav__group-label">{group.label}</div>}
-              <ul style={{ margin: 0, padding: 0 }}>
-                {group.items.map((item) => (
-                  <li
-                    key={item}
-                    className="left-nav__item"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => {
-                      if (item === "Dashboard") openTab(DASHBOARD_TAB);
-                      if (item === "Papers") openTab(LIBRARY_TAB);
-                    }}
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
+        <div className={`pane-shell pane-shell--left ${navCollapsed ? "pane-shell--collapsed" : ""}`}>
+          <nav className="left-nav">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label ?? "root"}>
+                {group.label && <div className="left-nav__group-label">{group.label}</div>}
+                <ul style={{ margin: 0, padding: 0 }}>
+                  {group.items.map((item) => (
+                    <li
+                      key={item}
+                      className="left-nav__item"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => {
+                        if (item === "Dashboard") openTab(DASHBOARD_TAB);
+                        if (item === "Papers") openTab(LIBRARY_TAB);
+                        if (item === "Notes") openTab(NOTES_TAB);
+                      }}
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(SEARCH_TAB)}>
+              Search
             </div>
-          ))}
-          <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(SEARCH_TAB)}>
-            Search
-          </div>
-          <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(READINESS_TAB)}>
-            Readiness
-          </div>
-        </nav>
+            <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(READINESS_TAB)}>
+              Readiness
+            </div>
+          </nav>
+        </div>
+        <button
+          type="button"
+          className="pane-toggle"
+          onClick={toggleNav}
+          aria-label={navCollapsed ? "Expand navigation" : "Collapse navigation"}
+        >
+          {navCollapsed ? "›" : "‹"}
+        </button>
         <div className="center-pane-column">
           {tabs.length > 1 && (
             <div className="tab-bar">
@@ -198,7 +216,17 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             ))}
           </main>
         </div>
-        <CompanionPane projectId={projectId} selection={selection} pendingAsk={pendingAsk} />
+        <button
+          type="button"
+          className="pane-toggle"
+          onClick={toggleCompanion}
+          aria-label={companionCollapsed ? "Expand companion" : "Collapse companion"}
+        >
+          {companionCollapsed ? "‹" : "›"}
+        </button>
+        <div className={`pane-shell pane-shell--right ${companionCollapsed ? "pane-shell--collapsed" : ""}`}>
+          <CompanionPane projectId={projectId} selection={selection} pendingAsk={pendingAsk} />
+        </div>
       </div>
     </div>
   );

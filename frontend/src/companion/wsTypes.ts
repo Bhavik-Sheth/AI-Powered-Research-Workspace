@@ -35,4 +35,4 @@ export type DownstreamEvent =
 export type UpstreamEvent =
   | { event: "user_message"; text: string; ui_state: UIState }
   | { event: "ui_state"; selection?: SelectionState | null }
-  | { event: "interrupt"; turn_id: string };
+  | { event: "interrupt" };

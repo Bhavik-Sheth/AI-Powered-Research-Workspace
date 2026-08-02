@@ -61,7 +61,20 @@
   inset: 0;
   overflow: hidden;
   line-height: 1;
-  opacity: 0.2;
+  /* opacity stays 1 (PDF.js's own default) — the glyphs themselves are
+     made invisible below, not the layer. The canvas already shows the
+     real rendered text; this layer exists only so the browser can
+     select/copy it. A visible opacity here double-renders faint text on
+     top of the sharp canvas text and makes the page hard to read. */
+}
+
+.reader__text-layer span,
+.reader__text-layer br {
+  color: transparent;
+}
+
+.reader__text-layer ::selection {
+  background: var(--accent-tint-25);
 }
 
 .reader__card {

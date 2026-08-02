@@ -86,11 +86,28 @@
 .search__card-abstract {
   font: 12px/1.5 var(--font-reading);
   color: var(--text);
-  margin: 0;
+  margin: 0 0 8px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.search__card-add {
+  height: 26px;
+  border-radius: var(--radius-button);
+  padding: 0 10px;
+  font: 700 11px var(--font-ui);
+  background: var(--accent-tint-10);
+  color: var(--accent-text);
+  border: none;
+  cursor: pointer;
+}
+
+.search__card-add:disabled {
+  background: none;
+  color: var(--text-muted);
+  cursor: default;
 }
 
 .search__empty {

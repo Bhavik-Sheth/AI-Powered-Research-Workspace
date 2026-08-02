@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { postSearchApiSearchPost, type ResultSet } from "@research-os/api-client";
+import { addPaperApiProjectsProjectIdPapersPost, postSearchApiSearchPost, type PaperSummary, type ResultSet } from "@research-os/api-client";
 
 import { ErrorCard } from "../design/ErrorCard";
 import "./SearchResults.css";
@@ -14,11 +14,36 @@ const SOURCE_LABEL: Record<string, string> = { arxiv: "arXiv", openalex: "OpenAl
  * progress, and renders `sources_failed` as the "what still worked" error
  * card once the response (partial or complete) arrives.
  */
-export function SearchResults() {
+export function SearchResults({ projectId, onAdded }: { projectId: string; onAdded?: (paperId: string) => void }) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ResultSet | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [addingId, setAddingId] = useState<string | null>(null);
+
+  async function handleAdd(paper: PaperSummary) {
+    setAddingId(paper.canonical_id);
+    try {
+      const { data } = await addPaperApiProjectsProjectIdPapersPost({
+        path: { project_id: projectId },
+        body: {
+          source_ids: paper.source_ids,
+          title: paper.title,
+          abstract: paper.abstract,
+          source_url: paper.source_url,
+          pdf_url: paper.pdf_url,
+        },
+        throwOnError: true,
+      });
+      setAddedIds((prev) => new Set(prev).add(paper.canonical_id));
+      onAdded?.(data.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add this paper");
+    } finally {
+      setAddingId(null);
+    }
+  }
 
   async function handleSearch() {
     if (!query.trim()) return;
@@ -79,16 +104,28 @@ export function SearchResults() {
 
       {result && result.results.length > 0 && (
         <div className="search__grid">
-          {result.results.map((paper) => (
-            <article key={paper.canonical_id} className="search__card">
-              <h3 className="search__card-title">{paper.title}</h3>
-              <p className="search__card-meta">
-                {[(paper.authors ?? []).slice(0, 3).join(", "), paper.year, paper.venue].filter(Boolean).join(" · ")}
-                {paper.citation_count != null ? ` · ${paper.citation_count} citations` : ""}
-              </p>
-              {paper.abstract && <p className="search__card-abstract">{paper.abstract}</p>}
-            </article>
-          ))}
+          {result.results.map((paper) => {
+            const added = addedIds.has(paper.canonical_id);
+            const adding = addingId === paper.canonical_id;
+            return (
+              <article key={paper.canonical_id} className="search__card">
+                <h3 className="search__card-title">{paper.title}</h3>
+                <p className="search__card-meta">
+                  {[(paper.authors ?? []).slice(0, 3).join(", "), paper.year, paper.venue].filter(Boolean).join(" · ")}
+                  {paper.citation_count != null ? ` · ${paper.citation_count} citations` : ""}
+                </p>
+                {paper.abstract && <p className="search__card-abstract">{paper.abstract}</p>}
+                <button
+                  type="button"
+                  className="search__card-add"
+                  disabled={added || adding}
+                  onClick={() => handleAdd(paper)}
+                >
+                  {added ? "Added ✓" : adding ? "Adding…" : "Add to library"}
+                </button>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>
