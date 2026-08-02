@@ -1174,6 +1174,73 @@
         }
       }
     },
+    "/api/experiments/{experiment_id}/cells": {
+      "post": {
+        "summary": "Propose Cell",
+        "description": "Writes an unrun, pending-approval cell into the experiment's vault\nnotebook (`sandbox.propose_cell`) \u2014 never executes it (D31). This route\ndid not exist through Phase 2.3: `propose_cell` had a public interface\nper MODULES.md but was only ever called directly in-process during\nmanual verification, so the approval flow this same module already\nimplements (`run_spec`/`confirmation`/`run_all`) had no way to reach a\nreal cell from the UI. Added post-sign-off once that gap surfaced.",
+        "operationId": "propose_cell_api_experiments__experiment_id__cells_post",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeCellRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notebook"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/experiments/{experiment_id}/confirmation": {
       "post": {
         "summary": "Create Confirmation",
@@ -3774,6 +3841,30 @@
           "active_tab"
         ],
         "title": "ProjectResponse"
+      },
+      "ProposeCellRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "ProposeCellRequest"
       },
       "ProviderCredentials": {
         "properties": {

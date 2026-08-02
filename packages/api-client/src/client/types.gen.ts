@@ -1016,6 +1016,20 @@ export type ProjectResponse = {
 };
 
 /**
+ * ProposeCellRequest
+ */
+export type ProposeCellRequest = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Index
+     */
+    index?: number | null;
+};
+
+/**
  * ProviderCredentials
  *
  * What the user submits to save and validate one provider.
@@ -2111,6 +2125,42 @@ export type GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses = {
 };
 
 export type GetRunSpecApiExperimentsExperimentIdRunSpecGetResponse = GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses[keyof GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses];
+
+export type ProposeCellApiExperimentsExperimentIdCellsPostData = {
+    body: ProposeCellRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/cells';
+};
+
+export type ProposeCellApiExperimentsExperimentIdCellsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposeCellApiExperimentsExperimentIdCellsPostError = ProposeCellApiExperimentsExperimentIdCellsPostErrors[keyof ProposeCellApiExperimentsExperimentIdCellsPostErrors];
+
+export type ProposeCellApiExperimentsExperimentIdCellsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Notebook;
+};
+
+export type ProposeCellApiExperimentsExperimentIdCellsPostResponse = ProposeCellApiExperimentsExperimentIdCellsPostResponses[keyof ProposeCellApiExperimentsExperimentIdCellsPostResponses];
 
 export type CreateConfirmationApiExperimentsExperimentIdConfirmationPostData = {
     body?: never;

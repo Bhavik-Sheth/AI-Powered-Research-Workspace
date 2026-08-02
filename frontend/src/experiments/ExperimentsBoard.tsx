@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createExperimentApiProjectsProjectIdExperimentsPost,
+  getRunSpecApiExperimentsExperimentIdRunSpecGet,
   listExperimentsApiProjectsProjectIdExperimentsGet,
+  proposeCellApiExperimentsExperimentIdCellsPost,
   type Experiment,
+  type Notebook,
 } from "@research-os/api-client";
 
 import type { ProjectSocket } from "../state/useProjectSocket";
@@ -169,6 +172,54 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
   const [runPanel, setRunPanel] = useState<RunPanelState | null>(null);
   const runPanelExperimentIdRef = useRef<string | null>(null);
   runPanelExperimentIdRef.current = runPanel?.experimentId ?? null;
+  // The one expanded card's notebook + run spec — fetched on demand
+  // (`GET .../run_spec` returns both together) rather than for every card
+  // up front, since most cards' notebooks are never looked at in a session.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [notebook, setNotebook] = useState<Notebook | null>(null);
+  const [runSpec, setRunSpec] = useState<RunSpec | null>(null);
+  const [newCellCode, setNewCellCode] = useState("");
+  const [proposing, setProposing] = useState(false);
+  const expandedIdRef = useRef<string | null>(null);
+  expandedIdRef.current = expandedId;
+
+  async function loadNotebook(experimentId: string) {
+    const { data } = await getRunSpecApiExperimentsExperimentIdRunSpecGet({
+      path: { experiment_id: experimentId },
+      throwOnError: true,
+    });
+    setNotebook(data.notebook);
+    setRunSpec(data.run_spec);
+  }
+
+  async function toggleExpand(experimentId: string) {
+    if (expandedId === experimentId) {
+      setExpandedId(null);
+      setNotebook(null);
+      setRunSpec(null);
+      return;
+    }
+    setExpandedId(experimentId);
+    setNotebook(null);
+    setRunSpec(null);
+    await loadNotebook(experimentId);
+  }
+
+  async function handleProposeCell(experimentId: string) {
+    if (!newCellCode.trim()) return;
+    setProposing(true);
+    try {
+      await proposeCellApiExperimentsExperimentIdCellsPost({
+        path: { experiment_id: experimentId },
+        body: { code: newCellCode },
+        throwOnError: true,
+      });
+      setNewCellCode("");
+      await loadNotebook(experimentId);
+    } finally {
+      setProposing(false);
+    }
+  }
 
   useEffect(() => {
     return socket.subscribe((message) => {
@@ -180,8 +231,16 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
         setRunPanel((prev) =>
           prev ? { ...prev, runId: message.run_id, status: message.status, exitCode: message.exit_code } : prev,
         );
+        // The cell that just ran carries stale `outputs` (empty) in the
+        // already-fetched notebook until refetched — without this, a cell
+        // that genuinely ran keeps showing "unrun — pending approval",
+        // which is exactly the ambiguity PRD §13 says must never happen.
+        if (message.status !== "running" && message.experiment_id === expandedIdRef.current) {
+          void loadNotebook(message.experiment_id);
+        }
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   async function refresh() {
@@ -257,7 +316,11 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
                 ) : (
                   columnExperiments.map((experiment) => (
                     <div className="experiments__card" key={experiment.id}>
-                      <div className="experiments__card-head">
+                      <div
+                        className="experiments__card-head"
+                        style={{ cursor: "pointer" }}
+                        onClick={() => void toggleExpand(experiment.id)}
+                      >
                         <span className="experiments__card-title">{experiment.title}</span>
                         <span className={statusBadgeClass(experiment.status)}>
                           {STATUS_LABEL[experiment.status]}
@@ -265,6 +328,58 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
                       </div>
                       {experiment.hypothesis && (
                         <p className="experiments__card-hypothesis">{experiment.hypothesis}</p>
+                      )}
+
+                      {expandedId === experiment.id && (
+                        <div className="experiments__notebook">
+                          {notebook === null ? (
+                            <p className="experiments__empty">Loading notebook…</p>
+                          ) : (
+                            <>
+                              {notebook.cells.length === 0 ? (
+                                <p className="experiments__empty">No cells yet.</p>
+                              ) : (
+                                notebook.cells.map((cell, index) => (
+                                  <CellPreview
+                                    key={index}
+                                    code={cell.source}
+                                    hasOutput={Boolean(cell.outputs && cell.outputs.length > 0)}
+                                    onRun={
+                                      cell.outputs && cell.outputs.length > 0
+                                        ? undefined
+                                        : () => {
+                                            if (!runSpec) return;
+                                            setPendingApproval({
+                                              experimentId: experiment.id,
+                                              code: cell.source,
+                                              spec: runSpec,
+                                            });
+                                          }
+                                    }
+                                  />
+                                ))
+                              )}
+                              <form
+                                className="experiments__new-cell"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  void handleProposeCell(experiment.id);
+                                }}
+                              >
+                                <textarea
+                                  className="experiments__new-cell-input"
+                                  value={newCellCode}
+                                  onChange={(event) => setNewCellCode(event.target.value)}
+                                  placeholder="print('hello from the sandbox')"
+                                  rows={3}
+                                />
+                                <button type="submit" disabled={proposing || !newCellCode.trim()}>
+                                  {proposing ? "Adding…" : "Propose cell"}
+                                </button>
+                              </form>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))

@@ -80,6 +80,27 @@ async def get_run_spec(experiment_id: uuid.UUID) -> RunSpecPreview:
     return RunSpecPreview(notebook=notebook, run_spec=spec)
 
 
+class ProposeCellRequest(BaseModel):
+    code: str
+    index: int | None = None
+
+
+@router.post("/api/experiments/{experiment_id}/cells", response_model=Notebook)
+async def propose_cell(experiment_id: uuid.UUID, body: ProposeCellRequest) -> Notebook:
+    """Writes an unrun, pending-approval cell into the experiment's vault
+    notebook (`sandbox.propose_cell`) — never executes it (D31). This route
+    did not exist through Phase 2.3: `propose_cell` had a public interface
+    per MODULES.md but was only ever called directly in-process during
+    manual verification, so the approval flow this same module already
+    implements (`run_spec`/`confirmation`/`run_all`) had no way to reach a
+    real cell from the UI. Added post-sign-off once that gap surfaced."""
+    async with db.session() as session:
+        try:
+            return await sandbox.propose_cell(session, experiment_id, body.code, body.index)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/api/experiments/{experiment_id}/confirmation", response_model=ConfirmationToken)
 async def create_confirmation(experiment_id: uuid.UUID) -> ConfirmationToken:
     """Mints the one-shot token `run_all` requires. Always recomputes the

@@ -268,6 +268,49 @@
   border: 1px dashed var(--border-dashed);
 }
 
+/* Expanded card's notebook (post-sign-off addendum: propose_cell had no
+   route or entry point through Phase 2.3 — this closes that gap). */
+.experiments__notebook {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.experiments__new-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.experiments__new-cell-input {
+  font: 400 11px/1.5 var(--font-mono);
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  color: var(--text);
+  resize: vertical;
+}
+
+.experiments__new-cell button {
+  align-self: flex-start;
+  font: 700 11px var(--font-ui);
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-button);
+  background: var(--accent);
+  color: var(--surface-raised);
+  cursor: pointer;
+}
+
+.experiments__new-cell button:disabled {
+  background: var(--surface-inactive);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .experiments__run-log {
   font: 400 11px/1.6 var(--font-mono);
   color: var(--text);
