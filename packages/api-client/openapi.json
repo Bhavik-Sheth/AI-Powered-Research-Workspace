@@ -1365,6 +1365,129 @@
         }
       }
     },
+    "/api/runs/{run_id}": {
+      "get": {
+        "summary": "Get Run",
+        "description": "A plain-text response is enough for now: the captured stdout of one\nnotebook run is bounded by the sandbox's own cell/idle timeouts, not an\narbitrarily large stream \u2014 unlike a paper PDF (`GET /api/papers/:id/pdf`,\nwhich streams via `FileResponse` because PDFs can be large binaries),\nthere is no comparable size case here yet. If run logs grow large enough\nto matter, this is the seam to swap for a streaming response.",
+        "operationId": "get_run_api_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{experiment_id}/metrics": {
+      "post": {
+        "summary": "Create Metric",
+        "operationId": "create_metric_api_experiments__experiment_id__metrics_post",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentMetric"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/voice/transcribe": {
       "post": {
         "summary": "Transcribe Audio",
@@ -2317,6 +2440,183 @@
         "title": "ExperimentInput",
         "description": "What a caller submits to create or update an experiment record.\n\nAll fields are optional so `update_experiment` can patch just one; on\ncreate, `title` is the only one that must be present in practice \u2014 the\nmodule enforces that, not this shape."
       },
+      "ExperimentMetric": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "experiment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Experiment Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "user",
+              "measured"
+            ],
+            "title": "Source"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "experiment_id",
+          "name",
+          "value",
+          "unit",
+          "source",
+          "run_id",
+          "recorded_at"
+        ],
+        "title": "ExperimentMetric",
+        "description": "The `experiment_metrics` row (Schema.md), returned by the metrics endpoint."
+      },
+      "ExperimentRun": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "experiment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Experiment Id"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "reqs_hash": {
+            "type": "string",
+            "title": "Reqs Hash"
+          },
+          "notebook_hash": {
+            "type": "string",
+            "title": "Notebook Hash"
+          },
+          "stdout_ref": {
+            "type": "string",
+            "title": "Stdout Ref"
+          },
+          "artifacts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "run_kind": {
+            "type": "string",
+            "enum": [
+              "clean_run_all",
+              "interactive"
+            ],
+            "title": "Run Kind"
+          },
+          "network_enabled": {
+            "type": "boolean",
+            "title": "Network Enabled"
+          },
+          "gpu_enabled": {
+            "type": "boolean",
+            "title": "Gpu Enabled"
+          },
+          "approved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Approved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "experiment_id",
+          "started_at",
+          "finished_at",
+          "exit_code",
+          "image",
+          "reqs_hash",
+          "notebook_hash",
+          "stdout_ref",
+          "artifacts",
+          "run_kind",
+          "network_enabled",
+          "gpu_enabled",
+          "approved_at"
+        ],
+        "title": "ExperimentRun",
+        "description": "The `experiment_runs` row (Schema.md) \u2014 the strongest provenance in\nthe system. `approved_at` is always set: a row cannot exist without a\nvalidated confirmation token (D31, invariant #5). This is the type\n`record_run` returns and `is_measured_eligible` inspects; Execution\nSandbox re-exports it (`sandbox.models.ExperimentRun`) rather than\ndefining a second, duplicate shape, since Experiment Record is the\nmodule that persists this row (MODULES.md's own `record_run` signature)."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2689,6 +2989,57 @@
           "created_at"
         ],
         "title": "MessageOut"
+      },
+      "MetricInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "user",
+              "measured"
+            ],
+            "title": "Source"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "source"
+        ],
+        "title": "MetricInput",
+        "description": "What a caller submits to `record_metric`. `source: llm` is\nunrepresentable at the type level (`MetricSource`); `run_id` is required\nby the caller only when `source='measured'` \u2014 the DB `CHECK` is what\nactually enforces that pairing (MODULES.md), this shape just allows it."
       },
       "ModelSettings": {
         "properties": {
@@ -3632,6 +3983,24 @@
           "run_id"
         ],
         "title": "RunAllResponse"
+      },
+      "RunDetail": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ExperimentRun"
+          },
+          "stdout": {
+            "type": "string",
+            "title": "Stdout"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "stdout"
+        ],
+        "title": "RunDetail",
+        "description": "`ExperimentRun` plus the run's captured stdout log content \u2014 the log\nitself lives on disk (`stdout_ref` is a vault-relative path), so this\nreads it back rather than making the caller resolve the path itself."
       },
       "RunSpec": {
         "properties": {

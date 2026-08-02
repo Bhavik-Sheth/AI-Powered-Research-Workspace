@@ -10,6 +10,7 @@ import { NotesView } from "../notes/NotesView";
 import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
 import { useCollapsible } from "../state/useCollapsible";
+import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
 import "./AppShell.css";
 import { ReadinessStrip } from "./ReadinessStrip";
@@ -91,6 +92,11 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
   const [navCollapsed, toggleNav] = useCollapsible("leftNavCollapsed");
   const [companionCollapsed, toggleCompanion] = useCollapsible("companionCollapsed");
+  // The project's one WebSocket session (backend/ws/__init__.py: exactly one
+  // live connection per project_id) — owned here, once, so CompanionPane and
+  // ExperimentsBoard (via renderTabContent) can both consume it without
+  // either opening a second connection that would evict the other's.
+  const socket = useProjectSocket(projectId);
 
   useEffect(() => {
     void (async () => {
@@ -124,7 +130,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       case "notes":
         return <NotesView projectId={projectId} />;
       case "experiments":
-        return <ExperimentsBoard projectId={projectId} />;
+        return <ExperimentsBoard projectId={projectId} socket={socket} />;
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
@@ -230,7 +236,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
           {companionCollapsed ? "‹" : "›"}
         </button>
         <div className={`pane-shell pane-shell--right ${companionCollapsed ? "pane-shell--collapsed" : ""}`}>
-          <CompanionPane projectId={projectId} selection={selection} pendingAsk={pendingAsk} />
+          <CompanionPane projectId={projectId} selection={selection} pendingAsk={pendingAsk} socket={socket} />
         </div>
       </div>
     </div>

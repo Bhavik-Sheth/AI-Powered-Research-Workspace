@@ -242,6 +242,118 @@ export type ExperimentInput = {
 };
 
 /**
+ * ExperimentMetric
+ *
+ * The `experiment_metrics` row (Schema.md), returned by the metrics endpoint.
+ */
+export type ExperimentMetric = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Experiment Id
+     */
+    experiment_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Unit
+     */
+    unit: string | null;
+    /**
+     * Source
+     */
+    source: 'user' | 'measured';
+    /**
+     * Run Id
+     */
+    run_id: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+};
+
+/**
+ * ExperimentRun
+ *
+ * The `experiment_runs` row (Schema.md) — the strongest provenance in
+ * the system. `approved_at` is always set: a row cannot exist without a
+ * validated confirmation token (D31, invariant #5). This is the type
+ * `record_run` returns and `is_measured_eligible` inspects; Execution
+ * Sandbox re-exports it (`sandbox.models.ExperimentRun`) rather than
+ * defining a second, duplicate shape, since Experiment Record is the
+ * module that persists this row (MODULES.md's own `record_run` signature).
+ */
+export type ExperimentRun = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Experiment Id
+     */
+    experiment_id: string;
+    /**
+     * Started At
+     */
+    started_at: string;
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Exit Code
+     */
+    exit_code: number | null;
+    /**
+     * Image
+     */
+    image: string;
+    /**
+     * Reqs Hash
+     */
+    reqs_hash: string;
+    /**
+     * Notebook Hash
+     */
+    notebook_hash: string;
+    /**
+     * Stdout Ref
+     */
+    stdout_ref: string;
+    /**
+     * Artifacts
+     */
+    artifacts: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Run Kind
+     */
+    run_kind: 'clean_run_all' | 'interactive';
+    /**
+     * Network Enabled
+     */
+    network_enabled: boolean;
+    /**
+     * Gpu Enabled
+     */
+    gpu_enabled: boolean;
+    /**
+     * Approved At
+     */
+    approved_at: string;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -451,6 +563,37 @@ export type MessageOut = {
      * Created At
      */
     created_at: string;
+};
+
+/**
+ * MetricInput
+ *
+ * What a caller submits to `record_metric`. `source: llm` is
+ * unrepresentable at the type level (`MetricSource`); `run_id` is required
+ * by the caller only when `source='measured'` — the DB `CHECK` is what
+ * actually enforces that pairing (MODULES.md), this shape just allows it.
+ */
+export type MetricInput = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Unit
+     */
+    unit?: string | null;
+    /**
+     * Source
+     */
+    source: 'user' | 'measured';
+    /**
+     * Run Id
+     */
+    run_id?: string | null;
 };
 
 /**
@@ -1001,6 +1144,21 @@ export type RunAllResponse = {
      * Run Id
      */
     run_id: string;
+};
+
+/**
+ * RunDetail
+ *
+ * `ExperimentRun` plus the run's captured stdout log content — the log
+ * itself lives on disk (`stdout_ref` is a vault-relative path), so this
+ * reads it back rather than making the caller resolve the path itself.
+ */
+export type RunDetail = {
+    run: ExperimentRun;
+    /**
+     * Stdout
+     */
+    stdout: string;
 };
 
 /**
@@ -2061,6 +2219,78 @@ export type RunAllApiExperimentsExperimentIdRunAllPostResponses = {
 };
 
 export type RunAllApiExperimentsExperimentIdRunAllPostResponse = RunAllApiExperimentsExperimentIdRunAllPostResponses[keyof RunAllApiExperimentsExperimentIdRunAllPostResponses];
+
+export type GetRunApiRunsRunIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/runs/{run_id}';
+};
+
+export type GetRunApiRunsRunIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunApiRunsRunIdGetError = GetRunApiRunsRunIdGetErrors[keyof GetRunApiRunsRunIdGetErrors];
+
+export type GetRunApiRunsRunIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunDetail;
+};
+
+export type GetRunApiRunsRunIdGetResponse = GetRunApiRunsRunIdGetResponses[keyof GetRunApiRunsRunIdGetResponses];
+
+export type CreateMetricApiExperimentsExperimentIdMetricsPostData = {
+    body: MetricInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/metrics';
+};
+
+export type CreateMetricApiExperimentsExperimentIdMetricsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateMetricApiExperimentsExperimentIdMetricsPostError = CreateMetricApiExperimentsExperimentIdMetricsPostErrors[keyof CreateMetricApiExperimentsExperimentIdMetricsPostErrors];
+
+export type CreateMetricApiExperimentsExperimentIdMetricsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ExperimentMetric;
+};
+
+export type CreateMetricApiExperimentsExperimentIdMetricsPostResponse = CreateMetricApiExperimentsExperimentIdMetricsPostResponses[keyof CreateMetricApiExperimentsExperimentIdMetricsPostResponses];
 
 export type TranscribeAudioApiVoiceTranscribePostData = {
     body?: never;

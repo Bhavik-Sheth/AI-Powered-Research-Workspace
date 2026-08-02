@@ -469,6 +469,38 @@ class ExperimentRuns(Base):
     approved_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
 
+class ExperimentMetrics(Base):
+    """D29's `metrics` list, one row per value (Schema.md `experiment_metrics`,
+    Phase 2.3). `source` CHECK IN ('user', 'measured') is what makes
+    `source: llm` structurally unrepresentable — there is no third value to
+    add (invariant, Rules.md). The second CHECK is the measured gate at
+    rest: a `measured` row cannot exist without its `run_id`, and `run_id`'s
+    own FK is `ON DELETE RESTRICT` so a run backing a promoted metric can
+    never be deleted out from under it.
+    """
+
+    __tablename__ = "experiment_metrics"
+    __table_args__ = (
+        CheckConstraint("source IN ('user', 'measured')", name="experiment_metrics_source_check"),
+        CheckConstraint(
+            "source <> 'measured' OR run_id IS NOT NULL", name="experiment_metrics_measured_requires_run_check"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    experiment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[str] = mapped_column(String, nullable=False)
+    unit: Mapped[str | None] = mapped_column(String, nullable=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("experiment_runs.id", ondelete="RESTRICT"), nullable=True
+    )
+    recorded_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
 class ProjectChunks(Base):
     """The second and last memory table (Schema.md `project_chunks`, Phase
     1.7, D25) — retrieval over a project's own artifacts. Identical shape to

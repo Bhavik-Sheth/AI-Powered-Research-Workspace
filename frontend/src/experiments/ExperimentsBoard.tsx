@@ -1,12 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createExperimentApiProjectsProjectIdExperimentsPost,
   listExperimentsApiProjectsProjectIdExperimentsGet,
   type Experiment,
 } from "@research-os/api-client";
 
+import type { ProjectSocket } from "../state/useProjectSocket";
 import { ApprovalPrompt, type RunSpec } from "./ApprovalPrompt";
 import "./ExperimentsBoard.css";
+
+// Wire shapes for the two run events (backend/sandbox/models.py
+// `RunLogEvent`/`RunStatusEvent`) broadcast over the same per-project socket
+// Companion uses. Declared here, not in `companion/wsTypes.ts`, because a
+// run is not a Companion turn (see `backend/ws/__init__.py`'s module
+// docstring) — this is the one place that needs to know these shapes.
+interface RunLogEvent {
+  event: "run_log";
+  experiment_id: string;
+  run_id: string;
+  line: string;
+}
+
+interface RunStatusEvent {
+  event: "run_status";
+  experiment_id: string;
+  run_id: string;
+  status: "running" | "done" | "failed";
+  exit_code: number | null;
+}
+
+function isRunEvent(message: unknown): message is RunLogEvent | RunStatusEvent {
+  if (typeof message !== "object" || message === null || !("event" in message)) return false;
+  const kind = (message as { event: unknown }).event;
+  return kind === "run_log" || kind === "run_status";
+}
+
+interface RunPanelState {
+  experimentId: string;
+  runId: string | null;
+  lines: string[];
+  status: "running" | "done" | "failed";
+  exitCode: number | null;
+}
 
 type ExperimentStatus = Experiment["status"];
 
@@ -74,11 +109,47 @@ export function CellPreview({
   );
 }
 
+// A run's own lifecycle ("running" → "done"/"failed") is not the
+// experiment's board status (PRD §13 forbids a "failed" *status* and the
+// danger family for status, full stop) — it's a separate, transient fact
+// about one approved run. `failed` here still never touches the danger
+// tokens (`--danger-*`, reserved for actual errors, tokens.css); the ⚠
+// treatment matches the non-danger "unverified" precedent in
+// `companion/parseCitations.tsx` — dashed border, muted ink, a glyph, no red.
+function runStatusLabel(status: RunPanelState["status"], exitCode: number | null): string {
+  if (status === "running") return "● running";
+  if (status === "failed") return `⚠ exited ${exitCode ?? "?"}`;
+  return "done";
+}
+
+function runStatusClass(status: RunPanelState["status"]): string {
+  if (status === "running") return "experiments__run-status experiments__run-status--running";
+  if (status === "failed") return "experiments__run-status experiments__run-status--failed";
+  return "experiments__run-status experiments__run-status--done";
+}
+
+/** Replaces `ApprovalPrompt` once a run is approved (D31's job there is
+ * done) — live `run_log` lines streamed over the shared project socket,
+ * appended as they arrive, plus the run's status transition. */
+function RunLogPanel({ run }: { run: RunPanelState }) {
+  return (
+    <div className="experiments__run-panel" role="status" aria-label="Run in progress">
+      <div className="experiments__run-panel-header">
+        <span className="experiments__run-panel-title">Run</span>
+        <span className={runStatusClass(run.status)}>{runStatusLabel(run.status, run.exitCode)}</span>
+      </div>
+      <pre className="experiments__run-log">
+        {run.lines.length === 0 ? "Waiting for output…" : run.lines.join("\n")}
+      </pre>
+    </div>
+  );
+}
+
 /** Experiments Board (MODULES.md) — the project's lab notebook, not a run
  * tracker (D17/D29): four status columns, hypothesis-first cards, and a
  * minimal create form. Status is the real four-value enum; there is no
  * "failed" status and the danger family is never used here (PRD §13). */
-export function ExperimentsBoard({ projectId }: { projectId: string }) {
+export function ExperimentsBoard({ projectId, socket }: { projectId: string; socket: ProjectSocket }) {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
@@ -91,6 +162,27 @@ export function ExperimentsBoard({ projectId }: { projectId: string }) {
     code: string;
     spec: RunSpec;
   } | null>(null);
+  // The one run currently being watched, scoped to whichever experiment was
+  // just approved — mirrors `pendingApproval`'s single-flight shape rather
+  // than a `Map<experimentId, ...>`: this board only ever has one approval
+  // gate open at a time, so it only ever has one run to watch live.
+  const [runPanel, setRunPanel] = useState<RunPanelState | null>(null);
+  const runPanelExperimentIdRef = useRef<string | null>(null);
+  runPanelExperimentIdRef.current = runPanel?.experimentId ?? null;
+
+  useEffect(() => {
+    return socket.subscribe((message) => {
+      if (!isRunEvent(message)) return; // not ours — e.g. a Companion turn event
+      if (message.experiment_id !== runPanelExperimentIdRef.current) return;
+      if (message.event === "run_log") {
+        setRunPanel((prev) => (prev ? { ...prev, runId: message.run_id, lines: [...prev.lines, message.line] } : prev));
+      } else {
+        setRunPanel((prev) =>
+          prev ? { ...prev, runId: message.run_id, status: message.status, exitCode: message.exit_code } : prev,
+        );
+      }
+    });
+  }, [socket]);
 
   async function refresh() {
     const { data } = await listExperimentsApiProjectsProjectIdExperimentsGet({
@@ -189,9 +281,17 @@ export function ExperimentsBoard({ projectId }: { projectId: string }) {
           code={pendingApproval.code}
           spec={pendingApproval.spec}
           onCancel={() => setPendingApproval(null)}
-          onApproved={() => setPendingApproval(null)}
+          onApproved={() => {
+            // The dialog's job (consent) is done — swap it for the live
+            // run panel rather than just closing it (D31: approval always
+            // leads somewhere observable, never a silent dismissal).
+            setRunPanel({ experimentId: pendingApproval.experimentId, runId: null, lines: [], status: "running", exitCode: null });
+            setPendingApproval(null);
+          }}
         />
       )}
+
+      {runPanel && <RunLogPanel run={runPanel} />}
     </div>
   );
 }

@@ -211,3 +211,72 @@
   color: var(--accent-text);
   border-color: var(--accent);
 }
+
+/* Live run panel (Phase 2.3) — replaces ApprovalPrompt once approved.
+   Status treatment: running/done use the accent family like the board's own
+   status badges; a non-zero exit gets the same dashed-border/muted-ink/⚠
+   glyph treatment as the "⚠ unverified" citation badge — never the danger
+   family (PRD §13: no danger color for a status, and a run's exit code is
+   a status, not an error). */
+.experiments__run-panel {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.experiments__run-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.experiments__run-panel-title {
+  font: 700 11px var(--font-ui);
+  color: var(--text-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.experiments__run-status {
+  font: 700 10px var(--font-ui);
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.experiments__run-status--running {
+  background: transparent;
+  color: var(--accent-text-outline);
+  border-color: var(--accent);
+}
+
+.experiments__run-status--done {
+  background: var(--accent-tint-12);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+
+.experiments__run-status--failed {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-dashed);
+}
+
+.experiments__run-log {
+  font: 400 11px/1.6 var(--font-mono);
+  color: var(--text);
+  background: var(--surface-muted);
+  border-radius: var(--radius-card);
+  padding: 10px;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

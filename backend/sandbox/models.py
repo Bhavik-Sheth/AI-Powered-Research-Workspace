@@ -7,7 +7,19 @@ from typing import Literal
 import nbformat
 from pydantic import BaseModel
 
-from vault.models import RunArtifactFile
+from experiments.models import ExperimentRun
+
+__all__ = [
+    "ConfirmationToken",
+    "ExperimentRun",
+    "KernelStatus",
+    "MountSpec",
+    "Notebook",
+    "NotebookCell",
+    "RunLogEvent",
+    "RunSpec",
+    "RunStatusEvent",
+]
 
 
 class NotebookCell(BaseModel):
@@ -78,46 +90,6 @@ class ConfirmationToken(BaseModel):
     token: str
     experiment_id: uuid.UUID
     expires_at: datetime
-
-
-class ExperimentRun(BaseModel):
-    """The `experiment_runs` row (Schema.md) — the strongest provenance in
-    the system. `approved_at` is always set: a row cannot exist without a
-    validated confirmation token (D31, invariant #5)."""
-
-    id: uuid.UUID
-    experiment_id: uuid.UUID
-    started_at: datetime
-    finished_at: datetime | None
-    exit_code: int | None
-    image: str
-    reqs_hash: str
-    notebook_hash: str
-    stdout_ref: str
-    artifacts: list[RunArtifactFile]
-    run_kind: Literal["clean_run_all", "interactive"]
-    network_enabled: bool
-    gpu_enabled: bool
-    approved_at: datetime
-
-    @classmethod
-    def from_row(cls, row) -> "ExperimentRun":
-        return cls(
-            id=row.id,
-            experiment_id=row.experiment_id,
-            started_at=row.started_at,
-            finished_at=row.finished_at,
-            exit_code=row.exit_code,
-            image=row.image,
-            reqs_hash=row.reqs_hash,
-            notebook_hash=row.notebook_hash,
-            stdout_ref=row.stdout_ref,
-            artifacts=[RunArtifactFile(**artifact) for artifact in row.artifacts],
-            run_kind=row.run_kind,
-            network_enabled=row.network_enabled,
-            gpu_enabled=row.gpu_enabled,
-            approved_at=row.approved_at,
-        )
 
 
 class KernelStatus(BaseModel):

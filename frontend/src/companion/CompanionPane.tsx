@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { getConversationApiProjectsProjectIdConversationGet } from "@research-os/api-client";
 
-import { wsSessionUrl } from "../state/bridge";
+import type { ProjectSocket } from "../state/useProjectSocket";
 import { useVoice } from "../voice/useVoice";
 import "./CompanionPane.css";
 import { renderAssistantContent } from "./parseCitations";
 import type { DownstreamEvent, SelectionState } from "./wsTypes";
+
+const DOWNSTREAM_EVENT_KINDS = new Set(["status", "text_delta", "turn_complete", "error"]);
+
+function isDownstreamEvent(message: unknown): message is DownstreamEvent {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    "event" in message &&
+    DOWNSTREAM_EVENT_KINDS.has((message as { event: unknown }).event as string)
+  );
+}
 
 interface TranscriptEntry {
   id: number;
@@ -24,9 +35,6 @@ export interface PendingAsk {
   nonce: number;
 }
 
-const RECONNECT_BASE_MS = 500;
-const RECONNECT_MAX_MS = 10_000;
-
 /** The Companion pane (MODULES.md Session Transport + Agent Harness,
  * UI_DESIGN.md §3.1) — one WebSocket session per project, streaming a
  * turn's `status` / `text_delta` / `turn_complete` / `error` events into a
@@ -34,32 +42,43 @@ const RECONNECT_MAX_MS = 10_000;
  * (D24), the split the UI must never collapse. Reconnects with backoff on
  * a dropped socket (TRD §4.1); a send while disconnected queues and the
  * composer says so, rather than silently failing.
+ *
+ * The socket itself is owned by `ProjectShell` (`useProjectSocket`), not by
+ * this component — Phase 2.3 added a second consumer of the same
+ * per-project connection (`ExperimentsBoard`'s run-log streaming), and the
+ * backend allows exactly one live connection per project, so only one
+ * component may ever call `new WebSocket(...)`. This component only
+ * subscribes and sends through the shared handle.
  */
 export function CompanionPane({
   projectId,
   selection,
   pendingAsk,
+  socket,
 }: {
   projectId: string;
   selection: SelectionState | null;
   pendingAsk: PendingAsk | null;
+  socket: ProjectSocket;
 }) {
-  const [connected, setConnected] = useState(false);
-  const [reconnecting, setReconnecting] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [turnInFlight, setTurnInFlight] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [draft, setDraft] = useState("");
   const [queued, setQueued] = useState<QueuedMessage | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const assistantBufferRef = useRef("");
   const nextIdRef = useRef(0);
   const handledNonceRef = useRef<number | null>(null);
   const selectionRef = useRef(selection);
-  const reconnectAttemptRef = useRef(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const closedByUsRef = useRef(false);
   const queuedRef = useRef<QueuedMessage | null>(null);
+  // History must finish loading (TRD §4.1: seeding after a live message
+  // arrives would clobber it) before any downstream message is applied.
+  // The shared socket connects independently of this component's mount now,
+  // so — unlike the old single-effect `loadHistoryThenConnect` — a message
+  // can genuinely arrive before history is ready; buffer and replay instead
+  // of dropping or racing it.
+  const historyLoadedRef = useRef(false);
+  const bufferedEventsRef = useRef<DownstreamEvent[]>([]);
   selectionRef.current = selection;
   queuedRef.current = queued;
 
@@ -88,50 +107,16 @@ export function CompanionPane({
     }
   }
 
+  // Rehydrate the verbatim transcript (TRD §4.1). Previously this gated
+  // *opening* the socket; now the socket is shared and connects on its own
+  // schedule, so instead this gates *applying* downstream messages — see
+  // the subscribe effect below, which buffers anything that arrives first.
   useEffect(() => {
-    closedByUsRef.current = false;
-    reconnectAttemptRef.current = 0;
+    historyLoadedRef.current = false;
+    bufferedEventsRef.current = [];
     let cancelled = false;
 
-    function connect(): void {
-      const ws = new WebSocket(wsSessionUrl(projectId));
-      wsRef.current = ws;
-      ws.onopen = () => {
-        setConnected(true);
-        setReconnecting(false);
-        reconnectAttemptRef.current = 0;
-        const pending = queuedRef.current;
-        if (pending) {
-          setQueued(null);
-          ws.send(
-            JSON.stringify({
-              event: "user_message",
-              text: pending.text,
-              ui_state: { selection: pending.selection },
-              input_modality: pending.inputModality,
-            }),
-          );
-          setTurnInFlight(true);
-        }
-      };
-      ws.onclose = () => {
-        setConnected(false);
-        wsRef.current = null;
-        if (closedByUsRef.current) return;
-        setReconnecting(true);
-        const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttemptRef.current, RECONNECT_MAX_MS);
-        reconnectAttemptRef.current += 1;
-        reconnectTimerRef.current = setTimeout(connect, delay);
-      };
-      ws.onmessage = (event) => {
-        const parsed: DownstreamEvent = JSON.parse(event.data);
-        handleDownstream(parsed);
-      };
-    }
-
-    // Rehydrate the verbatim transcript (TRD §4.1) before opening the
-    // socket — seeding after a live message could arrive would clobber it.
-    async function loadHistoryThenConnect(): Promise<void> {
+    async function loadHistory(): Promise<void> {
       try {
         const { data } = await getConversationApiProjectsProjectIdConversationGet({
           path: { project_id: projectId },
@@ -146,31 +131,61 @@ export function CompanionPane({
         // A history-load failure shouldn't block the live connection —
         // worst case the transcript starts empty, same as before this.
       }
-      if (!cancelled) connect();
+      if (cancelled) return;
+      historyLoadedRef.current = true;
+      const buffered = bufferedEventsRef.current;
+      bufferedEventsRef.current = [];
+      for (const evt of buffered) handleDownstream(evt);
     }
 
-    void loadHistoryThenConnect();
+    void loadHistory();
     return () => {
       cancelled = true;
-      closedByUsRef.current = true;
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
-      wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  useEffect(() => {
+    return socket.subscribe((message) => {
+      if (!isDownstreamEvent(message)) return; // not ours — e.g. a run_log/run_status for ExperimentsBoard
+      if (!historyLoadedRef.current) {
+        bufferedEventsRef.current.push(message);
+        return;
+      }
+      handleDownstream(message);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
+
+  // Flush a message queued while disconnected as soon as the shared socket
+  // reports connected — equivalent to the old `ws.onopen` flush, just
+  // reacting to the hook's `connected` transition instead of owning `onopen`
+  // directly.
+  useEffect(() => {
+    if (!socket.connected) return;
+    const pending = queuedRef.current;
+    if (!pending) return;
+    setQueued(null);
+    socket.send({
+      event: "user_message",
+      text: pending.text,
+      ui_state: { selection: pending.selection },
+      input_modality: pending.inputModality,
+    });
+    setTurnInFlight(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket.connected]);
+
   function sendMessage(text: string, withSelection: SelectionState | null, inputModality: "text" | "voice" = "text"): void {
     if (turnInFlight || !text.trim()) return;
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    const sent = socket.send({ event: "user_message", text, ui_state: { selection: withSelection }, input_modality: inputModality });
+    if (!sent) {
       setQueued({ text, selection: withSelection, inputModality });
       setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
       return;
     }
     setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
     setTurnInFlight(true);
-    ws.send(JSON.stringify({ event: "user_message", text, ui_state: { selection: withSelection }, input_modality: inputModality }));
   }
 
   useEffect(() => {
@@ -196,15 +211,15 @@ export function CompanionPane({
 
   const statusLine = queued
     ? "Disconnected — your message will send once reconnected…"
-    : (statusText ?? (connected ? "Companion" : reconnecting ? "Reconnecting…" : "Connecting…"));
+    : (statusText ?? (socket.connected ? "Companion" : socket.reconnecting ? "Reconnecting…" : "Connecting…"));
 
   return (
     <aside className="companion">
       <div className="companion__status">
-        <span className={`companion__status-dot ${connected ? "companion__status-dot--live" : ""}`} />
+        <span className={`companion__status-dot ${socket.connected ? "companion__status-dot--live" : ""}`} />
         <span className="companion__status-text">{statusLine}</span>
         {turnInFlight && (
-          <button type="button" className="companion__stop" onClick={() => wsRef.current?.send(JSON.stringify({ event: "interrupt" }))}>
+          <button type="button" className="companion__stop" onClick={() => socket.send({ event: "interrupt" })}>
             ✕ Stop
           </button>
         )}
@@ -244,7 +259,7 @@ export function CompanionPane({
       <div className="companion__composer">
         <input
           className="companion__input"
-          placeholder={connected ? "Ask the companion…" : "Message will queue until reconnected…"}
+          placeholder={socket.connected ? "Ask the companion…" : "Message will queue until reconnected…"}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {

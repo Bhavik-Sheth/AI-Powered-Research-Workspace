@@ -56,11 +56,10 @@ import db
 import experiments
 import vault
 import ws
-from db.models import ExperimentRuns, Project
-from experiments.models import Experiment
+from db.models import Project
+from experiments.models import Experiment, ExperimentRun, RunResult
 from sandbox.models import (
     ConfirmationToken,
-    ExperimentRun,
     KernelStatus,
     MountSpec,
     Notebook,
@@ -404,7 +403,7 @@ async def run_all(
     )
     assert written.stdout_ref is not None  # a `run` was always passed above
 
-    row = ExperimentRuns(
+    run_result = RunResult(
         id=run_id,
         experiment_id=experiment_id,
         started_at=started_at,
@@ -420,8 +419,7 @@ async def run_all(
         gpu_enabled=gpu_enabled,
         approved_at=approved_at,
     )
-    session.add(row)
-    await session.flush()
+    experiment_run = await experiments.record_run(session, experiment_id, run_result)
 
     if ws_session is not None:
         await ws.broadcast(
@@ -434,7 +432,7 @@ async def run_all(
             ),
         )
 
-    return ExperimentRun.from_row(row)
+    return experiment_run
 
 
 async def run_experiment_job(
