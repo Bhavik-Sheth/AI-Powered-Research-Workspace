@@ -89,6 +89,72 @@ export type ModelSettings = {
 };
 
 /**
+ * Note
+ *
+ * The `notes` row (Schema.md), returned by every notes endpoint.
+ */
+export type Note = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * File Path
+     */
+    file_path: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Frontmatter
+     */
+    frontmatter: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * NoteInput
+ *
+ * What a caller submits to create or update a note.
+ *
+ * `frontmatter_id` is absent to create (Vault Writer assigns one) and
+ * present to update — the id carried in the note's own YAML frontmatter,
+ * never the file path (D4).
+ */
+export type NoteInput = {
+    /**
+     * Frontmatter Id
+     */
+    frontmatter_id?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
  * ProjectResponse
  */
 export type ProjectResponse = {
@@ -496,3 +562,113 @@ export type GetProjectApiProjectsProjectIdGetResponses = {
 };
 
 export type GetProjectApiProjectsProjectIdGetResponse = GetProjectApiProjectsProjectIdGetResponses[keyof GetProjectApiProjectsProjectIdGetResponses];
+
+export type ListNotesApiProjectsProjectIdNotesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/notes';
+};
+
+export type ListNotesApiProjectsProjectIdNotesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListNotesApiProjectsProjectIdNotesGetError = ListNotesApiProjectsProjectIdNotesGetErrors[keyof ListNotesApiProjectsProjectIdNotesGetErrors];
+
+export type ListNotesApiProjectsProjectIdNotesGetResponses = {
+    /**
+     * Response List Notes Api Projects  Project Id  Notes Get
+     *
+     * Successful Response
+     */
+    200: Array<Note>;
+};
+
+export type ListNotesApiProjectsProjectIdNotesGetResponse = ListNotesApiProjectsProjectIdNotesGetResponses[keyof ListNotesApiProjectsProjectIdNotesGetResponses];
+
+export type UpdateNoteApiProjectsProjectIdNotesPatchData = {
+    body: NoteInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/notes';
+};
+
+export type UpdateNoteApiProjectsProjectIdNotesPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateNoteApiProjectsProjectIdNotesPatchError = UpdateNoteApiProjectsProjectIdNotesPatchErrors[keyof UpdateNoteApiProjectsProjectIdNotesPatchErrors];
+
+export type UpdateNoteApiProjectsProjectIdNotesPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: Note;
+};
+
+export type UpdateNoteApiProjectsProjectIdNotesPatchResponse = UpdateNoteApiProjectsProjectIdNotesPatchResponses[keyof UpdateNoteApiProjectsProjectIdNotesPatchResponses];
+
+export type CreateNoteApiProjectsProjectIdNotesPostData = {
+    body: NoteInput;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/notes';
+};
+
+export type CreateNoteApiProjectsProjectIdNotesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateNoteApiProjectsProjectIdNotesPostError = CreateNoteApiProjectsProjectIdNotesPostErrors[keyof CreateNoteApiProjectsProjectIdNotesPostErrors];
+
+export type CreateNoteApiProjectsProjectIdNotesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Note;
+};
+
+export type CreateNoteApiProjectsProjectIdNotesPostResponse = CreateNoteApiProjectsProjectIdNotesPostResponses[keyof CreateNoteApiProjectsProjectIdNotesPostResponses];

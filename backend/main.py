@@ -27,6 +27,7 @@ from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
 from api.health import Capability, ReadinessState
 from api.health import router as health_router
+from api.notes import router as notes_router
 from api.projects import router as projects_router
 from api.settings import router as settings_router
 from config import get_config
@@ -136,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(settings_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(projects_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(notes_router, dependencies=[Depends(require_bearer_token)])
     return app
 
 

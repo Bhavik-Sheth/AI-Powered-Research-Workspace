@@ -1,0 +1,152 @@
+.notes-view {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.notes-view__list {
+  width: 220px;
+  min-width: 220px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.notes-view__list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 700 12px var(--font-ui);
+  color: var(--text-strong);
+  margin-bottom: 10px;
+}
+
+.notes-view__new {
+  font: 700 11px var(--font-ui);
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.notes-view__empty {
+  border: 1px dashed var(--border-dashed);
+  border-radius: 8px;
+  padding: 12px;
+  font: italic 11px/1.5 var(--font-ui);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.notes-view__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notes-view__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0 8px 8px 0;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.notes-view__row--active {
+  background: var(--accent-tint-12);
+  border-left-color: var(--accent);
+}
+
+.notes-view__row-title {
+  font: 700 12px var(--font-ui);
+  color: var(--text-strong);
+}
+
+.notes-view__unlinked {
+  display: inline-block;
+  font: italic 10px var(--font-ui);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-dashed);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.notes-view__editor {
+  flex: 1;
+  min-width: 320px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px;
+  gap: 12px;
+}
+
+.notes-view__editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-view__title-input {
+  flex: 1;
+  font: 800 20px var(--font-reading);
+  color: var(--text-strong);
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.notes-view__title-input:focus {
+  outline: none;
+}
+
+.notes-view__body {
+  flex: 1;
+  min-height: 0;
+  max-width: 640px;
+  resize: none;
+  border: none;
+  background: none;
+  font: 15px/1.7 var(--font-reading);
+  color: var(--text);
+}
+
+.notes-view__body:focus {
+  outline: none;
+}
+
+.notes-view__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.notes-view__save {
+  height: 32px;
+  border-radius: var(--radius-button);
+  padding: 0 14px;
+  font: 700 12px var(--font-ui);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.notes-view__save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

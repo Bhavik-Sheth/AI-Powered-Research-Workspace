@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses } from './types.gen';
+import type { CreateNoteApiProjectsProjectIdNotesPostData, CreateNoteApiProjectsProjectIdNotesPostErrors, CreateNoteApiProjectsProjectIdNotesPostResponses, CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, ListNotesApiProjectsProjectIdNotesGetData, ListNotesApiProjectsProjectIdNotesGetErrors, ListNotesApiProjectsProjectIdNotesGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses, UpdateNoteApiProjectsProjectIdNotesPatchData, UpdateNoteApiProjectsProjectIdNotesPatchErrors, UpdateNoteApiProjectsProjectIdNotesPatchResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -94,3 +94,32 @@ export const createProjectApiProjectsPost = <ThrowOnError extends boolean = fals
  * Get Project
  */
 export const getProjectApiProjectsProjectIdGet = <ThrowOnError extends boolean = false>(options: Options<GetProjectApiProjectsProjectIdGetData, ThrowOnError>): RequestResult<GetProjectApiProjectsProjectIdGetResponses, GetProjectApiProjectsProjectIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetProjectApiProjectsProjectIdGetResponses, GetProjectApiProjectsProjectIdGetErrors, ThrowOnError>({ url: '/api/projects/{project_id}', ...options });
+
+/**
+ * List Notes
+ */
+export const listNotesApiProjectsProjectIdNotesGet = <ThrowOnError extends boolean = false>(options: Options<ListNotesApiProjectsProjectIdNotesGetData, ThrowOnError>): RequestResult<ListNotesApiProjectsProjectIdNotesGetResponses, ListNotesApiProjectsProjectIdNotesGetErrors, ThrowOnError> => (options.client ?? client).get<ListNotesApiProjectsProjectIdNotesGetResponses, ListNotesApiProjectsProjectIdNotesGetErrors, ThrowOnError>({ url: '/api/projects/{project_id}/notes', ...options });
+
+/**
+ * Update Note
+ */
+export const updateNoteApiProjectsProjectIdNotesPatch = <ThrowOnError extends boolean = false>(options: Options<UpdateNoteApiProjectsProjectIdNotesPatchData, ThrowOnError>): RequestResult<UpdateNoteApiProjectsProjectIdNotesPatchResponses, UpdateNoteApiProjectsProjectIdNotesPatchErrors, ThrowOnError> => (options.client ?? client).patch<UpdateNoteApiProjectsProjectIdNotesPatchResponses, UpdateNoteApiProjectsProjectIdNotesPatchErrors, ThrowOnError>({
+    url: '/api/projects/{project_id}/notes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Create Note
+ */
+export const createNoteApiProjectsProjectIdNotesPost = <ThrowOnError extends boolean = false>(options: Options<CreateNoteApiProjectsProjectIdNotesPostData, ThrowOnError>): RequestResult<CreateNoteApiProjectsProjectIdNotesPostResponses, CreateNoteApiProjectsProjectIdNotesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateNoteApiProjectsProjectIdNotesPostResponses, CreateNoteApiProjectsProjectIdNotesPostErrors, ThrowOnError>({
+    url: '/api/projects/{project_id}/notes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
