@@ -649,6 +649,35 @@ compromised: **exploration is free** (run cells in any order, any number of time
 recorded as a measurement), and **a number only becomes evidence via a clean restart-and-run-all**
 (D29). The discipline of one clean run before a number counts is the entire cost.
 
+**Kernel-transport spike outcome (2026-08-02) — descoped to the `nbclient` fallback.** TRD §2.7
+required spiking the sidecar↔in-container `jupyter_client`/ZMQ transport before any other Phase 2
+work, with a hard trigger: swap to the stated fallback immediately on failure, don't extend the
+phase. Findings:
+- TCP-transport `jupyter_client` against a live per-experiment kernel container **worked
+  end-to-end**, including a stateful cross-cell warm-state result — proving the interactive
+  execution model itself is sound.
+- But TCP transport needs `docker run -p 127.0.0.1:PORT:PORT`, which requires the container to sit
+  on a routable network. **`--network none` (this decision's own requirement) makes published
+  ports unreachable** — confirmed directly (connection refused). TCP transport and "network off by
+  default" are mutually exclusive.
+- The fix that keeps both is ZMQ's **`ipc` transport** (Unix domain sockets over a bind-mounted
+  directory instead of published TCP ports) — this needs no container network at all. The
+  kernel-side half worked (container started, bound its sockets, resolved ports, stayed up under
+  `--network none`), but the host-side socket handshake did not complete in this dev sandbox: `docker
+  info` shows Docker running inside a `linuxkit` VM (Docker Desktop), a separate kernel from the
+  spike script's host process, and bind-mounted Unix sockets are a known non-portable case across
+  that VM boundary — unrelated to the app's actual target (dockerd running natively on the user's
+  own Linux machine, D2), but not re-provable inside this session.
+- Per the stated trigger, this counts as spike failure: **descoping now** rather than spending
+  further phase time chasing a dev-sandbox artifact. The `nbclient`-under-one-shot-`docker run`
+  fallback was independently verified working end-to-end in this same environment (mount-only, no
+  socket) — notebook in, executed notebook with real outputs out.
+- **What v1 ships:** non-interactive restart-and-run-all only, per TRD §2.7's fallback table.
+  Mounts/network-off/limits/GPU-opt-in, the consent gate, and `source: measured` provenance are
+  all unaffected — only free-form out-of-order exploration is lost, already the non-evidential half
+  of the workflow. The interactive kernel is not abandoned, only deferred; revisit it against a
+  native (non-Desktop) Docker install if that ever changes.
+
 ### D31 — Consent: the agent never runs code on its own
 
 **Propose → user approves → execute.** The agent may write code into a cell and may read results,
