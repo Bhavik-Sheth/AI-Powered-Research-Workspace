@@ -175,41 +175,39 @@
   border-color: var(--accent);
 }
 
-/* Notebook cell preview — unrun/pending-approval marking (MODULES.md
-   Experiments Board; PRD §13: agent-written cells must be visibly marked
-   unrun and pending approval, never mistaken for something that ran). */
-.experiments__cell {
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: 10px;
+/* Record Measured Run (Phase 2.4) — deliberately separate from the live
+   notebook above and from Jupyter's own native "Restart & Run All" menu
+   item inside the iframe, which does something else entirely. */
+.experiments__measured-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
 }
 
-.experiments__cell-code {
-  font: 400 11px/1.5 var(--font-mono);
-  color: var(--text);
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.experiments__cell-badge {
-  align-self: flex-start;
-  font: 700 10px var(--font-ui);
-  padding: 2px 8px;
-  border-radius: var(--radius-badge);
-  border: 1px dashed var(--border-dashed);
-  color: var(--text-muted);
-  background: var(--surface-raised);
-}
-
-.experiments__cell-badge--button {
+.experiments__measured-button {
+  font: 700 11px var(--font-ui);
+  padding: 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--accent-text-outline);
   cursor: pointer;
-  color: var(--accent-text);
-  border-color: var(--accent);
+  white-space: nowrap;
+}
+
+.experiments__measured-hint {
+  font: 500 10px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.experiments__measured-error {
+  font: 500 11px var(--font-ui);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-dashed);
+  border-radius: var(--radius-card);
+  padding: 8px;
+  margin: 0;
 }
 
 /* Live run panel (Phase 2.3) — replaces ApprovalPrompt once approved.

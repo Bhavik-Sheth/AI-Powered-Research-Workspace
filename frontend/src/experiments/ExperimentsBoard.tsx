@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createExperimentApiProjectsProjectIdExperimentsPost,
+  getNotebookServerApiExperimentsExperimentIdNotebookServerGet,
   getRunSpecApiExperimentsExperimentIdRunSpecGet,
   listExperimentsApiProjectsProjectIdExperimentsGet,
-  proposeCellApiExperimentsExperimentIdCellsPost,
   type Experiment,
-  type Notebook,
 } from "@research-os/api-client";
 
 import type { ProjectSocket } from "../state/useProjectSocket";
 import { ApprovalPrompt, type RunSpec } from "./ApprovalPrompt";
 import "./ExperimentsBoard.css";
+import { LiveNotebookPanel } from "./LiveNotebookPanel";
 
 // Wire shapes for the two run events (backend/sandbox/models.py
 // `RunLogEvent`/`RunStatusEvent`) broadcast over the same per-project socket
@@ -72,46 +72,6 @@ function statusBadgeClass(status: ExperimentStatus): string {
   return "experiments__badge";
 }
 
-/**
- * A single notebook cell preview (MODULES.md Experiments Board: "hides … how
- * agent-written cells are marked unrun-and-pending"). `propose_cell` is a
- * backend call (Execution Sandbox, Phase 2.1) not built in this slice — this
- * component has no real cell data feeding it yet, but renders the required
- * visual treatment so Phase 2.2/2.3 can wire the approval flow against it
- * without redesigning the marking rule. A cell is only ever "unrun and
- * pending approval" or has output — there is no third, failed state (PRD §13
- * Phase 2, no "failed" anywhere in this system).
- *
- * `onRun` is the entry point into the consent gate (D31): when a caller has
- * a cell's code and container spec (still pending the notebook-fetch
- * endpoint, same gap noted above), passing `onRun` turns the pending badge
- * into the affordance that opens `ApprovalPrompt`. No spec/no `onRun` means
- * the badge stays inert, matching today's no-real-data state.
- */
-export function CellPreview({
-  code,
-  hasOutput,
-  onRun,
-}: {
-  code: string;
-  hasOutput: boolean;
-  onRun?: () => void;
-}) {
-  return (
-    <div className="experiments__cell">
-      <pre className="experiments__cell-code">{code}</pre>
-      {!hasOutput &&
-        (onRun ? (
-          <button type="button" className="experiments__cell-badge experiments__cell-badge--button" onClick={onRun}>
-            unrun — pending approval · Run
-          </button>
-        ) : (
-          <span className="experiments__cell-badge">unrun — pending approval</span>
-        ))}
-    </div>
-  );
-}
-
 // A run's own lifecycle ("running" → "done"/"failed") is not the
 // experiment's board status (PRD §13 forbids a "failed" *status* and the
 // danger family for status, full stop) — it's a separate, transient fact
@@ -157,8 +117,8 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
-  // The single open ApprovalPrompt for this board, if any (D31 entry point
-  // from CellPreview's "Run" affordance). One dialog at a time — no global
+  // The single open ApprovalPrompt for this board, if any (D31 entry point:
+  // the "Record Measured Run" button). One dialog at a time — no global
   // modal-management system for what is, by design, a single-flight gate.
   const [pendingApproval, setPendingApproval] = useState<{
     experimentId: string;
@@ -172,53 +132,45 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
   const [runPanel, setRunPanel] = useState<RunPanelState | null>(null);
   const runPanelExperimentIdRef = useRef<string | null>(null);
   runPanelExperimentIdRef.current = runPanel?.experimentId ?? null;
-  // The one expanded card's notebook + run spec — fetched on demand
-  // (`GET .../run_spec` returns both together) rather than for every card
-  // up front, since most cards' notebooks are never looked at in a session.
+  // The one expanded card — shows its live notebook panel. Only one at a
+  // time: opening a second live notebook server per card isn't useful (each
+  // is its own long-lived container) and keeps the lifecycle legible.
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [notebook, setNotebook] = useState<Notebook | null>(null);
-  const [runSpec, setRunSpec] = useState<RunSpec | null>(null);
-  const [newCellCode, setNewCellCode] = useState("");
-  const [proposing, setProposing] = useState(false);
-  const expandedIdRef = useRef<string | null>(null);
-  expandedIdRef.current = expandedId;
+  const [measuredRunError, setMeasuredRunError] = useState<string | null>(null);
 
-  async function loadNotebook(experimentId: string) {
+  function toggleExpand(experimentId: string) {
+    setExpandedId((prev) => (prev === experimentId ? null : experimentId));
+    setMeasuredRunError(null);
+  }
+
+  /** Entry point into the *unchanged* measured-run pipeline (`ApprovalPrompt`
+   * → confirm → `run_all`). Deliberately not called "Restart & Run All" —
+   * Jupyter's own iframe has its own native "Kernel → Restart & Run All"
+   * menu item that does something else entirely (an interactive re-run,
+   * producing no provenance record) and the two must not be confused. Checks
+   * the live-notebook-server status first so a live notebook being open
+   * surfaces a specific message here rather than `ApprovalPrompt`'s generic
+   * failure text (that component stays unchanged). */
+  async function handleRecordMeasuredRun(experimentId: string) {
+    setMeasuredRunError(null);
+    const { data: serverStatus } = await getNotebookServerApiExperimentsExperimentIdNotebookServerGet({
+      path: { experiment_id: experimentId },
+      throwOnError: true,
+    });
+    if (serverStatus.state !== "stopped") {
+      setMeasuredRunError("Stop the live notebook before running a measured pass.");
+      return;
+    }
     const { data } = await getRunSpecApiExperimentsExperimentIdRunSpecGet({
       path: { experiment_id: experimentId },
       throwOnError: true,
     });
-    setNotebook(data.notebook);
-    setRunSpec(data.run_spec);
-  }
-
-  async function toggleExpand(experimentId: string) {
-    if (expandedId === experimentId) {
-      setExpandedId(null);
-      setNotebook(null);
-      setRunSpec(null);
-      return;
-    }
-    setExpandedId(experimentId);
-    setNotebook(null);
-    setRunSpec(null);
-    await loadNotebook(experimentId);
-  }
-
-  async function handleProposeCell(experimentId: string) {
-    if (!newCellCode.trim()) return;
-    setProposing(true);
-    try {
-      await proposeCellApiExperimentsExperimentIdCellsPost({
-        path: { experiment_id: experimentId },
-        body: { code: newCellCode },
-        throwOnError: true,
-      });
-      setNewCellCode("");
-      await loadNotebook(experimentId);
-    } finally {
-      setProposing(false);
-    }
+    const code =
+      data.notebook.cells
+        .filter((cell) => cell.cell_type === "code")
+        .map((cell) => cell.source)
+        .join("\n\n# ---\n\n") || "(empty notebook)";
+    setPendingApproval({ experimentId, code, spec: data.run_spec });
   }
 
   useEffect(() => {
@@ -231,13 +183,6 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
         setRunPanel((prev) =>
           prev ? { ...prev, runId: message.run_id, status: message.status, exitCode: message.exit_code } : prev,
         );
-        // The cell that just ran carries stale `outputs` (empty) in the
-        // already-fetched notebook until refetched — without this, a cell
-        // that genuinely ran keeps showing "unrun — pending approval",
-        // which is exactly the ambiguity PRD §13 says must never happen.
-        if (message.status !== "running" && message.experiment_id === expandedIdRef.current) {
-          void loadNotebook(message.experiment_id);
-        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,53 +277,20 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
 
                       {expandedId === experiment.id && (
                         <div className="experiments__notebook">
-                          {notebook === null ? (
-                            <p className="experiments__empty">Loading notebook…</p>
-                          ) : (
-                            <>
-                              {notebook.cells.length === 0 ? (
-                                <p className="experiments__empty">No cells yet.</p>
-                              ) : (
-                                notebook.cells.map((cell, index) => (
-                                  <CellPreview
-                                    key={index}
-                                    code={cell.source}
-                                    hasOutput={Boolean(cell.outputs && cell.outputs.length > 0)}
-                                    onRun={
-                                      cell.outputs && cell.outputs.length > 0
-                                        ? undefined
-                                        : () => {
-                                            if (!runSpec) return;
-                                            setPendingApproval({
-                                              experimentId: experiment.id,
-                                              code: cell.source,
-                                              spec: runSpec,
-                                            });
-                                          }
-                                    }
-                                  />
-                                ))
-                              )}
-                              <form
-                                className="experiments__new-cell"
-                                onSubmit={(event) => {
-                                  event.preventDefault();
-                                  void handleProposeCell(experiment.id);
-                                }}
-                              >
-                                <textarea
-                                  className="experiments__new-cell-input"
-                                  value={newCellCode}
-                                  onChange={(event) => setNewCellCode(event.target.value)}
-                                  placeholder="print('hello from the sandbox')"
-                                  rows={3}
-                                />
-                                <button type="submit" disabled={proposing || !newCellCode.trim()}>
-                                  {proposing ? "Adding…" : "Propose cell"}
-                                </button>
-                              </form>
-                            </>
-                          )}
+                          <LiveNotebookPanel experimentId={experiment.id} socket={socket} />
+                          <div className="experiments__measured-row">
+                            <button
+                              type="button"
+                              className="experiments__measured-button"
+                              onClick={() => void handleRecordMeasuredRun(experiment.id)}
+                            >
+                              Record Measured Run
+                            </button>
+                            <span className="experiments__measured-hint">
+                              runs the whole notebook fresh, in an isolated container, for a citable result
+                            </span>
+                          </div>
+                          {measuredRunError && <p className="experiments__measured-error">{measuredRunError}</p>}
                         </div>
                       )}
                     </div>

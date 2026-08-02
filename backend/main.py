@@ -23,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import db
 import jobs
+import sandbox
 import vault
 from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
@@ -112,6 +113,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await _compose_up(vault_root)
             readiness["docker"] = "ready"
             docker_ready = True
+            # A sidecar restart orphans any live notebook-server container
+            # (Phase 2.4) from a prior process — a one-shot sweep, not
+            # continuous reconciliation (D4's spirit).
+            await sandbox.sweep_orphaned_notebook_servers()
         except (FileNotFoundError, RuntimeError):
             _mark_failed(readiness, "docker")
 

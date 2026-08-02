@@ -17,7 +17,7 @@ import jobs
 import sandbox
 from db.models import Experiments as ExperimentsRow
 from experiments.models import Experiment, ExperimentInput
-from sandbox.models import ConfirmationToken, KernelStatus, Notebook, RunSpec
+from sandbox.models import ConfirmationToken, KernelStatus, Notebook, NotebookServerAction, NotebookServerStatus, RunSpec
 from settings import get_vault_path
 
 router = APIRouter()
@@ -131,6 +131,29 @@ async def kernel_action(experiment_id: uuid.UUID, body: KernelActionRequest) -> 
     return sandbox.kernel_status(experiment_id)
 
 
+@router.get("/api/experiments/{experiment_id}/notebook_server", response_model=NotebookServerStatus)
+async def get_notebook_server(experiment_id: uuid.UUID) -> NotebookServerStatus:
+    """Pure status lookup — lets the frontend recover the live server's URL
+    after remounting (e.g. a tab switch back) without starting anything."""
+    return sandbox.notebook_server_status(experiment_id)
+
+
+@router.post("/api/experiments/{experiment_id}/notebook_server", response_model=NotebookServerStatus)
+async def notebook_server_action(experiment_id: uuid.UUID, body: NotebookServerAction) -> NotebookServerStatus:
+    """Starts or stops the experiment's live, interactive Jupyter server
+    container (Phase 2.4) — mutually exclusive with an in-flight measured
+    run, surfaced here as 409 rather than a generic 500."""
+    async with db.session() as session:
+        try:
+            if body.action == "start":
+                return await sandbox.start_notebook_server(session, experiment_id)
+            return await sandbox.stop_notebook_server(session, experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 class RunAllRequest(BaseModel):
     confirmation_token: str
     network_optin: bool = False
@@ -148,10 +171,20 @@ async def run_all(experiment_id: uuid.UUID, body: RunAllRequest) -> RunAllRespon
     already ride the job/WS pipes independently of this request. The
     `run_id` is assigned here so the client has a stable id to correlate
     against `run_log`/`run_status` events on the project's WebSocket before
-    the run itself has produced anything."""
+    the run itself has produced anything. The mutual-exclusion check against
+    a live notebook server is repeated here, synchronously, even though
+    `run_all` checks it again itself — that second check runs inside the
+    dispatched job, too late for this response to report it; checking here
+    is what lets the caller see a clear 409 immediately instead of a
+    `run_id` that silently never produces any `run_log`/`run_status` event.
+    """
     async with db.session() as session:
         if await experiments.get_experiment(session, experiment_id) is None:
             raise HTTPException(status_code=404, detail=f"experiment {experiment_id} not found")
+    if sandbox.notebook_server_status(experiment_id).state != "stopped":
+        raise HTTPException(
+            status_code=409, detail="a live notebook server is open for this experiment — stop it before running a measured pass"
+        )
 
     run_id = uuid.uuid4()
     await jobs.enqueue(

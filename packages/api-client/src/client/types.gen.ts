@@ -753,6 +753,55 @@ export type NotebookCell = {
 };
 
 /**
+ * NotebookServerAction
+ *
+ * Request body for `POST /api/experiments/:id/notebook_server`.
+ */
+export type NotebookServerAction = {
+    /**
+     * Action
+     */
+    action: 'start' | 'stop';
+};
+
+/**
+ * NotebookServerStatus
+ *
+ * Response for the live-notebook-server route (Phase 2.4). A
+ * deliberately separate model family from `KernelStatus`: that type's
+ * whole point is to honestly describe the one-shot measured path, where
+ * there is nothing persistent to start — conflating the two would make one
+ * type lie about whichever path didn't populate it. `url` is `None` unless
+ * `state == "running"`.
+ */
+export type NotebookServerStatus = {
+    /**
+     * Experiment Id
+     */
+    experiment_id: string;
+    /**
+     * State
+     */
+    state: 'stopped' | 'starting' | 'running' | 'stopping';
+    /**
+     * Url
+     */
+    url?: string | null;
+    /**
+     * Port
+     */
+    port?: number | null;
+    /**
+     * Network
+     */
+    network?: 'bridge' | 'internal' | null;
+    /**
+     * Started At
+     */
+    started_at?: string | null;
+};
+
+/**
  * Paper
  */
 export type Paper = {
@@ -2233,6 +2282,78 @@ export type KernelActionApiExperimentsExperimentIdKernelPostResponses = {
 };
 
 export type KernelActionApiExperimentsExperimentIdKernelPostResponse = KernelActionApiExperimentsExperimentIdKernelPostResponses[keyof KernelActionApiExperimentsExperimentIdKernelPostResponses];
+
+export type GetNotebookServerApiExperimentsExperimentIdNotebookServerGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/notebook_server';
+};
+
+export type GetNotebookServerApiExperimentsExperimentIdNotebookServerGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetNotebookServerApiExperimentsExperimentIdNotebookServerGetError = GetNotebookServerApiExperimentsExperimentIdNotebookServerGetErrors[keyof GetNotebookServerApiExperimentsExperimentIdNotebookServerGetErrors];
+
+export type GetNotebookServerApiExperimentsExperimentIdNotebookServerGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: NotebookServerStatus;
+};
+
+export type GetNotebookServerApiExperimentsExperimentIdNotebookServerGetResponse = GetNotebookServerApiExperimentsExperimentIdNotebookServerGetResponses[keyof GetNotebookServerApiExperimentsExperimentIdNotebookServerGetResponses];
+
+export type NotebookServerActionApiExperimentsExperimentIdNotebookServerPostData = {
+    body: NotebookServerAction;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/notebook_server';
+};
+
+export type NotebookServerActionApiExperimentsExperimentIdNotebookServerPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type NotebookServerActionApiExperimentsExperimentIdNotebookServerPostError = NotebookServerActionApiExperimentsExperimentIdNotebookServerPostErrors[keyof NotebookServerActionApiExperimentsExperimentIdNotebookServerPostErrors];
+
+export type NotebookServerActionApiExperimentsExperimentIdNotebookServerPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: NotebookServerStatus;
+};
+
+export type NotebookServerActionApiExperimentsExperimentIdNotebookServerPostResponse = NotebookServerActionApiExperimentsExperimentIdNotebookServerPostResponses[keyof NotebookServerActionApiExperimentsExperimentIdNotebookServerPostResponses];
 
 export type RunAllApiExperimentsExperimentIdRunAllPostData = {
     body: RunAllRequest;

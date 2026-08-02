@@ -189,6 +189,17 @@ It also leaves the door open to external editing without redesigning identity.
 SHA-256 gate, never blind-overwrite, file-beats-DB, startup reconciliation) is in this file's git
 history at commit `b53bff8` and can be lifted back wholesale.
 
+**A narrow, dated exception (2026-08-03) — the live notebook server (D30 addendum below).**
+While an experiment's live Jupyter server container is running, Jupyter's own autosave writes
+`notebook.ipynb` directly through the same bind mount Vault Writer uses — a second, legitimate
+writer to *that one file*, for the duration the container is up. This is not a reversal of D4's
+sole-writer rule: the backend resumes being the only writer the moment the container stops
+(`stop_notebook_server` re-reads the file's current bytes and passes them through the normal
+`write_experiment_files` path, keeping `updated_at`/`notebook_path` bookkeeping consistent — a
+sync-on-stop, not continuous reconciliation). Per Schema.md, notebook *content* was never
+chunked/embedded into the memory index in v1, so there is no search-index staleness question this
+exception creates — only the bookkeeping it already handles.
+
 ### D5 — Build order: five slices, text first
 
 | Slice | Contents |
@@ -677,6 +688,44 @@ phase. Findings:
   all unaffected — only free-form out-of-order exploration is lost, already the non-evidential half
   of the workflow. The interactive kernel is not abandoned, only deferred; revisit it against a
   native (non-Desktop) Docker install if that ever changes.
+
+**Un-descope (2026-08-03) — the interactive kernel, over a different transport.** Live user
+testing of the above rejected it outright: a per-cell propose-approve-run loop is not how anyone
+actually runs an experiment, and the friction meant the feature would go unused. The interactive
+path is un-descoped — but not via the raw `jupyter_client`/ZMQ transport the original spike
+tried. Instead, a long-lived per-experiment container runs a real Jupyter server (Jupyter Notebook
+7), reachable over its own HTTP/WebSocket protocol on a **plain published TCP port**
+(`docker run -p 127.0.0.1:PORT:PORT`) — the one half of the original spike that fully worked
+end-to-end, never the Unix-socket-over-bind-mount half that failed on this dev sandbox's
+Docker-Desktop/linuxkit VM. The frontend embeds the real Jupyter web UI directly in an `<iframe>`,
+verified rendering and executing cells (including out-of-order, warm-state execution — the actual
+point of an interactive kernel) from both a `file://`-loaded page and the dev server's origin.
+
+Two more real findings from this same round of spiking, both handled as documented trade-offs
+rather than open questions:
+- A custom Docker network created with `internal=True` (the natural way to keep the container's
+  own outbound internet access off while still letting its published port through) **reliably
+  blocks the published port from being reachable at all**, reproduced directly in this dev
+  sandbox — a second, separate limitation from the earlier Unix-socket one. The shipped behavior
+  tries `internal` once, falls back to the default `bridge` network if the port doesn't respond,
+  and logs the fallback — never a silent choice. On a native Linux `dockerd` this may not
+  reproduce; revisit then.
+- Jupyter's own CSP (`frame-ancestors 'self'`), XSRF check, and token/cookie auth all had to be
+  disabled for the iframe to work: the CSP header blocks any other origin from framing it at all
+  (and `file://`'s opaque origin has no CSP keyword that reliably allow-lists it); the XSRF check
+  rejects cross-origin state-changing requests; and token auth only protects the initial page
+  load — the kernel's own WebSocket connections rely on a session cookie that does not reliably
+  reach the server from a cross-origin/opaque-origin iframe, so every kernel connection was
+  rejected until token auth was disabled too. The real security boundary for this container is
+  loopback-only publishing plus a freshly-chosen, short-lived ephemeral port (D2's single-local-
+  user threat model) — not Jupyter's own web-app auth, which was never designed to be embedded
+  cross-origin in the first place. See `docker/jupyter_server_config.py`.
+
+This does not change the measured path above: `run_all`'s one-shot `nbclient` execution, the
+confirmation-token gate, and `source: measured` provenance are all exactly as descoped-to
+originally, and remain the only way to produce a `measured` metric. The two execution modes are
+mutually exclusive per experiment (`backend/sandbox/__init__.py`'s `_live_servers`/
+`_running_containers` checks) — never both at once for the same notebook file.
 
 ### D31 — Consent: the agent never runs code on its own
 

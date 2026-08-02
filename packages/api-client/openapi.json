@@ -1365,10 +1365,132 @@
         }
       }
     },
+    "/api/experiments/{experiment_id}/notebook_server": {
+      "get": {
+        "summary": "Get Notebook Server",
+        "description": "Pure status lookup \u2014 lets the frontend recover the live server's URL\nafter remounting (e.g. a tab switch back) without starting anything.",
+        "operationId": "get_notebook_server_api_experiments__experiment_id__notebook_server_get",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookServerStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Notebook Server Action",
+        "description": "Starts or stops the experiment's live, interactive Jupyter server\ncontainer (Phase 2.4) \u2014 mutually exclusive with an in-flight measured\nrun, surfaced here as 409 rather than a generic 500.",
+        "operationId": "notebook_server_action_api_experiments__experiment_id__notebook_server_post",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotebookServerAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookServerStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/experiments/{experiment_id}/run_all": {
       "post": {
         "summary": "Run All",
-        "description": "Dispatches the run via Job Queue rather than awaiting it inline \u2014\nthe container execution can run long, and cancellation/log streaming\nalready ride the job/WS pipes independently of this request. The\n`run_id` is assigned here so the client has a stable id to correlate\nagainst `run_log`/`run_status` events on the project's WebSocket before\nthe run itself has produced anything.",
+        "description": "Dispatches the run via Job Queue rather than awaiting it inline \u2014\nthe container execution can run long, and cancellation/log streaming\nalready ride the job/WS pipes independently of this request. The\n`run_id` is assigned here so the client has a stable id to correlate\nagainst `run_log`/`run_status` events on the project's WebSocket before\nthe run itself has produced anything. The mutual-exclusion check against\na live notebook server is repeated here, synchronously, even though\n`run_all` checks it again itself \u2014 that second check runs inside the\ndispatched job, too late for this response to report it; checking here\nis what lets the caller see a clear 409 immediately instead of a\n`run_id` that silently never produces any `run_log`/`run_status` event.",
         "operationId": "run_all_api_experiments__experiment_id__run_all_post",
         "parameters": [
           {
@@ -3337,6 +3459,99 @@
         ],
         "title": "NotebookCell",
         "description": "One cell as the UI needs to render it. `execution_count` and\n`outputs` absent/empty is the unrun signal `propose_cell` relies on \u2014\nnbformat's own freshly-created code cell already carries no other kind\nof \"pending approval\" marker, so none is invented here (MODULES.md)."
+      },
+      "NotebookServerAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stop"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "NotebookServerAction",
+        "description": "Request body for `POST /api/experiments/:id/notebook_server`."
+      },
+      "NotebookServerStatus": {
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Experiment Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "stopped",
+              "starting",
+              "running",
+              "stopping"
+            ],
+            "title": "State"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "bridge",
+                  "internal"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Network"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "experiment_id",
+          "state"
+        ],
+        "title": "NotebookServerStatus",
+        "description": "Response for the live-notebook-server route (Phase 2.4). A\ndeliberately separate model family from `KernelStatus`: that type's\nwhole point is to honestly describe the one-shot measured path, where\nthere is nothing persistent to start \u2014 conflating the two would make one\ntype lie about whichever path didn't populate it. `url` is `None` unless\n`state == \"running\"`."
       },
       "Paper": {
         "properties": {

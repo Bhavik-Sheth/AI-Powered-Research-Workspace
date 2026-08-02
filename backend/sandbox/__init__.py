@@ -36,18 +36,45 @@ each message's own `event` field, same as it already must for the
 "start a kernel" to perform under this execution model — see `KernelStatus`
 and `kernel_status` below. `"stop"` is real: it cancels the in-flight run
 container for the experiment, if any (`stop_kernel`).
+
+**Phase 2.4 — live embedded notebook server, un-descoping D30's original
+interactive-kernel path.** The measured path above (`propose_cell`,
+`mint_confirmation`, `run_all`) is unchanged by this addition — it remains
+the only way to produce a `source: measured` metric. Separately,
+`start_notebook_server`/`stop_notebook_server`/`notebook_server_status`
+run a **long-lived, per-experiment container** carrying a real Jupyter
+server (Jupyter Notebook 7, baked into the same base image), reachable from
+the host over a published loopback TCP port and embedded by the frontend in
+an `<iframe>`. This is not raw `jupyter_client`/ZMQ (the transport the
+original kernel-transport spike found incompatible with `--network none`
+inside this dev sandbox) — it's Jupyter's own HTTP/WebSocket protocol over
+plain TCP port publishing, the one half of that spike that fully worked.
+See `docker/jupyter_server_config.py` for why Jupyter's own CSP/XSRF/token
+auth are disabled for this container (proven necessary by a live spike, not
+assumed) and why that's an acceptable trade-off given loopback-only
+publishing + an ephemeral per-container port.
+
+A `KernelStatus`/live-server invariant this module enforces both ways: an
+experiment may have an in-flight measured run (`_running_containers`) or a
+live notebook server (`_live_servers`), never both — no auto-stop-and-switch
+magic, just a clear rejection either direction (see `run_all` and
+`start_notebook_server`).
 """
 
 import asyncio
 import hashlib
+import logging
 import queue
 import secrets
+import socket
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 import docker
+import httpx
 import nbformat
 from nbformat.v4 import new_code_cell, new_notebook
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,12 +90,16 @@ from sandbox.models import (
     KernelStatus,
     MountSpec,
     Notebook,
+    NotebookServerStatus,
+    NotebookServerStoppedEvent,
     RunLogEvent,
     RunSpec,
     RunStatusEvent,
 )
 from settings import get_vault_path
 from vault.models import RunArtifactFile, RunArtifacts
+
+logger = logging.getLogger(__name__)
 
 # Pinned per docker/experiment-base.Dockerfile (TRD §2.7); a tag, not yet a
 # digest — the digest (the local image's own content-addressed id, since
@@ -92,6 +123,32 @@ _TOKEN_TTL_SECONDS = 300
 
 _OUTPUTS_DIRNAME = "outputs"
 _RUNNER_SCRIPT_PATH = "/opt/run_notebook.py"
+
+# Phase 2.4 — live notebook server constants.
+_JUPYTER_CONFIG_PATH = "/opt/jupyter_server_config.py"
+_JUPYTER_CONTAINER_PORT = 8888
+_JUPYTER_NOTEBOOK_FILENAME = "notebook.ipynb"
+# A hard ceiling only — not real activity tracking (out of scope for v1);
+# revisit if this proves too short/long in practice.
+_LIVE_SERVER_CEILING_SECONDS = 4 * 3600
+# Verified by spike: `internal` custom bridge networks reliably block
+# published-port reachability in this project's own dev sandbox (Docker
+# Desktop's linuxkit VM) — a real, reproduced finding, not a guess. A native
+# Linux dockerd may not have this limitation, so the isolated network is
+# still tried first; the fallback below is what actually runs here.
+_EXPERIMENT_INTERNAL_NETWORK = "research-os-experiment-internal"
+_NOTEBOOK_SERVER_LABEL_KEY = "research-os.kind"
+_NOTEBOOK_SERVER_LABEL_VALUE = "notebook-server"
+_NETWORK_SELFCHECK_TIMEOUT_S = 2.0
+
+# A bare `new_notebook()` has no kernelspec, which makes Jupyter Notebook 7
+# prompt "Select Kernel" on first open instead of just starting one — real
+# friction confirmed live, not a guess. Every fresh notebook this module
+# creates gets this metadata so that dialog never appears.
+_DEFAULT_NOTEBOOK_METADATA = {
+    "kernelspec": {"name": "python3", "display_name": "Python 3 (ipykernel)", "language": "python"},
+    "language_info": {"name": "python"},
+}
 
 _docker_client: docker.DockerClient | None = None
 
@@ -128,6 +185,41 @@ _tokens: dict[str, _StoredToken] = {}
 _running_containers: dict[uuid.UUID, tuple["docker.models.containers.Container", uuid.UUID]] = {}
 
 
+@dataclass
+class _LiveServerHandle:
+    container: "docker.models.containers.Container"
+    project_id: uuid.UUID
+    port: int
+    network: str
+    url: str
+    started_at: datetime
+    ceiling_task: "asyncio.Task[None]"
+
+
+# experiment_id -> its one live notebook-server container. In-process only,
+# same reasoning as `_tokens`/`_running_containers` — a sidecar restart
+# orphans the container; the startup sweep (`sweep_orphaned_notebook_servers`)
+# and the ceiling task are the cleanup mechanisms, not persistence.
+_live_servers: dict[uuid.UUID, _LiveServerHandle] = {}
+
+# Serializes start/stop for one experiment's live server. Without this, an
+# overlapping start (mount) and stop (cleanup from the immediately-preceding
+# unmount — e.g. React StrictMode's dev-only double-invoke, or a fast tab
+# switch away-and-back) can interleave: `stop`'s pop from `_live_servers`
+# happens before its `await container.remove(...)` completes, so a `start`
+# landing in that gap sees no existing entry and creates a second container.
+# Caught live via Playwright testing, not theoretical.
+_live_server_locks: dict[uuid.UUID, asyncio.Lock] = {}
+
+
+def _get_live_server_lock(experiment_id: uuid.UUID) -> asyncio.Lock:
+    lock = _live_server_locks.get(experiment_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _live_server_locks[experiment_id] = lock
+    return lock
+
+
 async def propose_cell(
     session: AsyncSession, experiment_id: uuid.UUID, code: str, index: int | None = None
 ) -> Notebook:
@@ -144,7 +236,7 @@ async def propose_cell(
     if experiment.notebook_path is not None and (get_vault_path() / experiment.notebook_path).exists():
         notebook = nbformat.read(get_vault_path() / experiment.notebook_path, as_version=4)
     else:
-        notebook = new_notebook()
+        notebook = new_notebook(metadata=_DEFAULT_NOTEBOOK_METADATA)
 
     cell = new_code_cell(code)
     if index is None:
@@ -288,10 +380,16 @@ async def run_all(
 
     Raises `ConfirmationError` for any token mismatch, `ValueError` if the
     experiment or its notebook doesn't exist, and `RuntimeError` if this
-    experiment already has a run in flight.
+    experiment already has a run in flight (or a live notebook server open —
+    the two execution modes are mutually exclusive per experiment, since
+    both would read/write the same mounted notebook file at once).
     """
     if experiment_id in _running_containers:
         raise RuntimeError(f"a run is already in progress for experiment {experiment_id}")
+    if experiment_id in _live_servers:
+        raise RuntimeError(
+            f"experiment {experiment_id} has a live notebook server open — stop it before running a measured pass"
+        )
 
     experiment, spec = await load_run_spec(session, experiment_id)
     project = await session.get(Project, experiment.project_id)
@@ -479,3 +577,242 @@ async def stop_kernel(experiment_id: uuid.UUID) -> None:
         return
     container, _run_id = entry
     await asyncio.to_thread(container.kill)
+
+
+def _pick_free_port() -> int:
+    """Binds an ephemeral port, reads it, releases it. The same technique
+    this project's own kernel-transport spike used; the TOCTOU race (another
+    process claims the port before `docker run` publishes it) is accepted
+    as-is, same risk profile as that spike, not re-solved here."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+async def _tcp_reachable(port: int, timeout: float = _NETWORK_SELFCHECK_TIMEOUT_S) -> bool:
+    try:
+        _reader, writer = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", port), timeout=timeout)
+    except (OSError, asyncio.TimeoutError):
+        return False
+    writer.close()
+    await writer.wait_closed()
+    return True
+
+
+async def _wait_for_http_ready(port: int, timeout: float = 10.0) -> bool:
+    """A bare TCP connect (`_tcp_reachable`) only proves the port is
+    *listening* — Jupyter accepts the connection before its Tornado app has
+    finished initializing enough to answer a real request, and a request
+    that lands in that gap gets an empty response (confirmed live: the
+    embedded iframe showed Chromium's `ERR_EMPTY_RESPONSE` page on the very
+    first load). Polls with a real HTTP GET until one actually completes, so
+    `start_notebook_server` never hands the frontend a URL before the server
+    can truly serve it."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    async with httpx.AsyncClient() as client:
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                await client.get(f"http://127.0.0.1:{port}/", timeout=1.0)
+                return True
+            except httpx.HTTPError:
+                await asyncio.sleep(0.2)
+    return False
+
+
+def _start_jupyter_container(
+    docker_client: docker.DockerClient, spec: RunSpec, port: int, volumes: dict, network_mode: str
+):
+    return docker_client.containers.run(
+        spec.image,
+        command=[
+            "jupyter",
+            "notebook",
+            f"--port={_JUPYTER_CONTAINER_PORT}",
+            "--no-browser",
+            "--allow-root",
+            f"--config={_JUPYTER_CONFIG_PATH}",
+        ],
+        ports={f"{_JUPYTER_CONTAINER_PORT}/tcp": ("127.0.0.1", port)},
+        volumes=volumes,
+        network_mode=network_mode,
+        nano_cpus=int(spec.cpu_limit * 1_000_000_000),
+        mem_limit=f"{spec.memory_limit_mb}m",
+        working_dir="/workspace",
+        labels={_NOTEBOOK_SERVER_LABEL_KEY: _NOTEBOOK_SERVER_LABEL_VALUE},
+        detach=True,
+    )
+
+
+async def _run_notebook_server_container(
+    docker_client: docker.DockerClient, spec: RunSpec, port: int, volumes: dict
+) -> tuple["docker.models.containers.Container", str]:
+    """Tries the isolated `internal` network first (no outbound route once
+    running, still reachable via the published loopback port on a native
+    Linux dockerd); falls back exactly once to the default `bridge` network
+    if the published port isn't actually reachable — confirmed necessary in
+    this project's own dev sandbox by a live spike, not a theoretical case.
+    Exactly one retry, always logged, never a silent choice (Rules.md: no
+    speculative auto-negotiation loop)."""
+    try:
+        network = await asyncio.to_thread(docker_client.networks.get, _EXPERIMENT_INTERNAL_NETWORK)
+    except docker.errors.NotFound:
+        network = await asyncio.to_thread(
+            docker_client.networks.create, _EXPERIMENT_INTERNAL_NETWORK, driver="bridge", internal=True
+        )
+
+    container = await asyncio.to_thread(_start_jupyter_container, docker_client, spec, port, volumes, network.name)
+    if await _tcp_reachable(port):
+        return container, "internal"
+
+    logger.warning(
+        "event=notebook_server_network_fallback reason=internal_network_port_unreachable port=%d", port
+    )
+    await asyncio.to_thread(container.remove, force=True)
+    container = await asyncio.to_thread(_start_jupyter_container, docker_client, spec, port, volumes, "bridge")
+    if not await _tcp_reachable(port, timeout=5.0):
+        await asyncio.to_thread(container.remove, force=True)
+        raise RuntimeError(f"notebook server on port {port} did not become reachable on either network mode")
+    return container, "bridge"
+
+
+async def start_notebook_server(session: AsyncSession, experiment_id: uuid.UUID) -> NotebookServerStatus:
+    """Starts (or returns the status of an already-running) long-lived,
+    per-experiment Jupyter server container — the live, interactive
+    counterpart to the measured `run_all` path (see module docstring).
+    Idempotent. Raises `RuntimeError` if a measured run is currently in
+    flight for this experiment (mutual exclusion, see `run_all`).
+
+    Serialized per experiment (`_get_live_server_lock`) so an overlapping
+    start/stop pair — e.g. React StrictMode's dev-only double-mount, or a
+    fast tab switch away-and-back — can't race and produce two containers
+    for one experiment; see that lock's own comment for the concrete bug
+    this closes.
+    """
+    async with _get_live_server_lock(experiment_id):
+        existing = _live_servers.get(experiment_id)
+        if existing is not None:
+            return NotebookServerStatus(
+                experiment_id=experiment_id,
+                state="running",
+                url=existing.url,
+                port=existing.port,
+                network=existing.network,
+                started_at=existing.started_at,
+            )
+        if experiment_id in _running_containers:
+            raise RuntimeError(
+                f"experiment {experiment_id} has a measured run in progress — stop it before opening the live notebook"
+            )
+
+        experiment, spec = await load_run_spec(session, experiment_id)
+
+        if experiment.notebook_path is None:
+            empty_notebook = nbformat.writes(new_notebook(metadata=_DEFAULT_NOTEBOOK_METADATA), version=4).encode(
+                "utf-8"
+            )
+            await vault.write_experiment_files(session, experiment_id, empty_notebook)
+
+        docker_client = await asyncio.to_thread(_get_docker_client)
+        port = _pick_free_port()
+        volumes = {
+            str(get_vault_path() / mount.host_path): {"bind": mount.container_path, "mode": mount.mode}
+            for mount in spec.mounts
+        }
+
+        container, network_used = await _run_notebook_server_container(docker_client, spec, port, volumes)
+        if not await _wait_for_http_ready(port):
+            await asyncio.to_thread(container.remove, force=True)
+            raise RuntimeError(f"notebook server on port {port} never became ready to serve HTTP requests")
+
+        started_at = datetime.now(timezone.utc)
+        url = f"http://127.0.0.1:{port}/notebooks/{_JUPYTER_NOTEBOOK_FILENAME}"
+        ceiling_task = asyncio.create_task(_enforce_ceiling(experiment_id))
+        _live_servers[experiment_id] = _LiveServerHandle(
+            container=container,
+            project_id=experiment.project_id,
+            port=port,
+            network=network_used,
+            url=url,
+            started_at=started_at,
+            ceiling_task=ceiling_task,
+        )
+        return NotebookServerStatus(
+            experiment_id=experiment_id, state="running", url=url, port=port, network=network_used, started_at=started_at
+        )
+
+
+async def stop_notebook_server(
+    session: AsyncSession, experiment_id: uuid.UUID, reason: Literal["manual", "ceiling"] = "manual"
+) -> NotebookServerStatus:
+    """Idempotent teardown. Syncs the vault (D4's narrow, documented
+    exception for this one file while the container was up — see
+    `DECISIONS.md`'s addendum under D4) by re-reading `notebook.ipynb`'s
+    current bytes, already written by Jupyter's own autosave via the bind
+    mount, and passing them through the normal `write_experiment_files`
+    path so `updated_at`/index bookkeeping stays consistent.
+
+    Serialized per experiment against `start_notebook_server` — see that
+    function's docstring and `_get_live_server_lock`'s comment for why.
+    """
+    async with _get_live_server_lock(experiment_id):
+        handle = _live_servers.pop(experiment_id, None)
+        if handle is None:
+            return NotebookServerStatus(experiment_id=experiment_id, state="stopped")
+
+        handle.ceiling_task.cancel()
+        await asyncio.to_thread(handle.container.remove, force=True)
+
+        experiment = await experiments.get_experiment(session, experiment_id)
+        if experiment is not None and experiment.notebook_path is not None:
+            notebook_path = get_vault_path() / experiment.notebook_path
+            if notebook_path.exists():
+                await vault.write_experiment_files(session, experiment_id, notebook_path.read_bytes())
+
+        ws_session = ws.get_session(handle.project_id)
+        if ws_session is not None:
+            await ws.broadcast(ws_session, NotebookServerStoppedEvent(experiment_id=experiment_id, reason=reason))
+
+        return NotebookServerStatus(experiment_id=experiment_id, state="stopped")
+
+
+def notebook_server_status(experiment_id: uuid.UUID) -> NotebookServerStatus:
+    """Pure lookup — lets the frontend re-fetch the URL after remounting
+    (e.g. a tab switch back) without restarting anything."""
+    handle = _live_servers.get(experiment_id)
+    if handle is None:
+        return NotebookServerStatus(experiment_id=experiment_id, state="stopped")
+    return NotebookServerStatus(
+        experiment_id=experiment_id,
+        state="running",
+        url=handle.url,
+        port=handle.port,
+        network=handle.network,
+        started_at=handle.started_at,
+    )
+
+
+async def _enforce_ceiling(experiment_id: uuid.UUID) -> None:
+    """A hard safety-net timeout, not real activity tracking (explicitly out
+    of scope for v1) — covers a renderer/tab left open indefinitely."""
+    await asyncio.sleep(_LIVE_SERVER_CEILING_SECONDS)
+    if experiment_id not in _live_servers:
+        return
+    logger.info("event=notebook_server_ceiling_reached experiment_id=%s", experiment_id)
+    async with db.session() as ceiling_session:
+        await stop_notebook_server(ceiling_session, experiment_id, reason="ceiling")
+
+
+async def sweep_orphaned_notebook_servers() -> None:
+    """Force-removes any notebook-server container left over from a sidecar
+    restart that didn't shut down cleanly — a one-shot sweep at boot
+    (called from Sidecar Bootstrap once Docker is confirmed ready), not
+    continuous reconciliation (D4's spirit)."""
+    docker_client = await asyncio.to_thread(_get_docker_client)
+    containers = await asyncio.to_thread(
+        docker_client.containers.list,
+        all=True,
+        filters={"label": f"{_NOTEBOOK_SERVER_LABEL_KEY}={_NOTEBOOK_SERVER_LABEL_VALUE}"},
+    )
+    for container in containers:
+        logger.info("event=notebook_server_sweep_removed container_id=%s", container.id)
+        await asyncio.to_thread(container.remove, force=True)

@@ -17,6 +17,22 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 RUN pip install --no-cache-dir nbclient nbformat ipykernel && \
     python -m ipykernel install --sys-prefix --name python3
 
+# Phase 2.4: un-descoping D30's original interactive-kernel path over
+# Jupyter's own HTTP/WebSocket protocol on a published TCP port (proven
+# working in this project's own spikes) rather than raw jupyter_client/ZMQ.
+# `notebook` (Jupyter Notebook 7) brings jupyter-server transitively.
+RUN pip install --no-cache-dir notebook
+
 COPY run_notebook.py /opt/run_notebook.py
+COPY jupyter_server_config.py /opt/jupyter_server_config.py
+
+# JupyterLab's own default autosave interval is 120s (docmanager-extension's
+# `autosaveInterval` setting) — with the live notebook server torn down as
+# soon as its panel closes, that's a real window to lose recent edits in
+# (confirmed live: edits made and not yet autosaved were gone from the vault
+# file after a normal stop). This is the documented, supported override
+# mechanism (not a hack) for shortening it; 3s bounds that window to
+# something that matches how the panel is actually used.
+COPY jupyterlab_overrides.json /usr/local/share/jupyter/lab/settings/overrides.json
 
 WORKDIR /workspace

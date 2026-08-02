@@ -16,6 +16,9 @@ __all__ = [
     "MountSpec",
     "Notebook",
     "NotebookCell",
+    "NotebookServerAction",
+    "NotebookServerStatus",
+    "NotebookServerStoppedEvent",
     "RunLogEvent",
     "RunSpec",
     "RunStatusEvent",
@@ -127,3 +130,37 @@ class RunStatusEvent(BaseModel):
     run_id: uuid.UUID
     status: Literal["running", "done", "failed"]
     exit_code: int | None = None
+
+
+class NotebookServerAction(BaseModel):
+    """Request body for `POST /api/experiments/:id/notebook_server`."""
+
+    action: Literal["start", "stop"]
+
+
+class NotebookServerStatus(BaseModel):
+    """Response for the live-notebook-server route (Phase 2.4). A
+    deliberately separate model family from `KernelStatus`: that type's
+    whole point is to honestly describe the one-shot measured path, where
+    there is nothing persistent to start — conflating the two would make one
+    type lie about whichever path didn't populate it. `url` is `None` unless
+    `state == "running"`.
+    """
+
+    experiment_id: uuid.UUID
+    state: Literal["stopped", "starting", "running", "stopping"]
+    url: str | None = None
+    port: int | None = None
+    network: Literal["bridge", "internal"] | None = None
+    started_at: datetime | None = None
+
+
+class NotebookServerStoppedEvent(BaseModel):
+    """Broadcast over the project's Session Transport socket when a live
+    notebook server stops — lets the frontend explain *why* the iframe went
+    away instead of just going blank, especially for `reason="ceiling"`
+    (the hard safety-net timeout), which the user didn't ask for."""
+
+    event: Literal["notebook_server_stopped"] = "notebook_server_stopped"
+    experiment_id: uuid.UUID
+    reason: Literal["manual", "ceiling"]
