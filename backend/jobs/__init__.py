@@ -38,8 +38,16 @@ def _job_functions() -> list:
     # lifespan), papers/ is already fully loaded via main.py's own imports.
     from memory import chunk_and_embed_job
     from papers import embed_paper_job, enrich_paper_job, extract_card_job, parse_paper_job
+    from sandbox import run_experiment_job
 
-    return [parse_paper_job, extract_card_job, enrich_paper_job, embed_paper_job, chunk_and_embed_job]
+    return [
+        parse_paper_job,
+        extract_card_job,
+        enrich_paper_job,
+        embed_paper_job,
+        chunk_and_embed_job,
+        run_experiment_job,
+    ]
 
 
 async def start() -> None:

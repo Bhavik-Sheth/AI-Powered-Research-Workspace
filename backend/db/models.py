@@ -437,6 +437,38 @@ class Experiments(Base):
     )
 
 
+class ExperimentRuns(Base):
+    """One container execution's reproducibility fingerprint (Schema.md
+    `experiment_runs`, Phase 2, D29/D31/D30). `approved_at` NOT NULL is the
+    consent gate at rest — a row cannot exist without a validated
+    confirmation token (invariant #5). Only `run_kind='clean_run_all'` with
+    `exit_code=0` may back a `measured` metric (Phase 2.3); this table
+    itself does not enforce that — `experiment_metrics`'s own CHECK does.
+    """
+
+    __tablename__ = "experiment_runs"
+    __table_args__ = (
+        CheckConstraint("run_kind IN ('clean_run_all', 'interactive')", name="experiment_runs_run_kind_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    experiment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image: Mapped[str] = mapped_column(String, nullable=False)
+    reqs_hash: Mapped[str] = mapped_column(String, nullable=False)
+    notebook_hash: Mapped[str] = mapped_column(String, nullable=False)
+    stdout_ref: Mapped[str] = mapped_column(String, nullable=False)
+    artifacts: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    run_kind: Mapped[str] = mapped_column(String, nullable=False)
+    network_enabled: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    gpu_enabled: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    approved_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+
 class ProjectChunks(Base):
     """The second and last memory table (Schema.md `project_chunks`, Phase
     1.7, D25) — retrieval over a project's own artifacts. Identical shape to

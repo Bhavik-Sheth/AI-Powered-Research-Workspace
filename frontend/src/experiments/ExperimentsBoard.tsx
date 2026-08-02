@@ -5,6 +5,7 @@ import {
   type Experiment,
 } from "@research-os/api-client";
 
+import { ApprovalPrompt, type RunSpec } from "./ApprovalPrompt";
 import "./ExperimentsBoard.css";
 
 type ExperimentStatus = Experiment["status"];
@@ -42,12 +43,33 @@ function statusBadgeClass(status: ExperimentStatus): string {
  * without redesigning the marking rule. A cell is only ever "unrun and
  * pending approval" or has output — there is no third, failed state (PRD §13
  * Phase 2, no "failed" anywhere in this system).
+ *
+ * `onRun` is the entry point into the consent gate (D31): when a caller has
+ * a cell's code and container spec (still pending the notebook-fetch
+ * endpoint, same gap noted above), passing `onRun` turns the pending badge
+ * into the affordance that opens `ApprovalPrompt`. No spec/no `onRun` means
+ * the badge stays inert, matching today's no-real-data state.
  */
-export function CellPreview({ code, hasOutput }: { code: string; hasOutput: boolean }) {
+export function CellPreview({
+  code,
+  hasOutput,
+  onRun,
+}: {
+  code: string;
+  hasOutput: boolean;
+  onRun?: () => void;
+}) {
   return (
     <div className="experiments__cell">
       <pre className="experiments__cell-code">{code}</pre>
-      {!hasOutput && <span className="experiments__cell-badge">unrun — pending approval</span>}
+      {!hasOutput &&
+        (onRun ? (
+          <button type="button" className="experiments__cell-badge experiments__cell-badge--button" onClick={onRun}>
+            unrun — pending approval · Run
+          </button>
+        ) : (
+          <span className="experiments__cell-badge">unrun — pending approval</span>
+        ))}
     </div>
   );
 }
@@ -61,6 +83,14 @@ export function ExperimentsBoard({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  // The single open ApprovalPrompt for this board, if any (D31 entry point
+  // from CellPreview's "Run" affordance). One dialog at a time — no global
+  // modal-management system for what is, by design, a single-flight gate.
+  const [pendingApproval, setPendingApproval] = useState<{
+    experimentId: string;
+    code: string;
+    spec: RunSpec;
+  } | null>(null);
 
   async function refresh() {
     const { data } = await listExperimentsApiProjectsProjectIdExperimentsGet({
@@ -152,6 +182,16 @@ export function ExperimentsBoard({ projectId }: { projectId: string }) {
           );
         })}
       </div>
+
+      {pendingApproval && (
+        <ApprovalPrompt
+          experimentId={pendingApproval.experimentId}
+          code={pendingApproval.code}
+          spec={pendingApproval.spec}
+          onCancel={() => setPendingApproval(null)}
+          onApproved={() => setPendingApproval(null)}
+        />
+      )}
     </div>
   );
 }

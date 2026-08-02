@@ -205,3 +205,9 @@
   color: var(--text-muted);
   background: var(--surface-raised);
 }
+
+.experiments__cell-badge--button {
+  cursor: pointer;
+  color: var(--accent-text);
+  border-color: var(--accent);
+}

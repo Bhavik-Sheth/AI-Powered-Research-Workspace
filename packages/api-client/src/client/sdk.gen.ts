@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddPaperApiProjectsProjectIdPapersPostData, AddPaperApiProjectsProjectIdPapersPostErrors, AddPaperApiProjectsProjectIdPapersPostResponses, CreateExperimentApiProjectsProjectIdExperimentsPostData, CreateExperimentApiProjectsProjectIdExperimentsPostErrors, CreateExperimentApiProjectsProjectIdExperimentsPostResponses, CreateHighlightApiProjectsProjectIdHighlightsPostData, CreateHighlightApiProjectsProjectIdHighlightsPostErrors, CreateHighlightApiProjectsProjectIdHighlightsPostResponses, CreateNoteApiProjectsProjectIdNotesPostData, CreateNoteApiProjectsProjectIdNotesPostErrors, CreateNoteApiProjectsProjectIdNotesPostResponses, CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetConversationApiProjectsProjectIdConversationGetData, GetConversationApiProjectsProjectIdConversationGetErrors, GetConversationApiProjectsProjectIdConversationGetResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetPaperApiPapersPaperIdGetData, GetPaperApiPapersPaperIdGetErrors, GetPaperApiPapersPaperIdGetResponses, GetPaperPdfApiPapersPaperIdPdfGetData, GetPaperPdfApiPapersPaperIdPdfGetErrors, GetPaperPdfApiPapersPaperIdPdfGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, GetResultApiResultsResultIdGetData, GetResultApiResultsResultIdGetErrors, GetResultApiResultsResultIdGetResponses, ListExperimentsApiProjectsProjectIdExperimentsGetData, ListExperimentsApiProjectsProjectIdExperimentsGetErrors, ListExperimentsApiProjectsProjectIdExperimentsGetResponses, ListNotesApiProjectsProjectIdNotesGetData, ListNotesApiProjectsProjectIdNotesGetErrors, ListNotesApiProjectsProjectIdNotesGetResponses, ListProjectPapersApiProjectsProjectIdPapersGetData, ListProjectPapersApiProjectsProjectIdPapersGetErrors, ListProjectPapersApiProjectsProjectIdPapersGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses, PostSearchApiSearchPostData, PostSearchApiSearchPostErrors, PostSearchApiSearchPostResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses, QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostData, QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostErrors, QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses, SaveTabStackApiProjectsProjectIdTabStackPutData, SaveTabStackApiProjectsProjectIdTabStackPutErrors, SaveTabStackApiProjectsProjectIdTabStackPutResponses, SynthesizeSpeechApiVoiceSynthesizePostData, SynthesizeSpeechApiVoiceSynthesizePostErrors, SynthesizeSpeechApiVoiceSynthesizePostResponses, TranscribeAudioApiVoiceTranscribePostData, TranscribeAudioApiVoiceTranscribePostErrors, TranscribeAudioApiVoiceTranscribePostResponses, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchData, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses, UpdateNoteApiProjectsProjectIdNotesPatchData, UpdateNoteApiProjectsProjectIdNotesPatchErrors, UpdateNoteApiProjectsProjectIdNotesPatchResponses } from './types.gen';
+import type { AddPaperApiProjectsProjectIdPapersPostData, AddPaperApiProjectsProjectIdPapersPostErrors, AddPaperApiProjectsProjectIdPapersPostResponses, CreateConfirmationApiExperimentsExperimentIdConfirmationPostData, CreateConfirmationApiExperimentsExperimentIdConfirmationPostErrors, CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponses, CreateExperimentApiProjectsProjectIdExperimentsPostData, CreateExperimentApiProjectsProjectIdExperimentsPostErrors, CreateExperimentApiProjectsProjectIdExperimentsPostResponses, CreateHighlightApiProjectsProjectIdHighlightsPostData, CreateHighlightApiProjectsProjectIdHighlightsPostErrors, CreateHighlightApiProjectsProjectIdHighlightsPostResponses, CreateNoteApiProjectsProjectIdNotesPostData, CreateNoteApiProjectsProjectIdNotesPostErrors, CreateNoteApiProjectsProjectIdNotesPostResponses, CreateProjectApiProjectsPostData, CreateProjectApiProjectsPostErrors, CreateProjectApiProjectsPostResponses, DiscoverModelsApiSettingsModelsDiscoverPostData, DiscoverModelsApiSettingsModelsDiscoverPostErrors, DiscoverModelsApiSettingsModelsDiscoverPostResponses, GetConversationApiProjectsProjectIdConversationGetData, GetConversationApiProjectsProjectIdConversationGetErrors, GetConversationApiProjectsProjectIdConversationGetResponses, GetHealthApiHealthGetData, GetHealthApiHealthGetErrors, GetHealthApiHealthGetResponses, GetModelsApiSettingsModelsGetData, GetModelsApiSettingsModelsGetErrors, GetModelsApiSettingsModelsGetResponses, GetPaperApiPapersPaperIdGetData, GetPaperApiPapersPaperIdGetErrors, GetPaperApiPapersPaperIdGetResponses, GetPaperPdfApiPapersPaperIdPdfGetData, GetPaperPdfApiPapersPaperIdPdfGetErrors, GetPaperPdfApiPapersPaperIdPdfGetResponses, GetProjectApiProjectsProjectIdGetData, GetProjectApiProjectsProjectIdGetErrors, GetProjectApiProjectsProjectIdGetResponses, GetResultApiResultsResultIdGetData, GetResultApiResultsResultIdGetErrors, GetResultApiResultsResultIdGetResponses, GetRunSpecApiExperimentsExperimentIdRunSpecGetData, GetRunSpecApiExperimentsExperimentIdRunSpecGetErrors, GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses, KernelActionApiExperimentsExperimentIdKernelPostData, KernelActionApiExperimentsExperimentIdKernelPostErrors, KernelActionApiExperimentsExperimentIdKernelPostResponses, ListExperimentsApiProjectsProjectIdExperimentsGetData, ListExperimentsApiProjectsProjectIdExperimentsGetErrors, ListExperimentsApiProjectsProjectIdExperimentsGetResponses, ListNotesApiProjectsProjectIdNotesGetData, ListNotesApiProjectsProjectIdNotesGetErrors, ListNotesApiProjectsProjectIdNotesGetResponses, ListProjectPapersApiProjectsProjectIdPapersGetData, ListProjectPapersApiProjectsProjectIdPapersGetErrors, ListProjectPapersApiProjectsProjectIdPapersGetResponses, ListProjectsApiProjectsGetData, ListProjectsApiProjectsGetErrors, ListProjectsApiProjectsGetResponses, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchErrors, PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses, PostSearchApiSearchPostData, PostSearchApiSearchPostErrors, PostSearchApiSearchPostResponses, PutModelsApiSettingsModelsPutData, PutModelsApiSettingsModelsPutErrors, PutModelsApiSettingsModelsPutResponses, PutOnboardingCompleteApiSettingsOnboardingCompletePutData, PutOnboardingCompleteApiSettingsOnboardingCompletePutErrors, PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses, PutVaultPathApiSettingsVaultPathPutData, PutVaultPathApiSettingsVaultPathPutErrors, PutVaultPathApiSettingsVaultPathPutResponses, QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostData, QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostErrors, QueryProjectMemoryApiProjectsProjectIdMemoryQueryPostResponses, RunAllApiExperimentsExperimentIdRunAllPostData, RunAllApiExperimentsExperimentIdRunAllPostErrors, RunAllApiExperimentsExperimentIdRunAllPostResponses, SaveTabStackApiProjectsProjectIdTabStackPutData, SaveTabStackApiProjectsProjectIdTabStackPutErrors, SaveTabStackApiProjectsProjectIdTabStackPutResponses, SynthesizeSpeechApiVoiceSynthesizePostData, SynthesizeSpeechApiVoiceSynthesizePostErrors, SynthesizeSpeechApiVoiceSynthesizePostResponses, TranscribeAudioApiVoiceTranscribePostData, TranscribeAudioApiVoiceTranscribePostErrors, TranscribeAudioApiVoiceTranscribePostResponses, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchData, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses, UpdateNoteApiProjectsProjectIdNotesPatchData, UpdateNoteApiProjectsProjectIdNotesPatchErrors, UpdateNoteApiProjectsProjectIdNotesPatchResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -187,6 +187,61 @@ export const createExperimentApiProjectsProjectIdExperimentsPost = <ThrowOnError
  */
 export const updateExperimentApiProjectsProjectIdExperimentsExperimentIdPatch = <ThrowOnError extends boolean = false>(options: Options<UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchData, ThrowOnError>): RequestResult<UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses, UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchErrors, ThrowOnError>({
     url: '/api/projects/{project_id}/experiments/{experiment_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Run Spec
+ *
+ * No side effect, no token minted — a caller can fetch this as many
+ * times as it likes while the human is still reading.
+ */
+export const getRunSpecApiExperimentsExperimentIdRunSpecGet = <ThrowOnError extends boolean = false>(options: Options<GetRunSpecApiExperimentsExperimentIdRunSpecGetData, ThrowOnError>): RequestResult<GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses, GetRunSpecApiExperimentsExperimentIdRunSpecGetErrors, ThrowOnError> => (options.client ?? client).get<GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses, GetRunSpecApiExperimentsExperimentIdRunSpecGetErrors, ThrowOnError>({ url: '/api/experiments/{experiment_id}/run_spec', ...options });
+
+/**
+ * Create Confirmation
+ *
+ * Mints the one-shot token `run_all` requires. Always recomputes the
+ * spec itself rather than trusting anything the caller might send —
+ * `mint_confirmation` is issued only after *this* call has the spec in
+ * hand (D31).
+ */
+export const createConfirmationApiExperimentsExperimentIdConfirmationPost = <ThrowOnError extends boolean = false>(options: Options<CreateConfirmationApiExperimentsExperimentIdConfirmationPostData, ThrowOnError>): RequestResult<CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponses, CreateConfirmationApiExperimentsExperimentIdConfirmationPostErrors, ThrowOnError> => (options.client ?? client).post<CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponses, CreateConfirmationApiExperimentsExperimentIdConfirmationPostErrors, ThrowOnError>({ url: '/api/experiments/{experiment_id}/confirmation', ...options });
+
+/**
+ * Kernel Action
+ *
+ * `"start"` has nothing real to start under the `nbclient` fallback —
+ * there is no persistent per-experiment kernel (D30's descope) — so it
+ * just reports current status, same as a bare query would.
+ * `"stop"` is real: it cancels this experiment's in-flight run container,
+ * if any (`sandbox.stop_kernel`).
+ */
+export const kernelActionApiExperimentsExperimentIdKernelPost = <ThrowOnError extends boolean = false>(options: Options<KernelActionApiExperimentsExperimentIdKernelPostData, ThrowOnError>): RequestResult<KernelActionApiExperimentsExperimentIdKernelPostResponses, KernelActionApiExperimentsExperimentIdKernelPostErrors, ThrowOnError> => (options.client ?? client).post<KernelActionApiExperimentsExperimentIdKernelPostResponses, KernelActionApiExperimentsExperimentIdKernelPostErrors, ThrowOnError>({
+    url: '/api/experiments/{experiment_id}/kernel',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Run All
+ *
+ * Dispatches the run via Job Queue rather than awaiting it inline —
+ * the container execution can run long, and cancellation/log streaming
+ * already ride the job/WS pipes independently of this request. The
+ * `run_id` is assigned here so the client has a stable id to correlate
+ * against `run_log`/`run_status` events on the project's WebSocket before
+ * the run itself has produced anything.
+ */
+export const runAllApiExperimentsExperimentIdRunAllPost = <ThrowOnError extends boolean = false>(options: Options<RunAllApiExperimentsExperimentIdRunAllPostData, ThrowOnError>): RequestResult<RunAllApiExperimentsExperimentIdRunAllPostResponses, RunAllApiExperimentsExperimentIdRunAllPostErrors, ThrowOnError> => (options.client ?? client).post<RunAllApiExperimentsExperimentIdRunAllPostResponses, RunAllApiExperimentsExperimentIdRunAllPostErrors, ThrowOnError>({
+    url: '/api/experiments/{experiment_id}/run_all',
     ...options,
     headers: {
         'Content-Type': 'application/json',

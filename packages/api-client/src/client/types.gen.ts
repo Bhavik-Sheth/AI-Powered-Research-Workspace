@@ -68,6 +68,28 @@ export type CitedRow = {
 };
 
 /**
+ * ConfirmationToken
+ *
+ * The one-shot credential `run_all` requires (D31) — opaque beyond the
+ * fields the approval prompt needs to display (`expires_at`, for a
+ * countdown or a "this approval expired, review again" message).
+ */
+export type ConfirmationToken = {
+    /**
+     * Token
+     */
+    token: string;
+    /**
+     * Experiment Id
+     */
+    experiment_id: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+};
+
+/**
  * ConversationResponse
  */
 export type ConversationResponse = {
@@ -323,6 +345,42 @@ export type HighlightInput = {
 };
 
 /**
+ * KernelActionRequest
+ */
+export type KernelActionRequest = {
+    /**
+     * Action
+     */
+    action: 'start' | 'stop';
+};
+
+/**
+ * KernelStatus
+ *
+ * Response for `POST /api/experiments/:id/kernel`. Under the `nbclient`
+ * fallback (D30's descope) there is no persistent per-experiment kernel to
+ * start or stop — containers are per-run, not per-experiment. `state`
+ * honestly reports the only kernel-shaped fact that exists here: whether
+ * this experiment currently has an in-flight run container. `"start"`
+ * cannot create anything real to report back beyond this same status;
+ * `"stop"` maps to cancelling that in-flight container, if any.
+ */
+export type KernelStatus = {
+    /**
+     * Experiment Id
+     */
+    experiment_id: string;
+    /**
+     * State
+     */
+    state: 'idle' | 'running';
+    /**
+     * Run Id
+     */
+    run_id?: string | null;
+};
+
+/**
  * LibraryEntry
  */
 export type LibraryEntry = {
@@ -420,6 +478,27 @@ export type ModelSettings = {
 };
 
 /**
+ * MountSpec
+ *
+ * One bind mount into the run container (D30/Rules.md: never the whole
+ * vault, never `$HOME`).
+ */
+export type MountSpec = {
+    /**
+     * Host Path
+     */
+    host_path: string;
+    /**
+     * Container Path
+     */
+    container_path: string;
+    /**
+     * Mode
+     */
+    mode: 'ro' | 'rw';
+};
+
+/**
  * Note
  *
  * The `notes` row (Schema.md), returned by every notes endpoint.
@@ -483,6 +562,51 @@ export type NoteInput = {
      * Body
      */
     body: string;
+};
+
+/**
+ * Notebook
+ *
+ * The vault notebook's cell list, returned by `propose_cell`.
+ */
+export type Notebook = {
+    /**
+     * Experiment Id
+     */
+    experiment_id: string;
+    /**
+     * Cells
+     */
+    cells: Array<NotebookCell>;
+};
+
+/**
+ * NotebookCell
+ *
+ * One cell as the UI needs to render it. `execution_count` and
+ * `outputs` absent/empty is the unrun signal `propose_cell` relies on —
+ * nbformat's own freshly-created code cell already carries no other kind
+ * of "pending approval" marker, so none is invented here (MODULES.md).
+ */
+export type NotebookCell = {
+    /**
+     * Cell Type
+     */
+    cell_type: 'code' | 'markdown' | 'raw';
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Execution Count
+     */
+    execution_count?: number | null;
+    /**
+     * Outputs
+     */
+    outputs?: Array<{
+        [key: string]: unknown;
+    }>;
 };
 
 /**
@@ -849,6 +973,89 @@ export type ResultSet = {
      * Sources Failed
      */
     sources_failed?: Array<string>;
+};
+
+/**
+ * RunAllRequest
+ */
+export type RunAllRequest = {
+    /**
+     * Confirmation Token
+     */
+    confirmation_token: string;
+    /**
+     * Network Optin
+     */
+    network_optin?: boolean;
+    /**
+     * Gpu
+     */
+    gpu?: boolean;
+};
+
+/**
+ * RunAllResponse
+ */
+export type RunAllResponse = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+};
+
+/**
+ * RunSpec
+ *
+ * The container spec the approval prompt displays before `run_all` can
+ * mint a confirmation (D31) — image, mounts, network, and the limits that
+ * are "always set" per Rules.md's Security Rules. Nothing in Phase 2.1
+ * consumes this yet; `mint_confirmation`/`run_all` (Phase 2.2) do.
+ */
+export type RunSpec = {
+    /**
+     * Image
+     */
+    image: string;
+    /**
+     * Mounts
+     */
+    mounts: Array<MountSpec>;
+    /**
+     * Network
+     */
+    network?: 'none' | 'bridge';
+    /**
+     * Cpu Limit
+     */
+    cpu_limit: number;
+    /**
+     * Memory Limit Mb
+     */
+    memory_limit_mb: number;
+    /**
+     * Idle Timeout Seconds
+     */
+    idle_timeout_seconds: number;
+    /**
+     * Cell Timeout Seconds
+     */
+    cell_timeout_seconds: number;
+    /**
+     * Gpu
+     */
+    gpu?: boolean;
+};
+
+/**
+ * RunSpecPreview
+ *
+ * What the approval prompt renders before a human confirms: the
+ * proposed code and the full container spec (image, mounts, network,
+ * GPU) — D31's explicit requirement for what the prompt must show.
+ */
+export type RunSpecPreview = {
+    notebook: Notebook;
+    run_spec: RunSpec;
 };
 
 /**
@@ -1710,6 +1917,150 @@ export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResp
 };
 
 export type UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponse = UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses[keyof UpdateExperimentApiProjectsProjectIdExperimentsExperimentIdPatchResponses];
+
+export type GetRunSpecApiExperimentsExperimentIdRunSpecGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/run_spec';
+};
+
+export type GetRunSpecApiExperimentsExperimentIdRunSpecGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunSpecApiExperimentsExperimentIdRunSpecGetError = GetRunSpecApiExperimentsExperimentIdRunSpecGetErrors[keyof GetRunSpecApiExperimentsExperimentIdRunSpecGetErrors];
+
+export type GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunSpecPreview;
+};
+
+export type GetRunSpecApiExperimentsExperimentIdRunSpecGetResponse = GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses[keyof GetRunSpecApiExperimentsExperimentIdRunSpecGetResponses];
+
+export type CreateConfirmationApiExperimentsExperimentIdConfirmationPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/confirmation';
+};
+
+export type CreateConfirmationApiExperimentsExperimentIdConfirmationPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateConfirmationApiExperimentsExperimentIdConfirmationPostError = CreateConfirmationApiExperimentsExperimentIdConfirmationPostErrors[keyof CreateConfirmationApiExperimentsExperimentIdConfirmationPostErrors];
+
+export type CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfirmationToken;
+};
+
+export type CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponse = CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponses[keyof CreateConfirmationApiExperimentsExperimentIdConfirmationPostResponses];
+
+export type KernelActionApiExperimentsExperimentIdKernelPostData = {
+    body: KernelActionRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/kernel';
+};
+
+export type KernelActionApiExperimentsExperimentIdKernelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type KernelActionApiExperimentsExperimentIdKernelPostError = KernelActionApiExperimentsExperimentIdKernelPostErrors[keyof KernelActionApiExperimentsExperimentIdKernelPostErrors];
+
+export type KernelActionApiExperimentsExperimentIdKernelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: KernelStatus;
+};
+
+export type KernelActionApiExperimentsExperimentIdKernelPostResponse = KernelActionApiExperimentsExperimentIdKernelPostResponses[keyof KernelActionApiExperimentsExperimentIdKernelPostResponses];
+
+export type RunAllApiExperimentsExperimentIdRunAllPostData = {
+    body: RunAllRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Experiment Id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/api/experiments/{experiment_id}/run_all';
+};
+
+export type RunAllApiExperimentsExperimentIdRunAllPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunAllApiExperimentsExperimentIdRunAllPostError = RunAllApiExperimentsExperimentIdRunAllPostErrors[keyof RunAllApiExperimentsExperimentIdRunAllPostErrors];
+
+export type RunAllApiExperimentsExperimentIdRunAllPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunAllResponse;
+};
+
+export type RunAllApiExperimentsExperimentIdRunAllPostResponse = RunAllApiExperimentsExperimentIdRunAllPostResponses[keyof RunAllApiExperimentsExperimentIdRunAllPostResponses];
 
 export type TranscribeAudioApiVoiceTranscribePostData = {
     body?: never;

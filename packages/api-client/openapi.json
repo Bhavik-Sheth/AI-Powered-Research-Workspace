@@ -1117,6 +1117,254 @@
         }
       }
     },
+    "/api/experiments/{experiment_id}/run_spec": {
+      "get": {
+        "summary": "Get Run Spec",
+        "description": "No side effect, no token minted \u2014 a caller can fetch this as many\ntimes as it likes while the human is still reading.",
+        "operationId": "get_run_spec_api_experiments__experiment_id__run_spec_get",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSpecPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{experiment_id}/confirmation": {
+      "post": {
+        "summary": "Create Confirmation",
+        "description": "Mints the one-shot token `run_all` requires. Always recomputes the\nspec itself rather than trusting anything the caller might send \u2014\n`mint_confirmation` is issued only after *this* call has the spec in\nhand (D31).",
+        "operationId": "create_confirmation_api_experiments__experiment_id__confirmation_post",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationToken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{experiment_id}/kernel": {
+      "post": {
+        "summary": "Kernel Action",
+        "description": "`\"start\"` has nothing real to start under the `nbclient` fallback \u2014\nthere is no persistent per-experiment kernel (D30's descope) \u2014 so it\njust reports current status, same as a bare query would.\n`\"stop\"` is real: it cancels this experiment's in-flight run container,\nif any (`sandbox.stop_kernel`).",
+        "operationId": "kernel_action_api_experiments__experiment_id__kernel_post",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KernelActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KernelStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{experiment_id}/run_all": {
+      "post": {
+        "summary": "Run All",
+        "description": "Dispatches the run via Job Queue rather than awaiting it inline \u2014\nthe container execution can run long, and cancellation/log streaming\nalready ride the job/WS pipes independently of this request. The\n`run_id` is assigned here so the client has a stable id to correlate\nagainst `run_log`/`run_status` events on the project's WebSocket before\nthe run itself has produced anything.",
+        "operationId": "run_all_api_experiments__experiment_id__run_all_post",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAllRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAllResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/voice/transcribe": {
       "post": {
         "summary": "Transcribe Audio",
@@ -1768,6 +2016,32 @@
         "title": "CitedRow",
         "description": "One retrieval hit, always traceable back to the row it came from\n(MODULES.md `query_memory`) \u2014 the paper it's from when it has one, the\nverbatim text, and the span within the source artifact."
       },
+      "ConfirmationToken": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "experiment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Experiment Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "experiment_id",
+          "expires_at"
+        ],
+        "title": "ConfirmationToken",
+        "description": "The one-shot credential `run_all` requires (D31) \u2014 opaque beyond the\nfields the approval prompt needs to display (`expires_at`, for a\ncountdown or a \"this approval expired, review again\" message)."
+      },
       "ConversationResponse": {
         "properties": {
           "messages": {
@@ -2245,6 +2519,59 @@
         "title": "HighlightInput",
         "description": "`POST /api/projects/:id/highlights` request body (TRD \u00a74.2)."
       },
+      "KernelActionRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stop"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "KernelActionRequest"
+      },
+      "KernelStatus": {
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Experiment Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "running"
+            ],
+            "title": "State"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "experiment_id",
+          "state"
+        ],
+        "title": "KernelStatus",
+        "description": "Response for `POST /api/experiments/:id/kernel`. Under the `nbclient`\nfallback (D30's descope) there is no persistent per-experiment kernel to\nstart or stop \u2014 containers are per-run, not per-experiment. `state`\nhonestly reports the only kernel-shaped fact that exists here: whether\nthis experiment currently has an in-flight run container. `\"start\"`\ncannot create anything real to report back beyond this same status;\n`\"stop\"` maps to cancelling that in-flight container, if any."
+      },
       "LibraryEntry": {
         "properties": {
           "paper": {
@@ -2413,6 +2740,34 @@
         ],
         "title": "ModelSettings"
       },
+      "MountSpec": {
+        "properties": {
+          "host_path": {
+            "type": "string",
+            "title": "Host Path"
+          },
+          "container_path": {
+            "type": "string",
+            "title": "Container Path"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ro",
+              "rw"
+            ],
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host_path",
+          "container_path",
+          "mode"
+        ],
+        "title": "MountSpec",
+        "description": "One bind mount into the run container (D30/Rules.md: never the whole\nvault, never `$HOME`)."
+      },
       "Note": {
         "properties": {
           "id": {
@@ -2497,6 +2852,73 @@
         ],
         "title": "NoteInput",
         "description": "What a caller submits to create or update a note.\n\n`frontmatter_id` is absent to create (Vault Writer assigns one) and\npresent to update \u2014 the id carried in the note's own YAML frontmatter,\nnever the file path (D4)."
+      },
+      "Notebook": {
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Experiment Id"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/NotebookCell"
+            },
+            "type": "array",
+            "title": "Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "experiment_id",
+          "cells"
+        ],
+        "title": "Notebook",
+        "description": "The vault notebook's cell list, returned by `propose_cell`."
+      },
+      "NotebookCell": {
+        "properties": {
+          "cell_type": {
+            "type": "string",
+            "enum": [
+              "code",
+              "markdown",
+              "raw"
+            ],
+            "title": "Cell Type"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "execution_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Count"
+          },
+          "outputs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Outputs",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "cell_type",
+          "source"
+        ],
+        "title": "NotebookCell",
+        "description": "One cell as the UI needs to render it. `execution_count` and\n`outputs` absent/empty is the unrun signal `propose_cell` relies on \u2014\nnbformat's own freshly-created code cell already carries no other kind\nof \"pending approval\" marker, so none is invented here (MODULES.md)."
       },
       "Paper": {
         "properties": {
@@ -3173,6 +3595,116 @@
           "results"
         ],
         "title": "ResultSet"
+      },
+      "RunAllRequest": {
+        "properties": {
+          "confirmation_token": {
+            "type": "string",
+            "title": "Confirmation Token"
+          },
+          "network_optin": {
+            "type": "boolean",
+            "title": "Network Optin",
+            "default": false
+          },
+          "gpu": {
+            "type": "boolean",
+            "title": "Gpu",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmation_token"
+        ],
+        "title": "RunAllRequest"
+      },
+      "RunAllResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "title": "RunAllResponse"
+      },
+      "RunSpec": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "mounts": {
+            "items": {
+              "$ref": "#/components/schemas/MountSpec"
+            },
+            "type": "array",
+            "title": "Mounts"
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "none",
+              "bridge"
+            ],
+            "title": "Network",
+            "default": "none"
+          },
+          "cpu_limit": {
+            "type": "number",
+            "title": "Cpu Limit"
+          },
+          "memory_limit_mb": {
+            "type": "integer",
+            "title": "Memory Limit Mb"
+          },
+          "idle_timeout_seconds": {
+            "type": "integer",
+            "title": "Idle Timeout Seconds"
+          },
+          "cell_timeout_seconds": {
+            "type": "integer",
+            "title": "Cell Timeout Seconds"
+          },
+          "gpu": {
+            "type": "boolean",
+            "title": "Gpu",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "image",
+          "mounts",
+          "cpu_limit",
+          "memory_limit_mb",
+          "idle_timeout_seconds",
+          "cell_timeout_seconds"
+        ],
+        "title": "RunSpec",
+        "description": "The container spec the approval prompt displays before `run_all` can\nmint a confirmation (D31) \u2014 image, mounts, network, and the limits that\nare \"always set\" per Rules.md's Security Rules. Nothing in Phase 2.1\nconsumes this yet; `mint_confirmation`/`run_all` (Phase 2.2) do."
+      },
+      "RunSpecPreview": {
+        "properties": {
+          "notebook": {
+            "$ref": "#/components/schemas/Notebook"
+          },
+          "run_spec": {
+            "$ref": "#/components/schemas/RunSpec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "notebook",
+          "run_spec"
+        ],
+        "title": "RunSpecPreview",
+        "description": "What the approval prompt renders before a human confirms: the\nproposed code and the full container spec (image, mounts, network,\nGPU) \u2014 D31's explicit requirement for what the prompt must show."
       },
       "SaveProviderRequest": {
         "properties": {

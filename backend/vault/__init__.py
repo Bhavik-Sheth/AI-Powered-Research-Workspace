@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Experiments, Highlights, Notes, Paper, Project
 from settings import get_vault_path
-from vault.models import Highlight, Note, NoteInput, RunArtifacts
+from vault.models import ExperimentFilesWritten, Highlight, Note, NoteInput, RunArtifacts
 
 _LAYOUT = ("library/papers", "projects", ".research-os")
 
@@ -235,12 +235,16 @@ async def write_highlight(
 
 async def write_experiment_files(
     session: AsyncSession, experiment_id: uuid.UUID, notebook: bytes, run: RunArtifacts | None = None
-) -> None:
+) -> ExperimentFilesWritten:
     """Writes `notebook.ipynb` (+ a default `requirements.txt`) under
     `experiments/<exp-slug>/` and updates `experiments.notebook_path` in the
-    same operation (MODULES.md, D3/D4). `run` is accepted per the documented
-    signature but not yet handled — Execution Sandbox's run-completion path
-    (Phase 2.3) is what will populate `experiments/<exp>/runs/` from it.
+    same operation (MODULES.md, D3/D4). When `run` is supplied (Execution
+    Sandbox's `run_all`, Phase 2.2), also writes the captured container log
+    to `experiments/<exp>/runs/<run_id>/stdout.log` and returns its
+    vault-relative path as `stdout_ref` — the value `experiment_runs.stdout_ref`
+    stores. `run.artifacts` is metadata only (Vault Writer does not move
+    those files; the run container already wrote them into this same
+    directory via its rw mount).
     """
     experiment = await session.get(Experiments, experiment_id)
     if experiment is None:
@@ -252,11 +256,17 @@ async def write_experiment_files(
     exp_dir = get_vault_path() / "projects" / project.slug / "experiments" / experiment.slug
     notebook_path = f"projects/{project.slug}/experiments/{experiment.slug}/notebook.ipynb"
     requirements_path = exp_dir / "requirements.txt"
+    stdout_ref: str | None = None
     try:
         exp_dir.mkdir(parents=True, exist_ok=True)
         (exp_dir / "notebook.ipynb").write_bytes(notebook)
         if not requirements_path.exists():
             requirements_path.write_text("", encoding="utf-8")
+        if run is not None:
+            run_dir = exp_dir / "runs" / str(run.run_id)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / "stdout.log").write_bytes(run.stdout)
+            stdout_ref = f"projects/{project.slug}/experiments/{experiment.slug}/runs/{run.run_id}/stdout.log"
     except OSError as exc:
         raise VaultWriteFailed(f"could not write {notebook_path}: {exc}") from exc
 
@@ -265,3 +275,5 @@ async def write_experiment_files(
         await session.flush()
     except Exception as exc:
         raise VaultWriteFailed(f"notebook file written but index update failed: {exc}") from exc
+
+    return ExperimentFilesWritten(notebook_path=notebook_path, stdout_ref=stdout_ref)

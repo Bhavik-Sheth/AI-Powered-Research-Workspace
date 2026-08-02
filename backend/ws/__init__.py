@@ -3,6 +3,18 @@ typed events between the renderer and the Agent Harness (MODULES.md, D18
 node 5). A pure event pipe: it knows nothing about tools or context
 assembly, only how to authenticate the upgrade, keep one session per
 project, and shuttle events to and from `harness.run_turn`.
+
+Phase 2.2 adds a second, unrelated user of this same socket: Execution
+Sandbox's run-log/status streaming (`sandbox.RunLogEvent`/`RunStatusEvent`).
+A run is not a Companion turn, so those event models are **not** added to
+`harness.models.TurnEvent`'s union — folding them in would make every
+`TurnEvent` consumer reason about a case that has nothing to do with a
+turn. Instead, `get_session` below exposes the same per-project registry
+`sandbox` broadcasts through directly, and `broadcast`'s type hint is
+widened from `TurnEvent` to any Pydantic model — the function body only
+ever needed `.model_dump(mode="json")`, so nothing about its behavior
+changes for the harness's own callers. The frontend discriminates by each
+message's own `event` field either way.
 """
 
 import asyncio
@@ -96,7 +108,15 @@ async def handle_connect(project_id: uuid.UUID, token: str, websocket: WebSocket
     return session
 
 
-async def broadcast(session: Session, event: TurnEvent) -> None:
+def get_session(project_id: uuid.UUID) -> Session | None:
+    """The same per-project registry `handle_connect` populates — exposed
+    so a non-harness broadcaster (Execution Sandbox's run-log streaming)
+    can find a project's live socket without reaching into `_sessions`
+    directly."""
+    return _sessions.get(project_id)
+
+
+async def broadcast(session: Session, event: TurnEvent | BaseModel) -> None:
     try:
         await session.websocket.send_json(event.model_dump(mode="json"))
     except RuntimeError:

@@ -98,13 +98,40 @@ class Highlight(BaseModel):
     created_at: datetime
 
 
-class RunArtifacts(BaseModel):
-    """What a completed run hands `write_experiment_files` to persist under
-    `experiments/<exp>/runs/` (MODULES.md). Unused this slice — Phase 2.3's
-    Execution Sandbox is the first caller to construct one; the shape here
-    is only what the signature needs to type-check against, not a built-out
-    contract yet.
+class RunArtifactFile(BaseModel):
+    """One already-on-disk output file under `experiments/<exp>/outputs/`,
+    in the exact shape `experiment_runs.artifacts` stores (Schema.md:
+    `[{path, kind, bytes}]`). `path` is vault-relative. Vault Writer does
+    not move or copy this file's bytes — Execution Sandbox's run container
+    already wrote it directly into the same read-write mount; this model
+    only carries the metadata a run row needs to reference it.
     """
 
+    path: str
+    kind: str
+    bytes: int
+
+
+class RunArtifacts(BaseModel):
+    """What a completed run hands `write_experiment_files` to persist under
+    `experiments/<exp>/runs/<run_id>/` (MODULES.md). Execution Sandbox's
+    `run_all` (Phase 2.2) is the first real caller: `stdout` is the
+    captured container log, written to `runs/<run_id>/stdout.log`;
+    `artifacts` only *describes* files the run already wrote into
+    `experiments/<exp>/outputs/` via the rw mount — nothing here re-writes
+    their bytes.
+    """
+
+    run_id: uuid.UUID
     stdout: bytes
-    artifacts: dict[str, bytes] = {}
+    artifacts: list[RunArtifactFile] = []
+
+
+class ExperimentFilesWritten(BaseModel):
+    """What `write_experiment_files` returns: the notebook's vault-relative
+    path always, and the run's captured-log path (`stdout_ref`, Schema.md's
+    `experiment_runs.stdout_ref`) when a `run` was supplied.
+    """
+
+    notebook_path: str
+    stdout_ref: str | None = None
