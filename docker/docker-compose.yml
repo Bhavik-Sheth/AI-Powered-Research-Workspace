@@ -1,0 +1,19 @@
+# Postgres 16 + pgvector, the sole datastore (D7/D8). Data is bind-mounted into
+# the vault's .research-os/ folder so deleting that folder truly deletes it (D3) —
+# a named Docker volume would silently survive the folder being removed.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-researchos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-researchos}
+      POSTGRES_DB: ${POSTGRES_DB:-researchos}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - ${VAULT_PATH}/.research-os/postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-researchos} -d ${POSTGRES_DB:-researchos}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

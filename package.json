@@ -1,0 +1,17 @@
+{
+  "name": "research-companion-os",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "frontend",
+    "desktop",
+    "packages/api-client"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace frontend",
+    "dev:desktop": "npm run dev --workspace desktop",
+    "build:frontend": "npm run build --workspace frontend",
+    "build:desktop": "npm run build --workspace desktop",
+    "generate:api-client": "npm run generate --workspace @research-os/api-client"
+  }
+}

@@ -1,0 +1,57 @@
+/* Design Tokens — the literal values from UI_DESIGN.md §1. Every component
+   renders against these custom properties; no component inlines a color,
+   font or spacing literal of its own (Rules.md). */
+
+:root {
+  /* Color */
+  --page-bg: #e4e0d8;
+  --frame-bg: oklch(91% 0.079 225);
+  --frame-grid: oklch(52% 0.42 225 / 0.16);
+  --frame-grid-quiet: oklch(52% 0.42 225 / 0.07);
+  --surface: oklch(98% 0.024 210);
+  --surface-raised: #fff;
+  --surface-muted: oklch(93% 0.024 210);
+  --surface-inactive: oklch(84% 0.073 210);
+  --accent: oklch(52% 0.385 210);
+  --accent-text: oklch(38% 0.33 210);
+  --accent-text-outline: oklch(42% 0.2 210);
+  --accent-tint-10: oklch(52% 0.385 210 / 0.10);
+  --accent-tint-12: oklch(52% 0.385 210 / 0.12);
+  --accent-tint-14: oklch(52% 0.385 210 / 0.14);
+  --accent-tint-15: oklch(52% 0.385 210 / 0.15);
+  --accent-tint-25: oklch(52% 0.385 210 / 0.25);
+  --link: oklch(45% 0.32 210);
+  --link-hover: oklch(38% 0.36 210);
+  --text-strong: oklch(15% 0.055 210);
+  --text: oklch(28% 0.05 210);
+  --text-muted: oklch(49% 0.04 210);
+  --border: oklch(88% 0.055 210);
+  --border-faint: oklch(92% 0.025 210);
+  --border-dashed: oklch(80% 0.05 210);
+  --graph-edge: oklch(70% 0.05 210);
+
+  /* Danger family — errors only, never a status */
+  --danger-rule: oklch(55% 0.19 25);
+  --danger-border: oklch(80% 0.09 25);
+  --danger-badge-border: oklch(70% 0.12 25);
+  --danger-title: oklch(40% 0.16 25);
+  --danger-body: oklch(35% 0.04 25);
+  --danger-text: oklch(45% 0.15 25);
+  --danger-fill: oklch(52% 0.19 25);
+
+  /* Typography — three families (UI_DESIGN.md §1 Typography). Self-hosted
+     font files are not yet vendored (tracked for a later phase); the stack
+     falls back to the closest system fonts until then. */
+  --font-ui: "Space Grotesk", system-ui, sans-serif;
+  --font-reading: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Shape, elevation, spacing */
+  --radius-frame: 22px;
+  --radius-panel: 14px;
+  --radius-card: 10px;
+  --radius-badge: 9px;
+  --radius-button: 8px;
+  --shell-column-gap: 12px;
+  --panel-shadow: 0 1px 4px oklch(26% 0.079 210 / 0.16);
+}
