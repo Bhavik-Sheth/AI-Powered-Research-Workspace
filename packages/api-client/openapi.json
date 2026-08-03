@@ -2558,6 +2558,72 @@
           }
         }
       }
+    },
+    "/api/projects/{project_id}/graph": {
+      "get": {
+        "summary": "Get Project Graph",
+        "operationId": "get_project_graph_api_projects__project_id__graph_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Types"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Graph"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3185,6 +3251,129 @@
         ],
         "title": "ExperimentRun",
         "description": "The `experiment_runs` row (Schema.md) \u2014 the strongest provenance in\nthe system. `approved_at` is always set: a row cannot exist without a\nvalidated confirmation token (D31, invariant #5). This is the type\n`record_run` returns and `is_measured_eligible` inspects; Execution\nSandbox re-exports it (`sandbox.models.ExperimentRun`) rather than\ndefining a second, duplicate shape, since Experiment Record is the\nmodule that persists this row (MODULES.md's own `record_run` signature)."
+      },
+      "Graph": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "paper_ids": {
+            "additionalProperties": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "object",
+            "title": "Paper Ids",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "edges"
+        ],
+        "title": "Graph"
+      },
+      "GraphEdge": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "src_type": {
+            "type": "string",
+            "enum": [
+              "paper",
+              "author",
+              "dataset",
+              "repo",
+              "topic",
+              "method",
+              "concept",
+              "note",
+              "experiment",
+              "highlight"
+            ],
+            "title": "Src Type"
+          },
+          "src_id": {
+            "type": "string",
+            "title": "Src Id"
+          },
+          "dst_type": {
+            "type": "string",
+            "enum": [
+              "paper",
+              "author",
+              "dataset",
+              "repo",
+              "topic",
+              "method",
+              "concept",
+              "note",
+              "experiment",
+              "highlight"
+            ],
+            "title": "Dst Type"
+          },
+          "dst_id": {
+            "type": "string",
+            "title": "Dst Id"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "cites",
+              "cited_by",
+              "authored_by",
+              "uses_dataset",
+              "has_code",
+              "has_topic",
+              "method_of",
+              "related_method",
+              "inspired_by",
+              "references_note",
+              "relates_to",
+              "contradicts"
+            ],
+            "title": "Relation"
+          },
+          "provenance": {
+            "type": "string",
+            "enum": [
+              "metadata",
+              "llm",
+              "user"
+            ],
+            "title": "Provenance"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "src_type",
+          "src_id",
+          "dst_type",
+          "dst_id",
+          "relation",
+          "provenance"
+        ],
+        "title": "GraphEdge"
       },
       "HTTPValidationError": {
         "properties": {

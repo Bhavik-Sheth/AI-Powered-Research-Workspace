@@ -149,3 +149,68 @@ async def hybrid_retrieve(
     merged = [dict(row, score=float(row["score"])) for row in [*paper_rows, *project_rows]]
     merged.sort(key=lambda row: row["score"], reverse=True)
     return merged[:limit]
+
+
+# The project-scoped graph (D26, Schema.md "Join strategies"): idea_edges are
+# already project-scoped, so they're unioned in flat, no traversal; paper_edges
+# are global, so the walk starts at `roots` (the project's own paper nodes)
+# and expands outward hop by hop, bounded by `depth`, so the view can surface
+# what a project paper cites/is-cited-by without pulling in the whole graph.
+_GRAPH_TRAVERSAL_SQL = text(
+    """
+    WITH RECURSIVE roots(node_type, node_id) AS (
+        SELECT * FROM unnest(CAST(:root_types AS text[]), CAST(:root_ids AS text[]))
+    ),
+    graph_edges AS (
+        SELECT id, src_type, src_id, dst_type, dst_id, relation, provenance, confidence, 0 AS hop
+        FROM paper_edges pe
+        WHERE EXISTS (
+            SELECT 1 FROM roots r
+            WHERE (r.node_type, r.node_id) = (pe.src_type, pe.src_id) OR (r.node_type, r.node_id) = (pe.dst_type, pe.dst_id)
+        )
+
+        UNION ALL
+
+        SELECT pe.id, pe.src_type, pe.src_id, pe.dst_type, pe.dst_id, pe.relation, pe.provenance, pe.confidence, ge.hop + 1
+        FROM paper_edges pe
+        JOIN graph_edges ge ON
+            (pe.src_type = ge.src_type AND pe.src_id = ge.src_id)
+            OR (pe.src_type = ge.dst_type AND pe.src_id = ge.dst_id)
+            OR (pe.dst_type = ge.src_type AND pe.dst_id = ge.src_id)
+            OR (pe.dst_type = ge.dst_type AND pe.dst_id = ge.dst_id)
+        WHERE ge.hop < :depth
+    )
+    SELECT DISTINCT id, src_type, src_id, dst_type, dst_id, relation, provenance, confidence
+    FROM graph_edges
+    WHERE CAST(:types AS text[]) IS NULL OR src_type = ANY(CAST(:types AS text[])) OR dst_type = ANY(CAST(:types AS text[]))
+
+    UNION
+
+    SELECT id, src_type, src_id, dst_type, dst_id, relation, provenance, NULL::real AS confidence
+    FROM idea_edges
+    WHERE project_id = :project_id
+      AND (CAST(:types AS text[]) IS NULL OR src_type = ANY(CAST(:types AS text[])) OR dst_type = ANY(CAST(:types AS text[])))
+    """
+)
+
+
+async def traverse_graph(
+    session: AsyncSession,
+    project_id: uuid.UUID,
+    roots: list[tuple[str, str]],
+    depth: int,
+    types: list[str] | None = None,
+) -> list[dict]:
+    """The recursive-CTE traversal behind the project-scoped graph union
+    (D26) — every `idea_edges` row for `project_id`, plus `paper_edges`
+    reachable from `roots` within `depth` hops. `roots` is a list of
+    `(node_type, node_id)` pairs; an empty list yields an empty `paper_edges`
+    side with `idea_edges` alone, never an error.
+    """
+    root_types = [r[0] for r in roots]
+    root_ids = [r[1] for r in roots]
+    rows = await session.execute(
+        _GRAPH_TRAVERSAL_SQL,
+        {"project_id": project_id, "root_types": root_types, "root_ids": root_ids, "depth": depth, "types": types},
+    )
+    return [dict(row) for row in rows.mappings().all()]

@@ -11,12 +11,16 @@
   "dependencies": {
     "@research-os/api-client": "*",
     "@tanstack/react-query": "^5.62.0",
+    "cytoscape": "^3.34.0",
     "pdfjs-dist": "^6.2.108",
     "react": "^18.3.1",
+    "react-cytoscapejs": "^2.0.0",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/cytoscape": "^3.21.9",
     "@types/react": "^18.3.12",
+    "@types/react-cytoscapejs": "^1.2.6",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",

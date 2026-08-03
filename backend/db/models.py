@@ -307,6 +307,43 @@ class PaperEdges(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
 
+class IdeaEdges(Base):
+    """The project-scoped half of the knowledge graph (Schema.md `idea_edges`,
+    Phase 1 written, Phase 3 surfaced, D26) — edges involving the user's own
+    artifacts. The graph the UI shows is the union of these and the relevant
+    global `paper_edges`."""
+
+    __tablename__ = "idea_edges"
+    __table_args__ = (
+        CheckConstraint(
+            "src_type IN ('note','experiment','paper','dataset','method','concept','highlight')",
+            name="idea_edges_src_type_check",
+        ),
+        CheckConstraint(
+            "dst_type IN ('note','experiment','paper','dataset','method','concept','highlight')",
+            name="idea_edges_dst_type_check",
+        ),
+        CheckConstraint(
+            "relation IN ('inspired_by','uses_dataset','references_note','relates_to','contradicts')",
+            name="idea_edges_relation_check",
+        ),
+        CheckConstraint("provenance IN ('metadata', 'llm', 'user')", name="idea_edges_provenance_check"),
+        UniqueConstraint(
+            "project_id", "src_type", "src_id", "dst_type", "dst_id", "relation", "provenance", name="idea_edges_identity_key"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    src_type: Mapped[str] = mapped_column(String, nullable=False)
+    src_id: Mapped[str] = mapped_column(String, nullable=False)
+    dst_type: Mapped[str] = mapped_column(String, nullable=False)
+    dst_id: Mapped[str] = mapped_column(String, nullable=False)
+    relation: Mapped[str] = mapped_column(String, nullable=False)
+    provenance: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
 class ProjectPapers(Base):
     """Project membership + the user's own relevance note (Schema.md
     `project_papers`, Phase 1.4) — the only place a paper becomes project-specific."""

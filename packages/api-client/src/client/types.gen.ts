@@ -376,6 +376,60 @@ export type ExperimentRun = {
 };
 
 /**
+ * Graph
+ */
+export type Graph = {
+    /**
+     * Edges
+     */
+    edges: Array<GraphEdge>;
+    /**
+     * Paper Ids
+     */
+    paper_ids?: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * GraphEdge
+ */
+export type GraphEdge = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Src Type
+     */
+    src_type: 'paper' | 'author' | 'dataset' | 'repo' | 'topic' | 'method' | 'concept' | 'note' | 'experiment' | 'highlight';
+    /**
+     * Src Id
+     */
+    src_id: string;
+    /**
+     * Dst Type
+     */
+    dst_type: 'paper' | 'author' | 'dataset' | 'repo' | 'topic' | 'method' | 'concept' | 'note' | 'experiment' | 'highlight';
+    /**
+     * Dst Id
+     */
+    dst_id: string;
+    /**
+     * Relation
+     */
+    relation: 'cites' | 'cited_by' | 'authored_by' | 'uses_dataset' | 'has_code' | 'has_topic' | 'method_of' | 'related_method' | 'inspired_by' | 'references_note' | 'relates_to' | 'contradicts';
+    /**
+     * Provenance
+     */
+    provenance: 'metadata' | 'llm' | 'user';
+    /**
+     * Confidence
+     */
+    confidence?: number | null;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -3148,3 +3202,44 @@ export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponses = {
 };
 
 export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponse = UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponses[keyof UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponses];
+
+export type GetProjectGraphApiProjectsProjectIdGraphGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: {
+        /**
+         * Types
+         */
+        types?: string;
+    };
+    url: '/api/projects/{project_id}/graph';
+};
+
+export type GetProjectGraphApiProjectsProjectIdGraphGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetProjectGraphApiProjectsProjectIdGraphGetError = GetProjectGraphApiProjectsProjectIdGraphGetErrors[keyof GetProjectGraphApiProjectsProjectIdGraphGetErrors];
+
+export type GetProjectGraphApiProjectsProjectIdGraphGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Graph;
+};
+
+export type GetProjectGraphApiProjectsProjectIdGraphGetResponse = GetProjectGraphApiProjectsProjectIdGraphGetResponses[keyof GetProjectGraphApiProjectsProjectIdGraphGetResponses];

@@ -5,6 +5,7 @@ import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
 import type { SelectionState } from "../companion/wsTypes";
 import { Dashboard } from "../dashboard/Dashboard";
 import { ExperimentsBoard } from "../experiments/ExperimentsBoard";
+import { GraphView } from "../graph/GraphView";
 import { LibraryView } from "../library/LibraryView";
 import { MatrixView } from "../matrix/MatrixView";
 import { NotesView } from "../notes/NotesView";
@@ -29,6 +30,7 @@ const NOTES_TAB: TabRef = { id: "notes", kind: "notes", params: {}, label: "Note
 const EXPERIMENTS_TAB: TabRef = { id: "experiments", kind: "experiments", params: {}, label: "Experiments" };
 const SEARCH_TAB: TabRef = { id: "search", kind: "search", params: {}, label: "Search" };
 const MATRIX_TAB: TabRef = { id: "matrix", kind: "matrix", params: {}, label: "Matrix" };
+const GRAPH_TAB: TabRef = { id: "graph", kind: "graph", params: {}, label: "Graph" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 
 /** Picks up where the user left off (Phase 1.8 sign-off): most-recently-
@@ -141,6 +143,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <ExperimentsBoard projectId={projectId} socket={socket} />;
       case "matrix":
         return <MatrixView projectId={projectId} onOpenPaper={openReaderTab} />;
+      case "graph":
+        return <GraphView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
@@ -181,6 +185,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                         if (item === "Notes") openTab(NOTES_TAB);
                         if (item === "Experiments") openTab(EXPERIMENTS_TAB);
                         if (item === "Matrix") openTab(MATRIX_TAB);
+                        if (item === "Graph") openTab(GRAPH_TAB);
                       }}
                     >
                       {item}

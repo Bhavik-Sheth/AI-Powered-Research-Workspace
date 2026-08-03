@@ -30,6 +30,19 @@
   --border-dashed: oklch(80% 0.05 210);
   --graph-edge: oklch(70% 0.05 210);
 
+  /* Categorical palette (UI_DESIGN.md §1) — the one sanctioned exception to
+     "one accent". Used only for knowledge-graph node types (§4.7). Equal
+     lightness and chroma so no type reads as more important; each is also
+     paired with a shape (frontend/src/graph/nodeStyle.ts) so it survives
+     color-blindness. Duplicated as literal values there because Cytoscape's
+     canvas renderer cannot resolve a CSS custom property. */
+  --graph-node-paper: oklch(52% 0.385 210);
+  --graph-node-author: oklch(58% 0.14 285);
+  --graph-node-dataset: oklch(58% 0.14 150);
+  --graph-node-method: oklch(62% 0.13 75);
+  --graph-node-repo: oklch(58% 0.15 330);
+  --graph-node-idea: oklch(58% 0.14 25);
+
   /* Danger family — errors only, never a status */
   --danger-rule: oklch(55% 0.19 25);
   --danger-border: oklch(80% 0.09 25);

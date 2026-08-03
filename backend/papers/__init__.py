@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 import httpx
 from pydantic import BaseModel
+from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,8 +23,8 @@ import memory
 import settings
 from db.models import Paper as PaperRow
 from db.models import PaperCards, PaperContent, QuoteAnchors
-from graph import write_metadata_edges
-from graph.models import MetadataEdge
+from graph import write_llm_edges, write_metadata_edges
+from graph.models import LLMEdge, MetadataEdge
 from llm import LLMError, Message, complete_structured
 from papers.fetch import download_pdf, resolve_oa_pdf_url
 from papers.models import Paper, PaperCardField, PaperContentView, PaperInput, SourceIds
@@ -46,6 +47,15 @@ _ENRICH_JOB_TIMEOUT_S = 30
 _EMBED_JOB_TIMEOUT_S = 120
 
 _FIELD_KEYS = ("problem", "method", "datasets", "results", "limitations")
+
+# Which extractive-card fields double as LLM-derived graph edges (D26), and
+# which node type/relation each becomes — a paper-intrinsic edge is only
+# ever asserted from a field that already passed Provenance for this paper
+# (the same anchor a `paper_cards` row carries), never a separate claim.
+_GRAPH_EDGE_FIELDS: dict[str, tuple[str, str]] = {
+    "datasets": ("dataset", "uses_dataset"),
+    "method": ("method", "related_method"),
+}
 
 
 def _normalise_doi(doi: str) -> str:
@@ -307,6 +317,8 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
                 timeout=60,
             )
 
+            paper = await session.get(PaperRow, pid)
+            llm_edges: list[LLMEdge] = []
             for field_key in _FIELD_KEYS:
                 span = getattr(extracted, field_key)
                 if span is None or not span.quote:
@@ -324,8 +336,21 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
                         extracted_by_model=model_name,
                     )
                 )
+                edge_kind = _GRAPH_EDGE_FIELDS.get(field_key)
+                if edge_kind is not None:
+                    dst_type, relation = edge_kind
+                    llm_edges.append(
+                        LLMEdge(
+                            src_type="paper",
+                            src_id=paper.canonical_id,
+                            dst_type=dst_type,
+                            dst_id=slugify(span.quote[:80]),
+                            relation=relation,
+                        )
+                    )
+            if llm_edges:
+                await write_llm_edges(session, pid, llm_edges)
 
-            paper = await session.get(PaperRow, pid)
             paper.extract_state = "done"
     except (*LLMError, RuntimeError):
         # Recorded so the Library View shows "failed" rather than a stuck
