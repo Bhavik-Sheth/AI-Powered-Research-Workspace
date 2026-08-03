@@ -496,6 +496,61 @@ export type ExperimentRun = {
 };
 
 /**
+ * FeedActionRequest
+ */
+export type FeedActionRequest = {
+    /**
+     * Action
+     */
+    action: 'save' | 'dismiss';
+    /**
+     * Item Id
+     */
+    item_id: string;
+};
+
+/**
+ * FeedItem
+ */
+export type FeedItem = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Canonical Id
+     */
+    canonical_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Metadata
+     */
+    metadata: {
+        [key: string]: unknown;
+    };
+    /**
+     * Score
+     */
+    score: number;
+    why_relevant: WhyRelevant;
+    /**
+     * State
+     */
+    state: 'new' | 'saved' | 'dismissed';
+    /**
+     * Polled At
+     */
+    polled_at: string;
+};
+
+/**
  * Graph
  */
 export type Graph = {
@@ -1896,6 +1951,27 @@ export type VaultPathRequest = {
      * Path
      */
     path: string;
+};
+
+/**
+ * WhyRelevant
+ *
+ * Why one item surfaced. Required on every `FeedItem` — an item with
+ * none of these non-empty never reaches `feed_items` (Rules.md).
+ */
+export type WhyRelevant = {
+    /**
+     * Matched Keywords
+     */
+    matched_keywords?: Array<string>;
+    /**
+     * Matched Categories
+     */
+    matched_categories?: Array<string>;
+    /**
+     * Similarity
+     */
+    similarity?: number;
 };
 
 export type GetHealthApiHealthGetData = {
@@ -3824,3 +3900,79 @@ export type PutInterestProfileApiProjectsProjectIdInterestProfilePutResponses = 
 };
 
 export type PutInterestProfileApiProjectsProjectIdInterestProfilePutResponse = PutInterestProfileApiProjectsProjectIdInterestProfilePutResponses[keyof PutInterestProfileApiProjectsProjectIdInterestProfilePutResponses];
+
+export type ListFeedApiProjectsProjectIdFeedGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/feed';
+};
+
+export type ListFeedApiProjectsProjectIdFeedGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFeedApiProjectsProjectIdFeedGetError = ListFeedApiProjectsProjectIdFeedGetErrors[keyof ListFeedApiProjectsProjectIdFeedGetErrors];
+
+export type ListFeedApiProjectsProjectIdFeedGetResponses = {
+    /**
+     * Response List Feed Api Projects  Project Id  Feed Get
+     *
+     * Successful Response
+     */
+    200: Array<FeedItem>;
+};
+
+export type ListFeedApiProjectsProjectIdFeedGetResponse = ListFeedApiProjectsProjectIdFeedGetResponses[keyof ListFeedApiProjectsProjectIdFeedGetResponses];
+
+export type ActOnFeedItemApiProjectsProjectIdFeedPostData = {
+    body: FeedActionRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/feed';
+};
+
+export type ActOnFeedItemApiProjectsProjectIdFeedPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ActOnFeedItemApiProjectsProjectIdFeedPostError = ActOnFeedItemApiProjectsProjectIdFeedPostErrors[keyof ActOnFeedItemApiProjectsProjectIdFeedPostErrors];
+
+export type ActOnFeedItemApiProjectsProjectIdFeedPostResponses = {
+    /**
+     * Response Act On Feed Item Api Projects  Project Id  Feed Post
+     *
+     * Successful Response
+     */
+    200: Array<FeedItem>;
+};
+
+export type ActOnFeedItemApiProjectsProjectIdFeedPostResponse = ActOnFeedItemApiProjectsProjectIdFeedPostResponses[keyof ActOnFeedItemApiProjectsProjectIdFeedPostResponses];

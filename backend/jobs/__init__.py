@@ -38,18 +38,32 @@ _worker_task: asyncio.Task[None] | None = None
 # open/tunable post-v1; daily is a reasonable default until then.
 _FEED_POLL_INTERVAL_S = 24 * 60 * 60
 _INITIAL_FEED_LOOKBACK = timedelta(days=14)
+_INTEREST_PROFILE_REEXTRACT_INTERVAL_S = 7 * 24 * 60 * 60  # weekly (PRD §14, TRD §3.6)
+
+# SAQ's own job default is 10s (see papers/__init__.py's same note) — both
+# jobs below fan out to external literature APIs and/or cold-load an ML
+# model on first run, far longer than that default.
+_FEED_POLL_JOB_TIMEOUT_S = 300
+_REEXTRACT_JOB_TIMEOUT_S = 60
 
 
 def _feed_poll_kwargs(row: ScheduledJobs) -> dict:
     since = row.last_run_at or (datetime.now(timezone.utc) - _INITIAL_FEED_LOOKBACK)
-    return {"project_id": str(row.project_id), "since": since.isoformat()}
+    return {"project_id": str(row.project_id), "since": since.isoformat(), "timeout": _FEED_POLL_JOB_TIMEOUT_S}
+
+
+def _reextract_kwargs(row: ScheduledJobs) -> dict:
+    return {"project_id": str(row.project_id), "timeout": _REEXTRACT_JOB_TIMEOUT_S}
 
 
 # job_kind -> (SAQ-registered handler name, cadence seconds, kwargs builder).
-# Only `feed_poll` has a handler as of Phase 5.1; `interest_profile_reextract`
-# (Schema.md's other CHECK value) arrives with Phase 5.2.
 _SCHEDULE_KINDS: dict[str, tuple[str, int, Callable[[ScheduledJobs], dict]]] = {
     "feed_poll": ("poll_feed_job", _FEED_POLL_INTERVAL_S, _feed_poll_kwargs),
+    "interest_profile_reextract": (
+        "interest_profile_reextract_job",
+        _INTEREST_PROFILE_REEXTRACT_INTERVAL_S,
+        _reextract_kwargs,
+    ),
 }
 
 
@@ -58,7 +72,7 @@ def _job_functions() -> list:
     # `enqueue` from within its own job handlers), so a top-level import
     # here would cycle. By the time `start()` runs (Sidecar Bootstrap's
     # lifespan), papers/ is already fully loaded via main.py's own imports.
-    from feed import poll_feed_job
+    from feed import interest_profile_reextract_job, poll_feed_job
     from memory import chunk_and_embed_job
     from papers import embed_paper_job, enrich_paper_job, extract_card_job, parse_paper_job
     from sandbox import run_experiment_job
@@ -71,6 +85,7 @@ def _job_functions() -> list:
         chunk_and_embed_job,
         run_experiment_job,
         poll_feed_job,
+        interest_profile_reextract_job,
     ]
 
 

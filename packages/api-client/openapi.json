@@ -3292,6 +3292,134 @@
           }
         }
       }
+    },
+    "/api/projects/{project_id}/feed": {
+      "get": {
+        "summary": "List Feed",
+        "operationId": "list_feed_api_projects__project_id__feed_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FeedItem"
+                  },
+                  "title": "Response List Feed Api Projects  Project Id  Feed Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Act On Feed Item",
+        "operationId": "act_on_feed_item_api_projects__project_id__feed_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FeedItem"
+                  },
+                  "title": "Response Act On Feed Item Api Projects  Project Id  Feed Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4100,6 +4228,90 @@
         ],
         "title": "ExperimentRun",
         "description": "The `experiment_runs` row (Schema.md) \u2014 the strongest provenance in\nthe system. `approved_at` is always set: a row cannot exist without a\nvalidated confirmation token (D31, invariant #5). This is the type\n`record_run` returns and `is_measured_eligible` inspects; Execution\nSandbox re-exports it (`sandbox.models.ExperimentRun`) rather than\ndefining a second, duplicate shape, since Experiment Record is the\nmodule that persists this row (MODULES.md's own `record_run` signature)."
+      },
+      "FeedActionRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "save",
+              "dismiss"
+            ],
+            "title": "Action"
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "item_id"
+        ],
+        "title": "FeedActionRequest"
+      },
+      "FeedItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "canonical_id": {
+            "type": "string",
+            "title": "Canonical Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "why_relevant": {
+            "$ref": "#/components/schemas/WhyRelevant"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "new",
+              "saved",
+              "dismissed"
+            ],
+            "title": "State"
+          },
+          "polled_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Polled At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "canonical_id",
+          "title",
+          "metadata",
+          "score",
+          "why_relevant",
+          "state",
+          "polled_at"
+        ],
+        "title": "FeedItem"
       },
       "Graph": {
         "properties": {
@@ -6525,6 +6737,34 @@
           "path"
         ],
         "title": "VaultPathRequest"
+      },
+      "WhyRelevant": {
+        "properties": {
+          "matched_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Keywords",
+            "default": []
+          },
+          "matched_categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Categories",
+            "default": []
+          },
+          "similarity": {
+            "type": "number",
+            "title": "Similarity",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "WhyRelevant",
+        "description": "Why one item surfaced. Required on every `FeedItem` \u2014 an item with\nnone of these non-empty never reaches `feed_items` (Rules.md)."
       }
     }
   }

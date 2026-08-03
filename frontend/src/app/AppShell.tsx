@@ -5,6 +5,7 @@ import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
 import type { SelectionState } from "../companion/wsTypes";
 import { Dashboard } from "../dashboard/Dashboard";
 import { ExperimentsBoard } from "../experiments/ExperimentsBoard";
+import { FeedView } from "../feed/FeedView";
 import { GraphView } from "../graph/GraphView";
 import { LibraryView } from "../library/LibraryView";
 import { MatrixView } from "../matrix/MatrixView";
@@ -33,6 +34,7 @@ const EXPERIMENTS_TAB: TabRef = { id: "experiments", kind: "experiments", params
 const SEARCH_TAB: TabRef = { id: "search", kind: "search", params: {}, label: "Search" };
 const MATRIX_TAB: TabRef = { id: "matrix", kind: "matrix", params: {}, label: "Matrix" };
 const GRAPH_TAB: TabRef = { id: "graph", kind: "graph", params: {}, label: "Graph" };
+const FEED_TAB: TabRef = { id: "feed", kind: "feed", params: {}, label: "Feed" };
 const WRITING_TAB: TabRef = { id: "writing", kind: "writing", params: {}, label: "Writing" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 const SETTINGS_TAB: TabRef = { id: "settings", kind: "settings", params: {}, label: "Settings" };
@@ -149,6 +151,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <MatrixView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "graph":
         return <GraphView projectId={projectId} onOpenPaper={openReaderTab} />;
+      case "feed":
+        return <FeedView projectId={projectId} />;
       case "writing":
         return <ManuscriptTab projectId={projectId} />;
       case "reader":
@@ -199,6 +203,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                         if (item === "Experiments") openTab(EXPERIMENTS_TAB);
                         if (item === "Matrix") openTab(MATRIX_TAB);
                         if (item === "Graph") openTab(GRAPH_TAB);
+                        if (item === "Feed") openTab(FEED_TAB);
                         if (item === "Writing") openTab(WRITING_TAB);
                       }}
                     >
