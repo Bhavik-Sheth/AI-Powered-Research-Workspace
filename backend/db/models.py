@@ -26,7 +26,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import INT4RANGE, JSONB, TIMESTAMP, TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSONB, TIMESTAMP, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 EMBEDDING_DIM = 768
@@ -519,3 +519,55 @@ class ProjectChunks(Base):
     text_: Mapped[str] = mapped_column("text", String, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
     tsv: Mapped[str] = mapped_column(TSVECTOR, Computed("to_tsvector('english', text)", persisted=True), nullable=False)
+
+
+class Matrices(Base):
+    """The literature matrix, persisted as a project artifact (Schema.md
+    `matrices`, Phase 3, D27). `selected_paper_ids`/`selected_experiment_ids`
+    are arrays, not join tables, because row order is part of the artifact
+    and the whole matrix is written as one `PUT` (MODULES.md)."""
+
+    __tablename__ = "matrices"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    selected_paper_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=False, server_default=text("'{}'")
+    )
+    selected_experiment_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=False, server_default=text("'{}'")
+    )
+    column_defs: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+
+
+class MatrixCells(Base):
+    """D27's `cell_overrides` and `custom_column_cache` in one table (Schema.md
+    `matrix_cells`, Phase 3) — distinguished by `source`, which is what keeps
+    "editing a cell is an override, never a corruption of the extracted
+    value" true by construction. Exactly one of `paper_id`/`experiment_id` is
+    set, matching which kind of row the cell belongs to."""
+
+    __tablename__ = "matrix_cells"
+    __table_args__ = (
+        CheckConstraint("source IN ('extracted', 'user')", name="matrix_cells_source_check"),
+        CheckConstraint("source <> 'extracted' OR anchor_id IS NOT NULL", name="matrix_cells_extracted_requires_anchor_check"),
+        CheckConstraint(
+            "(paper_id IS NOT NULL)::int + (experiment_id IS NOT NULL)::int = 1", name="matrix_cells_one_row_kind_check"
+        ),
+        UniqueConstraint("matrix_id", "paper_id", "experiment_id", "column_key", name="matrix_cells_row_column_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    matrix_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("matrices.id", ondelete="CASCADE"), nullable=False)
+    paper_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("papers.id", ondelete="CASCADE"), nullable=True)
+    experiment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), nullable=True
+    )
+    column_key: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    anchor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("quote_anchors.id", ondelete="CASCADE"), nullable=True
+    )
+    cached_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

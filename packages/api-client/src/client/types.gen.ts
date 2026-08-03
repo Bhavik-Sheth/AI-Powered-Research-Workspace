@@ -68,6 +68,28 @@ export type CitedRow = {
 };
 
 /**
+ * ColumnDef
+ */
+export type ColumnDef = {
+    /**
+     * Column Key
+     */
+    column_key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Kind
+     */
+    kind: 'standard' | 'custom' | 'user';
+    /**
+     * Query
+     */
+    query?: string | null;
+};
+
+/**
  * ConfirmationToken
  *
  * The one-shot credential `run_all` requires (D31) — opaque beyond the
@@ -505,6 +527,137 @@ export type LibraryEntry = {
      * Why Relevant
      */
     why_relevant: string | null;
+};
+
+/**
+ * Matrix
+ */
+export type Matrix = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Selected Paper Ids
+     */
+    selected_paper_ids: Array<string>;
+    /**
+     * Selected Experiment Ids
+     */
+    selected_experiment_ids: Array<string>;
+    /**
+     * Column Defs
+     */
+    column_defs: Array<ColumnDef>;
+};
+
+/**
+ * MatrixCell
+ */
+export type MatrixCell = {
+    /**
+     * Row Id
+     */
+    row_id: string;
+    /**
+     * Row Kind
+     */
+    row_kind: 'paper' | 'experiment';
+    /**
+     * Column Key
+     */
+    column_key: string;
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Source
+     */
+    source: 'extracted' | 'user';
+    /**
+     * Anchor Id
+     */
+    anchor_id?: string | null;
+    /**
+     * Section Heading
+     */
+    section_heading?: string | null;
+    /**
+     * Char Start
+     */
+    char_start?: number | null;
+    /**
+     * Char End
+     */
+    char_end?: number | null;
+};
+
+/**
+ * MatrixRow
+ */
+export type MatrixRow = {
+    /**
+     * Row Id
+     */
+    row_id: string;
+    /**
+     * Row Kind
+     */
+    row_kind: 'paper' | 'experiment';
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * MatrixUpdate
+ *
+ * What a caller submits to `update_matrix` — one `PUT`-shaped write
+ * (MODULES.md); every field optional so a partial update only touches
+ * what it names.
+ */
+export type MatrixUpdate = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Selected Paper Ids
+     */
+    selected_paper_ids?: Array<string> | null;
+    /**
+     * Selected Experiment Ids
+     */
+    selected_experiment_ids?: Array<string> | null;
+    /**
+     * Column Defs
+     */
+    column_defs?: Array<ColumnDef> | null;
+};
+
+/**
+ * MatrixView
+ */
+export type MatrixView = {
+    matrix: Matrix;
+    /**
+     * Rows
+     */
+    rows: Array<MatrixRow>;
+    /**
+     * Cells
+     */
+    cells: Array<MatrixCell>;
 };
 
 /**
@@ -1441,6 +1594,24 @@ export type Transcript = {
      * Text
      */
     text: string;
+};
+
+/**
+ * UpdateCellRequest
+ */
+export type UpdateCellRequest = {
+    /**
+     * Row Id
+     */
+    row_id: string;
+    /**
+     * Column Key
+     */
+    column_key: string;
+    /**
+     * Value
+     */
+    value: string;
 };
 
 /**
@@ -2783,3 +2954,197 @@ export type GetResultApiResultsResultIdGetResponses = {
 };
 
 export type GetResultApiResultsResultIdGetResponse = GetResultApiResultsResultIdGetResponses[keyof GetResultApiResultsResultIdGetResponses];
+
+export type ListMatricesApiProjectsProjectIdMatrixGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/matrix';
+};
+
+export type ListMatricesApiProjectsProjectIdMatrixGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMatricesApiProjectsProjectIdMatrixGetError = ListMatricesApiProjectsProjectIdMatrixGetErrors[keyof ListMatricesApiProjectsProjectIdMatrixGetErrors];
+
+export type ListMatricesApiProjectsProjectIdMatrixGetResponses = {
+    /**
+     * Response List Matrices Api Projects  Project Id  Matrix Get
+     *
+     * Successful Response
+     */
+    200: Array<Matrix>;
+};
+
+export type ListMatricesApiProjectsProjectIdMatrixGetResponse = ListMatricesApiProjectsProjectIdMatrixGetResponses[keyof ListMatricesApiProjectsProjectIdMatrixGetResponses];
+
+export type CreateMatrixApiProjectsProjectIdMatrixPostData = {
+    body: MatrixUpdate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/matrix';
+};
+
+export type CreateMatrixApiProjectsProjectIdMatrixPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateMatrixApiProjectsProjectIdMatrixPostError = CreateMatrixApiProjectsProjectIdMatrixPostErrors[keyof CreateMatrixApiProjectsProjectIdMatrixPostErrors];
+
+export type CreateMatrixApiProjectsProjectIdMatrixPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Matrix;
+};
+
+export type CreateMatrixApiProjectsProjectIdMatrixPostResponse = CreateMatrixApiProjectsProjectIdMatrixPostResponses[keyof CreateMatrixApiProjectsProjectIdMatrixPostResponses];
+
+export type GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Matrix Id
+         */
+        matrix_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/matrix/{matrix_id}';
+};
+
+export type GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetError = GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetErrors[keyof GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetErrors];
+
+export type GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MatrixView;
+};
+
+export type GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetResponse = GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetResponses[keyof GetMatrixViewApiProjectsProjectIdMatrixMatrixIdGetResponses];
+
+export type PutMatrixApiProjectsProjectIdMatrixMatrixIdPutData = {
+    body: MatrixUpdate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Matrix Id
+         */
+        matrix_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/matrix/{matrix_id}';
+};
+
+export type PutMatrixApiProjectsProjectIdMatrixMatrixIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutMatrixApiProjectsProjectIdMatrixMatrixIdPutError = PutMatrixApiProjectsProjectIdMatrixMatrixIdPutErrors[keyof PutMatrixApiProjectsProjectIdMatrixMatrixIdPutErrors];
+
+export type PutMatrixApiProjectsProjectIdMatrixMatrixIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: Matrix;
+};
+
+export type PutMatrixApiProjectsProjectIdMatrixMatrixIdPutResponse = PutMatrixApiProjectsProjectIdMatrixMatrixIdPutResponses[keyof PutMatrixApiProjectsProjectIdMatrixMatrixIdPutResponses];
+
+export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchData = {
+    body: UpdateCellRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Matrix Id
+         */
+        matrix_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/matrix/{matrix_id}/cells';
+};
+
+export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchError = UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchErrors[keyof UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchErrors];
+
+export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: MatrixCell;
+};
+
+export type UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponse = UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponses[keyof UpdateCellApiProjectsProjectIdMatrixMatrixIdCellsPatchResponses];

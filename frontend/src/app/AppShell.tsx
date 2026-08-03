@@ -6,6 +6,7 @@ import type { SelectionState } from "../companion/wsTypes";
 import { Dashboard } from "../dashboard/Dashboard";
 import { ExperimentsBoard } from "../experiments/ExperimentsBoard";
 import { LibraryView } from "../library/LibraryView";
+import { MatrixView } from "../matrix/MatrixView";
 import { NotesView } from "../notes/NotesView";
 import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
@@ -27,6 +28,7 @@ const LIBRARY_TAB: TabRef = { id: "library", kind: "library", params: {}, label:
 const NOTES_TAB: TabRef = { id: "notes", kind: "notes", params: {}, label: "Notes" };
 const EXPERIMENTS_TAB: TabRef = { id: "experiments", kind: "experiments", params: {}, label: "Experiments" };
 const SEARCH_TAB: TabRef = { id: "search", kind: "search", params: {}, label: "Search" };
+const MATRIX_TAB: TabRef = { id: "matrix", kind: "matrix", params: {}, label: "Matrix" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 
 /** Picks up where the user left off (Phase 1.8 sign-off): most-recently-
@@ -137,6 +139,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <NotesView projectId={projectId} />;
       case "experiments":
         return <ExperimentsBoard projectId={projectId} socket={socket} />;
+      case "matrix":
+        return <MatrixView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
@@ -176,6 +180,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                         if (item === "Papers") openTab(LIBRARY_TAB);
                         if (item === "Notes") openTab(NOTES_TAB);
                         if (item === "Experiments") openTab(EXPERIMENTS_TAB);
+                        if (item === "Matrix") openTab(MATRIX_TAB);
                       }}
                     >
                       {item}
