@@ -40,6 +40,17 @@ __all__ = ["begin_turn", "run_turn", "interrupt"]
 
 _CITE_PATTERN = re.compile(r"<cite>(.*?)</cite>", re.DOTALL)
 
+# Every other LLM call in this codebase passes an explicit timeout
+# (memory-decision, extraction, scoped-column queries); the primary
+# completion is the one exception, and that gap is exactly what let a
+# stalled provider connection hang a turn forever, un-cancellable, since
+# the cooperative cancel-flag check below only runs *between* yielded
+# chunks — a stream that never yields even once can never be interrupted.
+# LiteLLM applies this per read, not as a hard cap on total stream
+# duration, so a genuinely long reasoning response that keeps producing
+# chunks is unaffected.
+_COMPLETION_TIMEOUT_S = 90
+
 # One in-flight turn per session (MODULES.md's Agent Harness state note).
 # Cancellation is cooperative rather than a real `asyncio.Task.cancel()`
 # handed across the transport boundary: `run_turn` checks the flag between
@@ -258,7 +269,7 @@ async def run_turn(
         full_text = ""
         interrupted = False
         try:
-            async for chunk in complete(llm_messages, tier="primary"):
+            async for chunk in complete(llm_messages, tier="primary", timeout=_COMPLETION_TIMEOUT_S):
                 full_text += chunk.delta
                 if cancel_flag.is_set():
                     interrupted = True
