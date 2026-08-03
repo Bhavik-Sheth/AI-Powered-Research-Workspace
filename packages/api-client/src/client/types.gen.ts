@@ -50,6 +50,37 @@ export type BodyInsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPost = {
 };
 
 /**
+ * CheckCitationsResponse
+ */
+export type CheckCitationsResponse = {
+    /**
+     * Findings
+     */
+    findings: Array<CitationFinding>;
+};
+
+/**
+ * CitationFinding
+ *
+ * One entry of `documents.citation_findings` (Schema.md) — a missing
+ * `\cite` target or a claim `check_citations` could not link to a source.
+ */
+export type CitationFinding = {
+    /**
+     * Kind
+     */
+    kind: 'missing' | 'unsupported';
+    /**
+     * Span
+     */
+    span: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
  * CitedRow
  *
  * One retrieval hit, always traceable back to the row it came from
@@ -1445,6 +1476,37 @@ export type QuoteAnchorInput = {
      */
     suffix: string;
     hint?: AnchorHint | null;
+};
+
+/**
+ * Reference
+ *
+ * One of the project's own papers, shaped for `\cite` autocomplete and
+ * BibTeX export — `cite_key` is the same deterministic value both surfaces
+ * use, so a key inserted while autocompleting always resolves in the
+ * exported `.bib`.
+ */
+export type Reference = {
+    /**
+     * Paper Id
+     */
+    paper_id: string;
+    /**
+     * Cite Key
+     */
+    cite_key: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Authors
+     */
+    authors?: Array<string>;
+    /**
+     * Year
+     */
+    year?: number | null;
 };
 
 /**
@@ -3554,3 +3616,122 @@ export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponse
 };
 
 export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponse = InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponses[keyof InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponses];
+
+export type CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents/{document_id}/check_citations';
+};
+
+export type CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostError = CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostErrors[keyof CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostErrors];
+
+export type CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CheckCitationsResponse;
+};
+
+export type CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostResponse = CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostResponses[keyof CheckCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPostResponses];
+
+export type ListReferencesApiProjectsProjectIdReferencesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: {
+        /**
+         * Prefix
+         */
+        prefix?: string;
+    };
+    url: '/api/projects/{project_id}/references';
+};
+
+export type ListReferencesApiProjectsProjectIdReferencesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListReferencesApiProjectsProjectIdReferencesGetError = ListReferencesApiProjectsProjectIdReferencesGetErrors[keyof ListReferencesApiProjectsProjectIdReferencesGetErrors];
+
+export type ListReferencesApiProjectsProjectIdReferencesGetResponses = {
+    /**
+     * Response List References Api Projects  Project Id  References Get
+     *
+     * Successful Response
+     */
+    200: Array<Reference>;
+};
+
+export type ListReferencesApiProjectsProjectIdReferencesGetResponse = ListReferencesApiProjectsProjectIdReferencesGetResponses[keyof ListReferencesApiProjectsProjectIdReferencesGetResponses];
+
+export type ExportBibtexApiProjectsProjectIdBibtexGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/bibtex';
+};
+
+export type ExportBibtexApiProjectsProjectIdBibtexGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportBibtexApiProjectsProjectIdBibtexGetError = ExportBibtexApiProjectsProjectIdBibtexGetErrors[keyof ExportBibtexApiProjectsProjectIdBibtexGetErrors];
+
+export type ExportBibtexApiProjectsProjectIdBibtexGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: string;
+};
+
+export type ExportBibtexApiProjectsProjectIdBibtexGetResponse = ExportBibtexApiProjectsProjectIdBibtexGetResponses[keyof ExportBibtexApiProjectsProjectIdBibtexGetResponses];

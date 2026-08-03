@@ -130,6 +130,25 @@
   color: var(--accent-text);
 }
 
+.citation-evidence {
+  background: var(--accent-tint-14);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.citation-missing {
+  background: var(--accent-tint-25);
+  border-left: 2px solid var(--danger-rule);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.citation-unsupported {
+  border-bottom: 1.5px dashed var(--border-dashed);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .writing__preview {
   height: 100%;
   min-height: 0;
@@ -175,4 +194,28 @@
 .writing__tectonic-result--error {
   background: color-mix(in oklch, var(--danger-border) 30%, transparent);
   border: 1px solid var(--danger-border);
+}
+
+.writing__citation-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.writing__citation-finding {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-button);
+  font: 12px var(--font-ui);
+}
+
+.writing__citation-finding--missing {
+  background: var(--accent-tint-15);
+  border-left: 2px solid var(--danger-rule);
+}
+
+.writing__citation-finding--unsupported {
+  border: 1px dashed var(--border-dashed);
+  color: var(--text-muted);
+  font-style: italic;
 }

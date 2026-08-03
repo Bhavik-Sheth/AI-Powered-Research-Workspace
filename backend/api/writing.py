@@ -1,17 +1,20 @@
 """`GET/POST /api/projects/:id/documents`, `PUT .../documents/:docId`,
-`POST .../documents/:docId/assets` — backs Manuscript (TRD §4.2, US12).
+`POST .../documents/:docId/assets`, `POST .../documents/:docId/check_citations`,
+`GET .../references`, `GET .../documents/bibtex` — backs Manuscript
+(TRD §4.2, US12).
 """
 
 import uuid
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 import db
 import vault
 import writing
-from writing.models import AssetInserted, CompileResult, Document
+from writing.models import AssetInserted, CitationFinding, CompileResult, Document, Reference
 
 router = APIRouter()
 
@@ -20,6 +23,10 @@ class SaveDocumentRequest(BaseModel):
     title: str
     tex: str
     engine: Literal["swiftlatex", "tectonic"] | None = None
+
+
+class CheckCitationsResponse(BaseModel):
+    findings: list[CitationFinding]
 
 
 @router.get("/api/projects/{project_id}/documents", response_model=list[Document])
@@ -67,3 +74,24 @@ async def insert_asset(project_id: uuid.UUID, document_id: uuid.UUID, file: Uplo
             return await writing.insert_asset(session, project_id, file.filename or "asset", content)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_id}/documents/{document_id}/check_citations", response_model=CheckCitationsResponse)
+async def check_citations(project_id: uuid.UUID, document_id: uuid.UUID) -> CheckCitationsResponse:
+    async with db.session() as session:
+        findings = await writing.check_citations(session, document_id)
+        if findings is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        return CheckCitationsResponse(findings=findings)
+
+
+@router.get("/api/projects/{project_id}/references", response_model=list[Reference])
+async def list_references(project_id: uuid.UUID, prefix: str = "") -> list[Reference]:
+    async with db.session() as session:
+        return await writing.autocomplete_citations(session, project_id, prefix)
+
+
+@router.get("/api/projects/{project_id}/bibtex", response_class=PlainTextResponse)
+async def export_bibtex(project_id: uuid.UUID) -> str:
+    async with db.session() as session:
+        return await writing.export_bibtex(session, project_id)

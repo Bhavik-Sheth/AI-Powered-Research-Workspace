@@ -2,8 +2,8 @@
 against the project's references (MODULES.md, D34). The `.tex` file under
 `projects/<slug>/manuscript/` is truth; Vault Writer is the only module that
 touches it. This package's own job is everything Vault Writer must not
-know: running the Tectonic escape hatch, and (Phase 4.2) the missing/
-unsupported citation rule.
+know: running the Tectonic escape hatch, and the missing/unsupported
+citation rule.
 """
 
 import uuid
@@ -14,12 +14,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import vault
-from db.models import Documents
+from db.models import Documents, Paper
 from vault.models import Document, DocumentInput
-from writing.models import AssetInserted, CompileResult
+from writing.citation_check import check_citations as _run_citation_check
+from writing.models import AssetInserted, CitationFinding, CompileResult, Reference
+from writing.references import autocomplete_citations as _autocomplete_citations
+from writing.references import format_bibtex, list_references
 from writing.tectonic import compile_tex
 
-__all__ = ["Document", "DocumentInput", "CompileResult", "AssetInserted", "save_document", "list_documents", "get_document", "insert_asset"]
+__all__ = [
+    "Document",
+    "DocumentInput",
+    "CompileResult",
+    "AssetInserted",
+    "CitationFinding",
+    "Reference",
+    "save_document",
+    "list_documents",
+    "get_document",
+    "insert_asset",
+    "check_citations",
+    "autocomplete_citations",
+    "export_bibtex",
+]
 
 
 def _document_from_row(row: Documents) -> Document:
@@ -88,3 +105,28 @@ async def insert_asset(session: AsyncSession, project_id: uuid.UUID, filename: s
     handing back the `\\includegraphics`-ready relative path."""
     path = await vault.write_manuscript_asset(session, project_id, filename, content)
     return AssetInserted(path=path)
+
+
+async def autocomplete_citations(session: AsyncSession, project_id: uuid.UUID, prefix: str) -> list[Reference]:
+    return await _autocomplete_citations(session, project_id, prefix)
+
+
+async def export_bibtex(session: AsyncSession, project_id: uuid.UUID) -> str:
+    references = await list_references(session, project_id)
+    papers_by_id = {paper.id: paper for paper in await session.scalars(select(Paper).where(Paper.id.in_([r.paper_id for r in references])))}
+    return format_bibtex(references, papers_by_id)
+
+
+async def check_citations(session: AsyncSession, document_id: uuid.UUID) -> list[CitationFinding] | None:
+    """Runs the missing/unsupported checks over the document's current
+    source and persists the result to `documents.citation_findings`
+    (Schema.md: "from the last check run") — `None` only when the document
+    itself doesn't exist."""
+    row = await session.get(Documents, document_id)
+    if row is None:
+        return None
+    references = await list_references(session, row.project_id)
+    findings = await _run_citation_check(row.body, {ref.cite_key for ref in references})
+    row.citation_findings = [f.model_dump() for f in findings]
+    await session.flush()
+    return findings

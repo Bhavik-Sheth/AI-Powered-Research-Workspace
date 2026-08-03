@@ -1,3 +1,4 @@
+import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
@@ -5,6 +6,8 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { type MutableRefObject, useEffect, useRef } from "react";
 
+import { citeCompletionSource } from "./citeAutocomplete";
+import { citationDecorations } from "./citationDecorations";
 import { latexMathWidgets } from "./latexMathWidget";
 
 const FONT_THEME = EditorView.theme({
@@ -21,10 +24,12 @@ export function LatexSourceEditor({
   value,
   onChange,
   viewRef: externalViewRef,
+  projectId,
 }: {
   value: string;
   onChange: (tex: string) => void;
   viewRef: MutableRefObject<EditorView | null>;
+  projectId: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = externalViewRef;
@@ -43,6 +48,8 @@ export function LatexSourceEditor({
           keymap.of([...defaultKeymap, ...historyKeymap]),
           StreamLanguage.define(stex),
           latexMathWidgets,
+          citationDecorations,
+          autocompletion({ override: [citeCompletionSource(projectId)] }),
           FONT_THEME,
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());

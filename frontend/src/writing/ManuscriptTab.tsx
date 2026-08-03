@@ -1,14 +1,18 @@
 import type { EditorView } from "@codemirror/view";
 import { useEffect, useRef, useState } from "react";
 import {
+  checkCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPost,
   createDocumentApiProjectsProjectIdDocumentsPost,
+  exportBibtexApiProjectsProjectIdBibtexGet,
   insertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPost,
   listDocumentsApiProjectsProjectIdDocumentsGet,
   updateDocumentApiProjectsProjectIdDocumentsDocumentIdPut,
+  type CitationFinding,
   type CompileResult,
   type Document,
 } from "@research-os/api-client";
 
+import { setCitationFindings } from "./citationDecorations";
 import { insertAtCursor, LatexSourceEditor } from "./LatexSourceEditor";
 import "./ManuscriptTab.css";
 import { renderMermaidToSvg } from "./renderMermaid";
@@ -33,8 +37,8 @@ function countCites(tex: string): number {
 /** Manuscript Editor (MODULES.md) — `drafts list │ source/preview split`.
  * SwiftLaTeX WASM drives the always-on debounced preview; Tectonic-in-
  * Docker is the explicit escape hatch for a final full-package compile
- * (D34). Citation autocomplete/BibTeX/unsupported-claim checks land in
- * Phase 4.2. */
+ * (D34). `\cite` autocompletes from the project's own references, and
+ * "Check citations" flags missing targets and uncited claims inline. */
 export function ManuscriptTab({ projectId }: { projectId: string }) {
   const [documents, setDocuments] = useState<Document[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -43,6 +47,8 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   const [compiling, setCompiling] = useState(false);
   const [showMermaidPanel, setShowMermaidPanel] = useState(false);
   const [mermaidSource, setMermaidSource] = useState("graph TD\n  A[Idea] --> B[Result]\n");
+  const [findings, setFindings] = useState<CitationFinding[]>([]);
+  const [checkingCitations, setCheckingCitations] = useState(false);
   const viewRef = useRef<EditorView | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -69,6 +75,8 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
     setActiveId(doc.id);
     setTex(doc.body);
     setTectonicResult(null);
+    setFindings([]);
+    setCitationFindings(viewRef.current, []);
   }
 
   async function createDraft() {
@@ -141,6 +149,31 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
     setShowMermaidPanel(false);
   }
 
+  async function checkCitations() {
+    if (!active) return;
+    setCheckingCitations(true);
+    try {
+      const { data } = await checkCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPost({
+        path: { project_id: projectId, document_id: active.id },
+        throwOnError: true,
+      });
+      setFindings(data.findings);
+      setCitationFindings(viewRef.current, data.findings);
+    } finally {
+      setCheckingCitations(false);
+    }
+  }
+
+  async function downloadBibtex() {
+    const { data } = await exportBibtexApiProjectsProjectIdBibtexGet({ path: { project_id: projectId }, throwOnError: true });
+    const url = URL.createObjectURL(new Blob([data as string], { type: "text/plain" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "references.bib";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (documents === null) return <p>Loading…</p>;
 
   return (
@@ -187,6 +220,12 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
               <button type="button" disabled={compiling} onClick={() => void compileWithTectonic()}>
                 {compiling ? "Compiling…" : "Compile with Tectonic"}
               </button>
+              <button type="button" disabled={checkingCitations} onClick={() => void checkCitations()}>
+                {checkingCitations ? "Checking…" : "Check citations"}
+              </button>
+              <button type="button" onClick={() => void downloadBibtex()}>
+                Export BibTeX
+              </button>
             </div>
           </header>
 
@@ -200,7 +239,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
           )}
 
           <div className="writing__split">
-            <LatexSourceEditor value={tex} onChange={onSourceChange} viewRef={viewRef} />
+            <LatexSourceEditor value={tex} onChange={onSourceChange} viewRef={viewRef} projectId={projectId} />
             <div className="writing__preview">
               {preview.status === "unavailable" && (
                 <p className="writing__preview-note">
@@ -226,6 +265,16 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
                   <pre className="writing__compile-error">{tectonicResult.log.slice(-2000)}</pre>
                 </>
               )}
+            </div>
+          )}
+
+          {findings.length > 0 && (
+            <div className="writing__citation-findings">
+              {findings.map((finding, index) => (
+                <p key={index} className={`writing__citation-finding writing__citation-finding--${finding.kind}`}>
+                  {finding.kind === "missing" ? finding.note : "unsupported claim — no linked source yet"}
+                </p>
+              ))}
             </div>
           )}
         </div>

@@ -2980,6 +2980,198 @@
           }
         }
       }
+    },
+    "/api/projects/{project_id}/documents/{document_id}/check_citations": {
+      "post": {
+        "summary": "Check Citations",
+        "operationId": "check_citations_api_projects__project_id__documents__document_id__check_citations_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckCitationsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/references": {
+      "get": {
+        "summary": "List References",
+        "operationId": "list_references_api_projects__project_id__references_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Prefix"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Reference"
+                  },
+                  "title": "Response List References Api Projects  Project Id  References Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/bibtex": {
+      "get": {
+        "summary": "Export Bibtex",
+        "operationId": "export_bibtex_api_projects__project_id__bibtex_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3046,6 +3238,56 @@
           "file"
         ],
         "title": "Body_insert_asset_api_projects__project_id__documents__document_id__assets_post"
+      },
+      "CheckCitationsResponse": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/CitationFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "findings"
+        ],
+        "title": "CheckCitationsResponse"
+      },
+      "CitationFinding": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "unsupported"
+            ],
+            "title": "Kind"
+          },
+          "span": {
+            "type": "string",
+            "title": "Span"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "span"
+        ],
+        "title": "CitationFinding",
+        "description": "One entry of `documents.citation_findings` (Schema.md) \u2014 a missing\n`\\cite` target or a claim `check_citations` could not link to a source."
       },
       "CitedRow": {
         "properties": {
@@ -5520,6 +5762,50 @@
         ],
         "title": "QuoteAnchorInput",
         "description": "The wire shape of `QuoteAnchor` in TRD \u00a74.1 \u2014 what a caller submits\nto be validated and anchored fresh (D24), same as an extractive card\nfield."
+      },
+      "Reference": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "cite_key": {
+            "type": "string",
+            "title": "Cite Key"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Authors",
+            "default": []
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "cite_key",
+          "title"
+        ],
+        "title": "Reference",
+        "description": "One of the project's own papers, shaped for `\\cite` autocomplete and\nBibTeX export \u2014 `cite_key` is the same deterministic value both surfaces\nuse, so a key inserted while autocompleting always resolves in the\nexported `.bib`."
       },
       "ReferenceInfo": {
         "properties": {
