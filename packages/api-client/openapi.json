@@ -3269,6 +3269,14 @@
             "type": "object",
             "title": "Paper Ids",
             "default": {}
+          },
+          "paper_titles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Paper Titles",
+            "default": {}
           }
         },
         "type": "object",

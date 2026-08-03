@@ -158,7 +158,13 @@ export function ReaderTab({
     const target = normalise(quote);
     for (const page of pages) {
       const content = await page.getTextContent();
-      const pageText = normalise(content.items.map((item) => ("str" in item ? item.str : "")).join(" "));
+      // No separator between items: PDF.js already embeds the space a text
+      // run needs inside that run's own `str` (confirmed against this
+      // reader's actual output), so forcing one between every item instead
+      // splits a heading that PDF.js emitted as multiple runs — e.g.
+      // "CONCLUSION" arriving as two items reads back as "C ONCLUSION" or
+      // worse, breaking the match entirely.
+      const pageText = normalise(content.items.map((item) => ("str" in item ? item.str : "")).join(""));
       if (pageText.includes(target)) {
         pageRefs.current.get(page.pageNumber)?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;

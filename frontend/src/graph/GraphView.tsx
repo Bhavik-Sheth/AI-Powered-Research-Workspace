@@ -8,9 +8,9 @@ import { categoryOf, colorFor, fillOpacityFor, LEGEND, nodesFromEdges, shapeFor 
 
 const LAYOUT = { name: "cose", animate: false, padding: 40 } as const;
 
-function elementsFor(edges: GraphEdge[]) {
+function elementsFor(edges: GraphEdge[], paperTitles: Record<string, string>) {
   const nodes = nodesFromEdges(edges).map((node) => ({
-    data: { id: node.id, label: node.label, nodeType: node.nodeType },
+    data: { id: node.id, rawId: node.label, label: paperTitles[node.label] ?? node.label, nodeType: node.nodeType },
   }));
   const cyEdges = edges.map((edge) => ({
     data: {
@@ -36,8 +36,11 @@ const STYLESHEET = [
       "border-color": (el: cytoscape.NodeSingular) => colorFor(el.data("nodeType")),
       label: "data(label)",
       "font-size": 10,
-      "font-family": "var(--font-ui)",
-      color: "var(--text-strong)",
+      // Literal values, not `var(--font-ui)` / `var(--text-strong)`: same
+      // reason as the LEGEND colours above — Cytoscape's canvas stylesheet
+      // cannot resolve a CSS custom property at all.
+      "font-family": '"Space Grotesk", sans-serif',
+      color: "#001018",
       "text-valign": "bottom",
       "text-margin-y": 4,
       "text-wrap": "ellipsis",
@@ -48,14 +51,14 @@ const STYLESHEET = [
   },
   {
     selector: "node:selected",
-    style: { "border-width": 3, "border-color": "var(--accent)" },
+    style: { "border-width": 3, "border-color": "#0089df" },
   },
   {
     selector: "edge",
     style: {
       width: 1.5,
-      "line-color": "var(--graph-edge)",
-      "target-arrow-color": "var(--graph-edge)",
+      "line-color": "#7aa7b0",
+      "target-arrow-color": "#7aa7b0",
       "target-arrow-shape": "triangle",
       "curve-style": "bezier",
       "line-style": (el: cytoscape.EdgeSingular) => (el.data("provenance") === "llm" ? "dashed" : "solid"),
@@ -69,8 +72,11 @@ const STYLESHEET = [
 export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpenPaper: (paperId: string, title: string) => void }) {
   const [edges, setEdges] = useState<GraphEdge[] | null>(null);
   const [paperIds, setPaperIds] = useState<Record<string, string>>({});
+  const [paperTitles, setPaperTitles] = useState<Record<string, string>>({});
   const [activeTypes, setActiveTypes] = useState<Set<string> | null>(null);
-  const [selected, setSelected] = useState<{ id: string; nodeType: string; label: string; edges: GraphEdge[] } | null>(null);
+  const [selected, setSelected] = useState<{ id: string; rawId: string; nodeType: string; label: string; edges: GraphEdge[] } | null>(
+    null,
+  );
   const cyRef = useRef<cytoscape.Core | null>(null);
 
   useEffect(() => {
@@ -78,6 +84,7 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
       const { data } = await getProjectGraphApiProjectsProjectIdGraphGet({ path: { project_id: projectId }, throwOnError: true });
       setEdges(data.edges);
       setPaperIds(data.paper_ids ?? {});
+      setPaperTitles(data.paper_titles ?? {});
     })();
   }, [projectId]);
 
@@ -98,11 +105,12 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
     });
   }
 
-  function handleNodeSelect(id: string, nodeType: string, label: string) {
+  function handleNodeSelect(id: string, nodeType: string, rawId: string) {
     const nodeEdges = (edges ?? []).filter(
       (edge) => `${edge.src_type}:${edge.src_id}` === id || `${edge.dst_type}:${edge.dst_id}` === id,
     );
-    setSelected({ id, nodeType, label, edges: nodeEdges });
+    const label = nodeType === "paper" ? (paperTitles[rawId] ?? rawId) : rawId;
+    setSelected({ id, rawId, nodeType, label, edges: nodeEdges });
   }
 
   if (edges === null) return <p>Loading…</p>;
@@ -140,7 +148,7 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
 
       <div className="graph__canvas-wrap">
         <CytoscapeComponent
-          elements={elementsFor(visibleEdges)}
+          elements={elementsFor(visibleEdges, paperTitles)}
           style={{ width: "100%", height: "100%" }}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           stylesheet={STYLESHEET as any}
@@ -150,7 +158,7 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
             cy.off("tap", "node");
             cy.on("tap", "node", (event) => {
               const node = event.target;
-              handleNodeSelect(node.id(), node.data("nodeType"), node.data("label"));
+              handleNodeSelect(node.id(), node.data("nodeType"), node.data("rawId"));
             });
           }}
         />
@@ -184,13 +192,13 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
             <div className="graph__detail-edges">
               {selected.edges.map((edge) => (
                 <div key={edge.id} className="graph__detail-edge">
-                  <span>{edge.src_id === selected.label ? `→ ${edge.relation} → ${edge.dst_id}` : `${edge.src_id} → ${edge.relation} →`}</span>
+                  <span>{edge.src_id === selected.rawId ? `→ ${edge.relation} → ${edge.dst_id}` : `${edge.src_id} → ${edge.relation} →`}</span>
                   <span className="graph__detail-provenance">({edge.provenance === "llm" ? "inferred" : edge.provenance})</span>
                 </div>
               ))}
             </div>
-            {selected.nodeType === "paper" && paperIds[selected.label] && (
-              <button type="button" className="graph__detail-open" onClick={() => onOpenPaper(paperIds[selected.label], selected.label)}>
+            {selected.nodeType === "paper" && paperIds[selected.rawId] && (
+              <button type="button" className="graph__detail-open" onClick={() => onOpenPaper(paperIds[selected.rawId], selected.label)}>
                 Open
               </button>
             )}

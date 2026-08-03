@@ -83,8 +83,13 @@ async def get_graph(
         edge.dst_id for edge in edges if edge.dst_type == "paper"
     }
     paper_ids: dict[str, uuid.UUID] = {}
+    paper_titles: dict[str, str] = {}
     if paper_node_ids:
-        rows = await session.execute(select(Paper.canonical_id, Paper.id).where(Paper.canonical_id.in_(paper_node_ids)))
-        paper_ids = {canonical_id: paper_id for canonical_id, paper_id in rows}
+        rows = await session.execute(
+            select(Paper.canonical_id, Paper.id, Paper.title).where(Paper.canonical_id.in_(paper_node_ids))
+        )
+        for canonical_id, paper_id, title in rows:
+            paper_ids[canonical_id] = paper_id
+            paper_titles[canonical_id] = title
 
-    return Graph(edges=edges, paper_ids=paper_ids)
+    return Graph(edges=edges, paper_ids=paper_ids, paper_titles=paper_titles)

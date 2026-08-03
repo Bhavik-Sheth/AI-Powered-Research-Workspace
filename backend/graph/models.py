@@ -68,3 +68,6 @@ class Graph(BaseModel):
     # in `edges` so a caller can open a paper node without a second
     # lookup round trip (MODULES.md: pull complexity downward).
     paper_ids: dict[str, uuid.UUID] = {}
+    # A node label is otherwise just the raw canonical id — this lets a
+    # caller show the paper's real title (e.g. a reader tab's label).
+    paper_titles: dict[str, str] = {}

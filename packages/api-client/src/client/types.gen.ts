@@ -389,6 +389,12 @@ export type Graph = {
     paper_ids?: {
         [key: string]: string;
     };
+    /**
+     * Paper Titles
+     */
+    paper_titles?: {
+        [key: string]: string;
+    };
 };
 
 /**

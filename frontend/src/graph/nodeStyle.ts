@@ -27,13 +27,19 @@ export function categoryOf(nodeType: string): LegendCategory {
   return CATEGORY_BY_NODE_TYPE[nodeType] ?? "idea";
 }
 
+// sRGB hex, not the `oklch(...)` UI_DESIGN.md §1 gives literally: Cytoscape's
+// canvas renderer only parses hex/rgb/hsl/named CSS colours, not the CSS
+// Color 4 `oklch()` function — passing it through silently drops every
+// node's fill (canvas logs "invalid style property" and falls back to
+// black). These are the browser's own gamut-mapped conversion of each
+// oklch() value, computed once via `canvas.fillStyle` + `getImageData`.
 export const LEGEND: { category: LegendCategory; label: string; color: string; shape: string }[] = [
-  { category: "paper", label: "Paper", color: "oklch(52% 0.385 210)", shape: "ellipse" },
-  { category: "author", label: "Author", color: "oklch(58% 0.14 285)", shape: "ellipse" },
-  { category: "dataset", label: "Dataset", color: "oklch(58% 0.14 150)", shape: "round-rectangle" },
-  { category: "method", label: "Method / concept", color: "oklch(62% 0.13 75)", shape: "hexagon" },
-  { category: "repo", label: "Code / repo", color: "oklch(58% 0.15 330)", shape: "round-rectangle" },
-  { category: "idea", label: "Idea / note", color: "oklch(58% 0.14 25)", shape: "diamond" },
+  { category: "paper", label: "Paper", color: "#0089df", shape: "ellipse" },
+  { category: "author", label: "Author", color: "#736bc9", shape: "ellipse" },
+  { category: "dataset", label: "Dataset", color: "#2a914b", shape: "round-rectangle" },
+  { category: "method", label: "Method / concept", color: "#b37903", shape: "hexagon" },
+  { category: "repo", label: "Code / repo", color: "#aa55a4", shape: "round-rectangle" },
+  { category: "idea", label: "Idea / note", color: "#bf534e", shape: "diamond" },
 ];
 
 const LEGEND_BY_CATEGORY = new Map(LEGEND.map((entry) => [entry.category, entry]));
