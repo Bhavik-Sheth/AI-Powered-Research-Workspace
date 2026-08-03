@@ -121,6 +121,12 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     openTab({ id: `reader:${paperId}`, kind: "reader", params: { paperId, projectId }, label: title });
   }
 
+  // The read set a cross-paper compare claim (US4) is allowed to cite —
+  // every paper currently open as a reader tab (MODULES.md Agent Harness).
+  const openPaperIds = tabs
+    .map((tab) => (tab.kind === "reader" ? tab.params?.paperId : undefined))
+    .filter((paperId): paperId is string => Boolean(paperId));
+
   function renderTabContent(tab: TabRef) {
     switch (tab.kind) {
       case "dashboard":
@@ -236,7 +242,13 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
           {companionCollapsed ? "‹" : "›"}
         </button>
         <div className={`pane-shell pane-shell--right ${companionCollapsed ? "pane-shell--collapsed" : ""}`}>
-          <CompanionPane projectId={projectId} selection={selection} pendingAsk={pendingAsk} socket={socket} />
+          <CompanionPane
+            projectId={projectId}
+            selection={selection}
+            pendingAsk={pendingAsk}
+            socket={socket}
+            openPaperIds={openPaperIds}
+          />
         </div>
       </div>
     </div>

@@ -27,6 +27,7 @@ interface TranscriptEntry {
 interface QueuedMessage {
   text: string;
   selection: SelectionState | null;
+  openPaperIds: string[];
   inputModality: "text" | "voice";
 }
 
@@ -55,11 +56,15 @@ export function CompanionPane({
   selection,
   pendingAsk,
   socket,
+  openPaperIds,
 }: {
   projectId: string;
   selection: SelectionState | null;
   pendingAsk: PendingAsk | null;
   socket: ProjectSocket;
+  /** Paper ids currently open as reader tabs — the read set a cross-paper
+   * compare claim (US4) is allowed to cite (MODULES.md Agent Harness). */
+  openPaperIds: string[];
 }) {
   const [statusText, setStatusText] = useState<string | null>(null);
   const [turnInFlight, setTurnInFlight] = useState(false);
@@ -169,7 +174,7 @@ export function CompanionPane({
     socket.send({
       event: "user_message",
       text: pending.text,
-      ui_state: { selection: pending.selection },
+      ui_state: { selection: pending.selection, open_paper_ids: pending.openPaperIds },
       input_modality: pending.inputModality,
     });
     setTurnInFlight(true);
@@ -178,9 +183,14 @@ export function CompanionPane({
 
   function sendMessage(text: string, withSelection: SelectionState | null, inputModality: "text" | "voice" = "text"): void {
     if (turnInFlight || !text.trim()) return;
-    const sent = socket.send({ event: "user_message", text, ui_state: { selection: withSelection }, input_modality: inputModality });
+    const sent = socket.send({
+      event: "user_message",
+      text,
+      ui_state: { selection: withSelection, open_paper_ids: openPaperIds },
+      input_modality: inputModality,
+    });
     if (!sent) {
-      setQueued({ text, selection: withSelection, inputModality });
+      setQueued({ text, selection: withSelection, openPaperIds, inputModality });
       setTranscript((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
       return;
     }

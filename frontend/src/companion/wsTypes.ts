@@ -24,6 +24,7 @@ export interface SelectionState {
 
 export interface UIState {
   selection?: SelectionState | null;
+  open_paper_ids?: string[];
 }
 
 export type DownstreamEvent =

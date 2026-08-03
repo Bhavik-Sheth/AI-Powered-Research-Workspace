@@ -57,14 +57,21 @@ async def list_project_papers(project_id: uuid.UUID) -> list[LibraryEntry]:
         ]
 
 
+_CONTENT_FIELDS = {"sections", "content", "references", "datasets", "code"}
+
+
 @router.get("/api/papers/{paper_id}", response_model=PaperDetail)
 async def get_paper(paper_id: uuid.UUID, include: str = "") -> PaperDetail:
+    """`include` is one parameterised read (TRD §4.3's
+    `get_paper(paper_id, include=[card|sections|references|datasets|code])`)
+    — `sections`/`references`/`datasets`/`code` all come from the same
+    `paper_content` row, so any one of them fetches the whole row."""
     fields = {f.strip() for f in include.split(",") if f.strip()}
     async with db.session() as session:
         paper = await papers.get_paper(session, paper_id)
         if paper is None:
             raise HTTPException(status_code=404, detail="paper not found")
-        content = await papers.get_paper_content(session, paper_id) if "sections" in fields or "content" in fields else None
+        content = await papers.get_paper_content(session, paper_id) if fields & _CONTENT_FIELDS else None
         card = await papers.get_paper_card(session, paper_id) if "card" in fields else None
     return PaperDetail(paper=paper, content=content, card=card)
 

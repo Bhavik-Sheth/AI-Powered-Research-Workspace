@@ -44,6 +44,20 @@ function normalise(text: string): string {
   return text.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/** `paper_content.datasets`/`code_links` are untyped JSONB (Schema.md) — the
+ * enrichment pass that populates them writes whatever a source gives it, so
+ * these read the common `name`/`title`/`url` shapes defensively rather than
+ * assuming one. */
+function datasetLabel(dataset: Record<string, unknown>): string {
+  const name = dataset.name ?? dataset.title;
+  return typeof name === "string" && name ? name : JSON.stringify(dataset);
+}
+
+function codeLinkUrl(codeLink: Record<string, unknown>): string | null {
+  const url = codeLink.url ?? codeLink.repo_url ?? codeLink.href;
+  return typeof url === "string" && url ? url : null;
+}
+
 /** One page: a canvas render plus an invisible, selectable text layer. */
 function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPageProxy; pageNumber: number; containerRef: (el: HTMLDivElement | null) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -224,6 +238,8 @@ export function ReaderTab({
 
   const sections = detail.content?.sections ?? [];
   const references = detail.content?.references ?? [];
+  const datasets = detail.content?.datasets ?? [];
+  const codeLinks = detail.content?.code_links ?? [];
   const card = detail.card ?? [];
   const cardByField = new Map(card.map((f) => [f.field_key, f]));
 
@@ -242,8 +258,46 @@ export function ReaderTab({
           </button>
         ))}
         <h4>References ({references.length})</h4>
-        <h4>Datasets ({detail.content?.datasets.length ?? 0})</h4>
-        <h4>Code ({detail.content?.code_links.length ?? 0})</h4>
+        {references.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
+        {references.map((reference) => (
+          <button
+            key={reference.ref_id}
+            type="button"
+            className="reader__section-link"
+            title={reference.raw}
+            onClick={() => void scrollToQuote(reference.raw)}
+          >
+            {reference.raw}
+          </button>
+        ))}
+
+        <h4>Datasets ({datasets.length})</h4>
+        {datasets.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
+        {datasets.map((dataset, index) => (
+          <button
+            key={index}
+            type="button"
+            className="reader__section-link"
+            onClick={() => void scrollToQuote(datasetLabel(dataset))}
+          >
+            {datasetLabel(dataset)}
+          </button>
+        ))}
+
+        <h4>Code ({codeLinks.length})</h4>
+        {codeLinks.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
+        {codeLinks.map((codeLink, index) => {
+          const url = codeLinkUrl(codeLink);
+          return url ? (
+            <a key={index} className="reader__section-link" href={url} target="_blank" rel="noreferrer">
+              {url}
+            </a>
+          ) : (
+            <p key={index} className="reader__section-link">
+              {JSON.stringify(codeLink)}
+            </p>
+          );
+        })}
       </nav>
 
       <div className="reader__pages" onMouseUp={handleTextSelection}>

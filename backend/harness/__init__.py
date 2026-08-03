@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 import db
+import papers
 from db.models import Messages
 from harness.models import ErrorEvent, SessionRef, StatusEvent, TextDeltaEvent, TurnCompleteEvent, TurnEvent, UIState
 from llm import LLMError, Message, complete, complete_structured
@@ -103,6 +104,31 @@ async def _maybe_retrieve(project_id: uuid.UUID, message: str) -> list[CitedRow]
     return await query_memory(project_id, decision.query)
 
 
+async def _open_papers(session, open_paper_ids: list[uuid.UUID]) -> list[tuple[uuid.UUID, str]]:
+    """Titles of the papers currently open as reader tabs — the read set a
+    cross-paper claim (US4) is allowed to cite. A paper id that no longer
+    resolves (closed/deleted mid-turn) is silently dropped rather than
+    failing the turn."""
+    out: list[tuple[uuid.UUID, str]] = []
+    for paper_id in open_paper_ids:
+        paper = await papers.get_paper(session, paper_id)
+        if paper is not None:
+            out.append((paper.id, paper.title))
+    return out
+
+
+def _format_open_papers(open_papers: list[tuple[uuid.UUID, str]]) -> str:
+    lines = ["Papers currently open in the reader (the read set for cross-paper comparison):"]
+    for paper_id, title in open_papers:
+        lines.append(f"- {title} (paper_id {paper_id})")
+    lines.append(
+        "A claim comparing two papers must cite a verbatim quote from each of them. If asked to "
+        "compare against a paper that is not in this list, say explicitly that the paper is not "
+        "open in this project rather than answering from training knowledge."
+    )
+    return "\n".join(lines)
+
+
 def _format_memory_rows(rows: list[CitedRow]) -> str:
     lines = ["Retrieved from the project's memory:"]
     for row in rows:
@@ -128,20 +154,25 @@ def _matching_memory_row(quote: str, memory_rows: list[CitedRow]) -> CitedRow | 
 
 
 async def _validate_citations(
-    session, paper_id: uuid.UUID | None, memory_rows: list[CitedRow], text: str
+    session, paper_ids: list[uuid.UUID], memory_rows: list[CitedRow], text: str
 ) -> tuple[str, list[dict]]:
     """D24's substring validator, applied to every `<cite>` span the model
-    produced — against the open paper via Provenance, or against a row
-    `query_memory` actually retrieved. Returns the text with failed tags
-    relabelled `<unverified>`, plus the structured citation list
-    `messages.citations` stores."""
+    produced — against any paper in `paper_ids` (the selected paper plus any
+    open reader tabs, so a cross-paper claim can resolve against either
+    paper — US4) via Provenance, or against a row `query_memory` actually
+    retrieved. Returns the text with failed tags relabelled `<unverified>`,
+    plus the structured citation list `messages.citations` stores."""
     citations: list[dict] = []
     pieces: list[str] = []
     cursor = 0
     for match in _CITE_PATTERN.finditer(text):
         pieces.append(text[cursor : match.start()])
         quote = match.group(1)
-        anchor = await validate_and_anchor(session, paper_id, quote, "", "") if paper_id is not None else None
+        anchor = None
+        for paper_id in paper_ids:
+            anchor = await validate_and_anchor(session, paper_id, quote, "", "")
+            if anchor is not None:
+                break
         memory_row = None if anchor is not None else _matching_memory_row(quote, memory_rows)
         if anchor is not None:
             citations.append({"kind": "anchor", "anchor_id": str(anchor.id), "quote": quote})
@@ -196,6 +227,15 @@ async def run_turn(
                     input_modality=input_modality,
                 )
             )
+            open_papers = await _open_papers(db_session, ui_state.open_paper_ids)
+
+        # The selected paper plus every open reader tab — the candidate set
+        # a `<cite>` span is checked against (US4 cross-paper compare).
+        # De-duplicated, order preserved, so the selected paper is tried first.
+        citation_paper_ids: list[uuid.UUID] = []
+        for pid in ([paper_id] if paper_id is not None else []) + [p[0] for p in open_papers]:
+            if pid not in citation_paper_ids:
+                citation_paper_ids.append(pid)
 
         memory_rows = await _maybe_retrieve(session_ref.project_id, message)
         if memory_rows:
@@ -206,6 +246,8 @@ async def run_turn(
             llm_messages.append(
                 Message(role="system", content=f'The user has highlighted this passage from the paper:\n"{ui_state.selection.anchor.quote}"')
             )
+        if len(open_papers) > 1:
+            llm_messages.append(Message(role="system", content=_format_open_papers(open_papers)))
         if memory_rows:
             llm_messages.append(Message(role="system", content=_format_memory_rows(memory_rows)))
         llm_messages += history
@@ -231,7 +273,7 @@ async def run_turn(
             return
 
         async with db.session() as db_session:
-            cleaned_text, citations = await _validate_citations(db_session, paper_id, memory_rows, full_text)
+            cleaned_text, citations = await _validate_citations(db_session, citation_paper_ids, memory_rows, full_text)
             seq = await _next_seq(db_session, session_ref.conversation_id)
             db_session.add(
                 Messages(
