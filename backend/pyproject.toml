@@ -23,6 +23,7 @@ dependencies = [
     "docker>=7.1",
     "nbformat>=5.10",
     "nbclient>=0.10",
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]

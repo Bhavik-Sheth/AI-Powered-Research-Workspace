@@ -14,6 +14,7 @@ import { SearchResults } from "../search/SearchResults";
 import { useCollapsible } from "../state/useCollapsible";
 import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
+import { ManuscriptTab } from "../writing/ManuscriptTab";
 import "./AppShell.css";
 import { ReadinessStrip } from "./ReadinessStrip";
 
@@ -31,6 +32,7 @@ const EXPERIMENTS_TAB: TabRef = { id: "experiments", kind: "experiments", params
 const SEARCH_TAB: TabRef = { id: "search", kind: "search", params: {}, label: "Search" };
 const MATRIX_TAB: TabRef = { id: "matrix", kind: "matrix", params: {}, label: "Matrix" };
 const GRAPH_TAB: TabRef = { id: "graph", kind: "graph", params: {}, label: "Graph" };
+const WRITING_TAB: TabRef = { id: "writing", kind: "writing", params: {}, label: "Writing" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 
 /** Picks up where the user left off (Phase 1.8 sign-off): most-recently-
@@ -145,6 +147,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <MatrixView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "graph":
         return <GraphView projectId={projectId} onOpenPaper={openReaderTab} />;
+      case "writing":
+        return <ManuscriptTab projectId={projectId} />;
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
@@ -186,6 +190,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                         if (item === "Experiments") openTab(EXPERIMENTS_TAB);
                         if (item === "Matrix") openTab(MATRIX_TAB);
                         if (item === "Graph") openTab(GRAPH_TAB);
+                        if (item === "Writing") openTab(WRITING_TAB);
                       }}
                     >
                       {item}

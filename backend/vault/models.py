@@ -8,10 +8,11 @@ service call and the wire, not a duplicated request/response DTO.
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
-from db.models import Notes
+from db.models import Documents, Notes
 
 
 class NoteInput(BaseModel):
@@ -96,6 +97,43 @@ class Highlight(BaseModel):
     color: str | None
     note_id: uuid.UUID | None
     created_at: datetime
+
+
+class DocumentInput(BaseModel):
+    """What a caller submits to create or update a manuscript (Rules.md:
+    matches `Manuscript.save_document`'s wire shape). `id` absent creates
+    (Vault Writer assigns one and derives `file_path` from `title`); present
+    updates the existing row in place at its unchanged `file_path`."""
+
+    id: uuid.UUID | None = None
+    title: str
+    tex: str
+
+
+class Document(BaseModel):
+    """The `documents` row (Schema.md), returned by every writing endpoint."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    title: str
+    file_path: str
+    body: str
+    citation_findings: list[dict]
+    last_compiled_at: datetime | None
+    last_compile_engine: Literal["swiftlatex", "tectonic"] | None
+
+    @classmethod
+    def from_row(cls, row: Documents) -> "Document":
+        return cls(
+            id=row.id,
+            project_id=row.project_id,
+            title=row.title,
+            file_path=row.file_path,
+            body=row.body,
+            citation_findings=row.citation_findings,
+            last_compiled_at=row.last_compiled_at,
+            last_compile_engine=row.last_compile_engine,
+        )
 
 
 class RunArtifactFile(BaseModel):

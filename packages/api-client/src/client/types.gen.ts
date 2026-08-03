@@ -26,6 +26,30 @@ export type AnchorHint = {
 };
 
 /**
+ * AssetInserted
+ *
+ * What inserting an image, a rendered Mermaid diagram, or a workspace
+ * dataviz export into a manuscript returns — the vault-relative path the
+ * editor inlines into an `\includegraphics{...}` snippet.
+ */
+export type AssetInserted = {
+    /**
+     * Path
+     */
+    path: string;
+};
+
+/**
+ * Body_insert_asset_api_projects__project_id__documents__document_id__assets_post
+ */
+export type BodyInsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
  * CitedRow
  *
  * One retrieval hit, always traceable back to the row it came from
@@ -87,6 +111,29 @@ export type ColumnDef = {
      * Query
      */
     query?: string | null;
+};
+
+/**
+ * CompileResult
+ *
+ * What a Tectonic compile returns — success or failure, never a 500
+ * (MODULES.md's Errors clause). On failure the previous `.tex` on disk is
+ * untouched, so `document` is the unchanged prior row.
+ */
+export type CompileResult = {
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Engine
+     */
+    engine: 'tectonic';
+    /**
+     * Log
+     */
+    log: string;
+    document: Document;
 };
 
 /**
@@ -157,6 +204,48 @@ export type DiscoverModelsResponse = {
      * Models
      */
     models: Array<string>;
+};
+
+/**
+ * Document
+ *
+ * The `documents` row (Schema.md), returned by every writing endpoint.
+ */
+export type Document = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Project Id
+     */
+    project_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * File Path
+     */
+    file_path: string;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Citation Findings
+     */
+    citation_findings: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Last Compiled At
+     */
+    last_compiled_at: string | null;
+    /**
+     * Last Compile Engine
+     */
+    last_compile_engine: 'swiftlatex' | 'tectonic' | null;
 };
 
 /**
@@ -1490,6 +1579,24 @@ export type RunSpec = {
 export type RunSpecPreview = {
     notebook: Notebook;
     run_spec: RunSpec;
+};
+
+/**
+ * SaveDocumentRequest
+ */
+export type SaveDocumentRequest = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Tex
+     */
+    tex: string;
+    /**
+     * Engine
+     */
+    engine?: 'swiftlatex' | 'tectonic' | null;
 };
 
 /**
@@ -3249,3 +3356,201 @@ export type GetProjectGraphApiProjectsProjectIdGraphGetResponses = {
 };
 
 export type GetProjectGraphApiProjectsProjectIdGraphGetResponse = GetProjectGraphApiProjectsProjectIdGraphGetResponses[keyof GetProjectGraphApiProjectsProjectIdGraphGetResponses];
+
+export type ListDocumentsApiProjectsProjectIdDocumentsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents';
+};
+
+export type ListDocumentsApiProjectsProjectIdDocumentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListDocumentsApiProjectsProjectIdDocumentsGetError = ListDocumentsApiProjectsProjectIdDocumentsGetErrors[keyof ListDocumentsApiProjectsProjectIdDocumentsGetErrors];
+
+export type ListDocumentsApiProjectsProjectIdDocumentsGetResponses = {
+    /**
+     * Response List Documents Api Projects  Project Id  Documents Get
+     *
+     * Successful Response
+     */
+    200: Array<Document>;
+};
+
+export type ListDocumentsApiProjectsProjectIdDocumentsGetResponse = ListDocumentsApiProjectsProjectIdDocumentsGetResponses[keyof ListDocumentsApiProjectsProjectIdDocumentsGetResponses];
+
+export type CreateDocumentApiProjectsProjectIdDocumentsPostData = {
+    body: SaveDocumentRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents';
+};
+
+export type CreateDocumentApiProjectsProjectIdDocumentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateDocumentApiProjectsProjectIdDocumentsPostError = CreateDocumentApiProjectsProjectIdDocumentsPostErrors[keyof CreateDocumentApiProjectsProjectIdDocumentsPostErrors];
+
+export type CreateDocumentApiProjectsProjectIdDocumentsPostResponses = {
+    /**
+     * Response Create Document Api Projects  Project Id  Documents Post
+     *
+     * Successful Response
+     */
+    200: Document | CompileResult;
+};
+
+export type CreateDocumentApiProjectsProjectIdDocumentsPostResponse = CreateDocumentApiProjectsProjectIdDocumentsPostResponses[keyof CreateDocumentApiProjectsProjectIdDocumentsPostResponses];
+
+export type GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents/{document_id}';
+};
+
+export type GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetError = GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetErrors[keyof GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetErrors];
+
+export type GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Document;
+};
+
+export type GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetResponse = GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetResponses[keyof GetDocumentApiProjectsProjectIdDocumentsDocumentIdGetResponses];
+
+export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutData = {
+    body: SaveDocumentRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents/{document_id}';
+};
+
+export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutError = UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutErrors[keyof UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutErrors];
+
+export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponses = {
+    /**
+     * Response Update Document Api Projects  Project Id  Documents  Document Id  Put
+     *
+     * Successful Response
+     */
+    200: Document | CompileResult;
+};
+
+export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponse = UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponses[keyof UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponses];
+
+export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostData = {
+    body: BodyInsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPost;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents/{document_id}/assets';
+};
+
+export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostError = InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostErrors[keyof InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostErrors];
+
+export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssetInserted;
+};
+
+export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponse = InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponses[keyof InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostResponses];

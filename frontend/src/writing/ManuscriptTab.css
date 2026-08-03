@@ -1,0 +1,178 @@
+.writing {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  height: 100%;
+  font-family: var(--font-ui);
+}
+
+.writing__drafts {
+  border-right: 1px solid var(--border-faint);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.writing__drafts-header {
+  font: 700 12px var(--font-ui);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.writing__draft-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: var(--radius-button);
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.writing__draft-row--active {
+  background: var(--accent-tint-12);
+  border-left: 2px solid var(--accent);
+}
+
+.writing__draft-title {
+  font: 700 12px var(--font-ui);
+  color: var(--text-strong);
+}
+
+.writing__draft-meta {
+  font: 10px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.writing__new-draft {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.writing__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 24px;
+}
+
+.writing__empty-title {
+  color: var(--text-muted);
+  font: 13px var(--font-ui);
+}
+
+.writing__editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px;
+  gap: 10px;
+}
+
+.writing__editor-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.writing__editor-title {
+  font: 800 20px var(--font-reading);
+  color: var(--text-strong);
+  margin: 0;
+}
+
+.writing__toolbar {
+  display: flex;
+  gap: 6px;
+}
+
+.writing__mermaid-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  padding: 10px;
+}
+
+.writing__mermaid-panel textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.writing__split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.latex-editor__source {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.latex-math-widget {
+  color: var(--accent-text);
+}
+
+.writing__preview {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+}
+
+.writing__preview-frame {
+  flex: 1;
+  border: none;
+}
+
+.writing__preview-note {
+  padding: 14px;
+  font: 12px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.writing__compile-error {
+  padding: 12px;
+  margin: 0;
+  font: 11px/1.5 var(--font-mono);
+  color: var(--danger-text);
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+.writing__tectonic-result {
+  border-radius: var(--radius-panel);
+  padding: 10px 14px;
+  font: 12px var(--font-ui);
+}
+
+.writing__tectonic-result--ok {
+  background: var(--accent-tint-10);
+  color: var(--accent-text);
+}
+
+.writing__tectonic-result--error {
+  background: color-mix(in oklch, var(--danger-border) 30%, transparent);
+  border: 1px solid var(--danger-border);
+}

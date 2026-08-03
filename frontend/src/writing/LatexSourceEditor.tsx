@@ -1,0 +1,84 @@
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { StreamLanguage } from "@codemirror/language";
+import { stex } from "@codemirror/legacy-modes/mode/stex";
+import { EditorState } from "@codemirror/state";
+import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { type MutableRefObject, useEffect, useRef } from "react";
+
+import { latexMathWidgets } from "./latexMathWidget";
+
+const FONT_THEME = EditorView.theme({
+  "&": { fontSize: "13px", height: "100%" },
+  ".cm-content": { fontFamily: "var(--font-mono)" },
+  ".cm-scroller": { overflow: "auto" },
+});
+
+/** The `.tex` source pane (MODULES.md Manuscript Editor) — CodeMirror 6 in
+ * JetBrains Mono with LaTeX highlighting and the live inline-math widgets.
+ * Uncontrolled by design (CodeMirror owns its own text state); `onChange`
+ * fires post-edit for the caller's own debounced save/preview. */
+export function LatexSourceEditor({
+  value,
+  onChange,
+  viewRef: externalViewRef,
+}: {
+  value: string;
+  onChange: (tex: string) => void;
+  viewRef: MutableRefObject<EditorView | null>;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = externalViewRef;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const view = new EditorView({
+      parent: containerRef.current,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          lineNumbers(),
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          StreamLanguage.define(stex),
+          latexMathWidgets,
+          FONT_THEME,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+        ],
+      }),
+    });
+    viewRef.current = view;
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+    // Mounted once; external `value` changes (draft switch) are applied via
+    // the effect below rather than tearing down and rebuilding the view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const current = view.state.doc.toString();
+    if (current !== value) {
+      view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
+    }
+  }, [value]);
+
+  return <div className="latex-editor__source" ref={containerRef} />;
+}
+
+/** Inserts `text` at the current cursor (or replaces the selection) — backs
+ * toolbar snippet/insert-image/insert-Mermaid/`\cite` actions, which all
+ * act on the same live CodeMirror instance rather than the React-level
+ * `value` string (Rules.md: pull complexity downward, one insertion path). */
+export function insertAtCursor(view: EditorView | null, text: string) {
+  if (!view) return;
+  const { from, to } = view.state.selection.main;
+  view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+  view.focus();
+}

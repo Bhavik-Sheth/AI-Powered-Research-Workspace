@@ -42,6 +42,7 @@ from api.runs import router as runs_router
 from api.search import router as search_router
 from api.settings import router as settings_router
 from api.voice import router as voice_router
+from api.writing import router as writing_router
 from config import get_config
 from ws import router as ws_router
 
@@ -170,6 +171,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(matrix_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(graph_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(writing_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(ws_router)
     return app
 

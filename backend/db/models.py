@@ -608,3 +608,27 @@ class MatrixCells(Base):
         UUID(as_uuid=True), ForeignKey("quote_anchors.id", ondelete="CASCADE"), nullable=True
     )
     cached_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
+class Documents(Base):
+    """One LaTeX manuscript (Schema.md `documents`, Phase 4, D34). The `.tex`
+    file under `projects/<slug>/manuscript/` is truth; `body` is an indexed
+    mirror, never AI-authored."""
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(
+            "last_compile_engine IS NULL OR last_compile_engine IN ('swiftlatex', 'tectonic')",
+            name="documents_last_compile_engine_check",
+        ),
+        UniqueConstraint("project_id", "file_path", name="documents_project_id_file_path_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    file_path: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(String, nullable=False)
+    citation_findings: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    last_compiled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_compile_engine: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -19,9 +19,9 @@ from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Experiments, Highlights, Notes, Paper, Project
+from db.models import Documents, Experiments, Highlights, Notes, Paper, Project
 from settings import get_vault_path
-from vault.models import ExperimentFilesWritten, Highlight, Note, NoteInput, RunArtifacts
+from vault.models import Document, DocumentInput, ExperimentFilesWritten, Highlight, Note, NoteInput, RunArtifacts
 
 _LAYOUT = ("library/papers", "projects", ".research-os")
 
@@ -128,6 +128,113 @@ async def write_note(session: AsyncSession, project_id: uuid.UUID, note: NoteInp
         raise VaultWriteFailed(f"note file written but index update failed: {exc}") from exc
 
     return Note.from_row(row)
+
+
+async def _unique_document_file_path(session: AsyncSession, project_id: uuid.UUID, project_slug: str, title: str) -> str:
+    base = slugify(title) or "manuscript"
+    candidate = base
+    suffix = 1
+    while True:
+        file_path = f"projects/{project_slug}/manuscript/{candidate}.tex"
+        collision = await session.scalar(
+            select(Documents.id).where(Documents.project_id == project_id, Documents.file_path == file_path)
+        )
+        if collision is None:
+            return file_path
+        suffix += 1
+        candidate = f"{base}-{suffix}"
+
+
+async def write_document(
+    session: AsyncSession, project_id: uuid.UUID, document: DocumentInput, compiled_pdf: bytes | None = None
+) -> Document:
+    """Creates or updates one manuscript's `.tex` source; assigns the id
+    (and derives `file_path` from `title`) on create, same shape as
+    `write_note` (MODULES.md, Phase 4). `compiled_pdf`, when Manuscript has
+    just run the Tectonic escape hatch, is written to the `.tex` file's
+    sibling `.pdf` path in the same operation — there is no separate index
+    column for it (Schema.md derives it from `file_path`)."""
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise ValueError(f"project {project_id} not found")
+
+    existing: Documents | None = None
+    if document.id is not None:
+        existing = await session.get(Documents, document.id)
+        if existing is None or existing.project_id != project_id:
+            raise ValueError(f"document {document.id} not found in project {project_id}")
+
+    document_id = existing.id if existing is not None else uuid.uuid4()
+    file_path = (
+        existing.file_path
+        if existing is not None
+        else await _unique_document_file_path(session, project_id, project.slug, document.title)
+    )
+
+    absolute_path = get_vault_path() / file_path
+    absolute_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        absolute_path.write_text(document.tex, encoding="utf-8")
+        if compiled_pdf is not None:
+            absolute_path.with_suffix(".pdf").write_bytes(compiled_pdf)
+    except OSError as exc:
+        raise VaultWriteFailed(f"could not write {file_path}: {exc}") from exc
+
+    try:
+        if existing is not None:
+            existing.title = document.title
+            existing.body = document.tex
+            row = existing
+        else:
+            row = Documents(id=document_id, project_id=project_id, title=document.title, file_path=file_path, body=document.tex)
+            session.add(row)
+        await session.flush()
+    except Exception as exc:
+        raise VaultWriteFailed(f"document file written but index update failed: {exc}") from exc
+
+    return Document.from_row(row)
+
+
+async def manuscript_dir(session: AsyncSession, project_id: uuid.UUID) -> Path:
+    """Resolves (and ensures) `projects/<slug>/manuscript/` — the one place
+    that knows this path shape, so Manuscript's Tectonic compile can mount
+    the same directory an insert path writes `assets/` into without
+    re-deriving the vault layout itself (Rules.md: one decision, one
+    module)."""
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise ValueError(f"project {project_id} not found")
+    path = get_vault_path() / "projects" / project.slug / "manuscript"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+async def write_manuscript_asset(session: AsyncSession, project_id: uuid.UUID, filename: str, content: bytes) -> str:
+    """Writes an inserted image/diagram/dataviz export into
+    `projects/<slug>/manuscript/assets/` (Phase 4.1's insert paths — D34's
+    image upload / Mermaid / dataviz `\\includegraphics` GUI help). Returns
+    the vault-relative path the caller inlines into the `.tex` source; there
+    is no index row because an asset is not independently queried — the
+    `.tex` source referencing it is the only index that matters."""
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise ValueError(f"project {project_id} not found")
+
+    assets_dir = get_vault_path() / "projects" / project.slug / "manuscript" / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = slugify(Path(filename).stem) + Path(filename).suffix.lower()
+    candidate = safe_name
+    suffix = 1
+    while (assets_dir / candidate).exists():
+        suffix += 1
+        candidate = f"{slugify(Path(filename).stem)}-{suffix}{Path(filename).suffix.lower()}"
+
+    try:
+        (assets_dir / candidate).write_bytes(content)
+    except OSError as exc:
+        raise VaultWriteFailed(f"could not write asset {candidate}: {exc}") from exc
+
+    return f"projects/{project.slug}/manuscript/assets/{candidate}"
 
 
 async def write_paper_asset(session: AsyncSession, paper_id: uuid.UUID, kind: Literal["pdf", "parsed"], content: bytes | dict) -> Path:
