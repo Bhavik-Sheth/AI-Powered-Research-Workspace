@@ -632,3 +632,42 @@ class Documents(Base):
     citation_findings: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     last_compiled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_compile_engine: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class FeedItems(Base):
+    """One surfaced candidate paper per project poll (Schema.md `feed_items`,
+    Phase 5, D28). `canonical_id` carries no FK — a feed candidate is
+    deliberately not yet a `papers` row; it becomes one only on save."""
+
+    __tablename__ = "feed_items"
+    __table_args__ = (
+        CheckConstraint("state IN ('new', 'saved', 'dismissed')", name="feed_items_state_check"),
+        UniqueConstraint("project_id", "canonical_id", name="feed_items_project_canonical_uq"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    canonical_id: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    why_relevant: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    state: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'new'"))
+    polled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+
+class SeenSet(Base):
+    """The dedup ledger — read ∪ library ∪ previously-surfaced ∪ dismissed
+    (Schema.md `seen_set`, Phase 5, D28). `canonical_id` carries no FK, for
+    the same reason as `FeedItems.canonical_id`."""
+
+    __tablename__ = "seen_set"
+    __table_args__ = (
+        CheckConstraint("reason IN ('read', 'library', 'surfaced', 'dismissed')", name="seen_set_reason_check"),
+        PrimaryKeyConstraint("project_id", "canonical_id", "reason", name="seen_set_pkey"),
+    )
+
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"))
+    canonical_id: Mapped[str] = mapped_column(String)
+    reason: Mapped[str] = mapped_column(String)
+    recorded_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

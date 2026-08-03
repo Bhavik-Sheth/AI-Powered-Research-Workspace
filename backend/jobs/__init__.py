@@ -12,7 +12,8 @@ best-effort dressed up as the real guarantee.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -22,7 +23,7 @@ from saq.worker import Worker
 
 from config import get_config
 from db import session
-from db.models import ScheduledJobs
+from db.models import Project, ScheduledJobs
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,34 @@ _queue: PostgresQueue | None = None
 _worker: Worker | None = None
 _worker_task: asyncio.Task[None] | None = None
 
+# The catch-up cursor's own schedule kinds (Schema.md `scheduled_jobs.job_kind`
+# CHECK) mapped to the SAQ-registered handler name and its cadence — Job
+# Queue owns this mapping (MODULES.md: "Hides: ...the catch-up-on-launch
+# cursor check"), not Research Feed. PRD §14 leaves the exact feed cadence
+# open/tunable post-v1; daily is a reasonable default until then.
+_FEED_POLL_INTERVAL_S = 24 * 60 * 60
+_INITIAL_FEED_LOOKBACK = timedelta(days=14)
+
+
+def _feed_poll_kwargs(row: ScheduledJobs) -> dict:
+    since = row.last_run_at or (datetime.now(timezone.utc) - _INITIAL_FEED_LOOKBACK)
+    return {"project_id": str(row.project_id), "since": since.isoformat()}
+
+
+# job_kind -> (SAQ-registered handler name, cadence seconds, kwargs builder).
+# Only `feed_poll` has a handler as of Phase 5.1; `interest_profile_reextract`
+# (Schema.md's other CHECK value) arrives with Phase 5.2.
+_SCHEDULE_KINDS: dict[str, tuple[str, int, Callable[[ScheduledJobs], dict]]] = {
+    "feed_poll": ("poll_feed_job", _FEED_POLL_INTERVAL_S, _feed_poll_kwargs),
+}
+
 
 def _job_functions() -> list:
     # Imported locally, not at module top: papers/ imports jobs/ (to call
     # `enqueue` from within its own job handlers), so a top-level import
     # here would cycle. By the time `start()` runs (Sidecar Bootstrap's
     # lifespan), papers/ is already fully loaded via main.py's own imports.
+    from feed import poll_feed_job
     from memory import chunk_and_embed_job
     from papers import embed_paper_job, enrich_paper_job, extract_card_job, parse_paper_job
     from sandbox import run_experiment_job
@@ -47,6 +70,7 @@ def _job_functions() -> list:
         embed_paper_job,
         chunk_and_embed_job,
         run_experiment_job,
+        poll_feed_job,
     ]
 
 
@@ -81,16 +105,39 @@ async def enqueue(job_kind: str, **payload: object) -> Job | None:
     return await _queue.enqueue(job_kind, **payload)
 
 
-async def run_catchup_pass() -> None:
-    """Runs any `scheduled_jobs` overdue since `last_run_at`, once, at startup.
+async def _ensure_schedule_rows(db_session, job_kind: str, interval_seconds: int, now: datetime) -> None:
+    """Every project gets a `scheduled_jobs` row for `job_kind` the first
+    time this runs after the project exists — due immediately (`next_due_at
+    = now`) so a brand-new project's first feed poll happens on the very
+    next catch-up pass, not a full interval later."""
+    project_ids = (await db_session.scalars(select(Project.id))).all()
+    scheduled_ids = set(
+        await db_session.scalars(select(ScheduledJobs.project_id).where(ScheduledJobs.job_kind == job_kind))
+    )
+    for project_id in project_ids:
+        if project_id not in scheduled_ids:
+            db_session.add(
+                ScheduledJobs(job_kind=job_kind, project_id=project_id, interval_seconds=interval_seconds, next_due_at=now)
+            )
 
-    No `job_kind` in `scheduled_jobs` has a registered handler yet — the
-    first one (`feed_poll`) arrives in Phase 5. Until then this legitimately
-    finds nothing to do; it exists now so the mechanism (table + startup
-    pass) is proven end to end.
-    """
+
+async def run_catchup_pass() -> None:
+    """Runs any `scheduled_jobs` overdue since `last_run_at`, once, at startup."""
     now = datetime.now(timezone.utc)
     async with session() as db_session:
+        for job_kind, (_, interval_seconds, _) in _SCHEDULE_KINDS.items():
+            await _ensure_schedule_rows(db_session, job_kind, interval_seconds, now)
+        await db_session.flush()
+
         overdue = (await db_session.scalars(select(ScheduledJobs).where(ScheduledJobs.next_due_at <= now))).all()
+        for row in overdue:
+            registered = _SCHEDULE_KINDS.get(row.job_kind)
+            if registered is None:
+                continue
+            function_name, interval_seconds, kwargs_builder = registered
+            await enqueue(function_name, **kwargs_builder(row))
+            row.last_run_at = now
+            row.next_due_at = now + timedelta(seconds=interval_seconds)
+
     if overdue:
-        logger.info("job_kind=catchup event=overdue_found count=%d", len(overdue))
+        logger.info("job_kind=catchup event=overdue_dispatched count=%d", len(overdue))

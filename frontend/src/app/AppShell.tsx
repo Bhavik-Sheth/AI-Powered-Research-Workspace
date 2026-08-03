@@ -11,6 +11,7 @@ import { MatrixView } from "../matrix/MatrixView";
 import { NotesView } from "../notes/NotesView";
 import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
+import { InterestProfileForm } from "../settings/InterestProfileForm";
 import { useCollapsible } from "../state/useCollapsible";
 import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
@@ -34,6 +35,7 @@ const MATRIX_TAB: TabRef = { id: "matrix", kind: "matrix", params: {}, label: "M
 const GRAPH_TAB: TabRef = { id: "graph", kind: "graph", params: {}, label: "Graph" };
 const WRITING_TAB: TabRef = { id: "writing", kind: "writing", params: {}, label: "Writing" };
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
+const SETTINGS_TAB: TabRef = { id: "settings", kind: "settings", params: {}, label: "Settings" };
 
 /** Picks up where the user left off (Phase 1.8 sign-off): most-recently-
  * opened project, or the first project if none has been opened yet. */
@@ -153,6 +155,13 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
         return <SearchResults projectId={projectId} />;
+      case "settings":
+        return (
+          <>
+            <h1 className="center-pane__title">Settings</h1>
+            <InterestProfileForm projectId={projectId} />
+          </>
+        );
       case "readiness":
         return (
           <>
@@ -201,6 +210,9 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             ))}
             <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(SEARCH_TAB)}>
               Search
+            </div>
+            <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(SETTINGS_TAB)}>
+              Settings
             </div>
             <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(READINESS_TAB)}>
               Readiness

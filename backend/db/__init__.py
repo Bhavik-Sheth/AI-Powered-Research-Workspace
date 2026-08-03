@@ -214,3 +214,34 @@ async def traverse_graph(
         {"project_id": project_id, "root_types": root_types, "root_ids": root_ids, "depth": depth, "types": types},
     )
     return [dict(row) for row in rows.mappings().all()]
+
+
+# The feed seen-set check (D28, Schema.md "Join strategies"): a candidate is
+# excluded if it is read, in the library, previously surfaced, or dismissed.
+# Library membership is checked directly against `project_papers` rather than
+# requiring every paper-adding path outside Research Feed to also write a
+# `seen_set` row for it.
+_SEEN_SET_ANTI_JOIN_SQL = text(
+    """
+    SELECT candidate.canonical_id
+    FROM unnest(CAST(:canonical_ids AS text[])) AS candidate(canonical_id)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM seen_set
+        WHERE project_id = :project_id AND canonical_id = candidate.canonical_id
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM project_papers pp
+        JOIN papers p ON p.id = pp.paper_id
+        WHERE pp.project_id = :project_id AND p.canonical_id = candidate.canonical_id
+    )
+    """
+)
+
+
+async def filter_unseen(session: AsyncSession, project_id: uuid.UUID, canonical_ids: list[str]) -> list[str]:
+    """Of `canonical_ids`, the ones not yet in the project's seen set —
+    same order not guaranteed, caller re-keys by id."""
+    if not canonical_ids:
+        return []
+    rows = await session.execute(_SEEN_SET_ANTI_JOIN_SQL, {"project_id": project_id, "canonical_ids": canonical_ids})
+    return [row[0] for row in rows]

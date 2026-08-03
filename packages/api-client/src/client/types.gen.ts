@@ -659,6 +659,23 @@ export type HighlightInput = {
 };
 
 /**
+ * InterestProfile
+ *
+ * Inspectable and user-editable (D28) — the fetch's category window and
+ * the ranking's keyword-match term are both read from exactly this.
+ */
+export type InterestProfile = {
+    /**
+     * Categories
+     */
+    categories?: Array<string>;
+    /**
+     * Keywords
+     */
+    keywords?: Array<string>;
+};
+
+/**
  * KernelActionRequest
  */
 export type KernelActionRequest = {
@@ -3735,3 +3752,75 @@ export type ExportBibtexApiProjectsProjectIdBibtexGetResponses = {
 };
 
 export type ExportBibtexApiProjectsProjectIdBibtexGetResponse = ExportBibtexApiProjectsProjectIdBibtexGetResponses[keyof ExportBibtexApiProjectsProjectIdBibtexGetResponses];
+
+export type GetInterestProfileApiProjectsProjectIdInterestProfileGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/interest-profile';
+};
+
+export type GetInterestProfileApiProjectsProjectIdInterestProfileGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetInterestProfileApiProjectsProjectIdInterestProfileGetError = GetInterestProfileApiProjectsProjectIdInterestProfileGetErrors[keyof GetInterestProfileApiProjectsProjectIdInterestProfileGetErrors];
+
+export type GetInterestProfileApiProjectsProjectIdInterestProfileGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InterestProfile;
+};
+
+export type GetInterestProfileApiProjectsProjectIdInterestProfileGetResponse = GetInterestProfileApiProjectsProjectIdInterestProfileGetResponses[keyof GetInterestProfileApiProjectsProjectIdInterestProfileGetResponses];
+
+export type PutInterestProfileApiProjectsProjectIdInterestProfilePutData = {
+    body: InterestProfile;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/interest-profile';
+};
+
+export type PutInterestProfileApiProjectsProjectIdInterestProfilePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutInterestProfileApiProjectsProjectIdInterestProfilePutError = PutInterestProfileApiProjectsProjectIdInterestProfilePutErrors[keyof PutInterestProfileApiProjectsProjectIdInterestProfilePutErrors];
+
+export type PutInterestProfileApiProjectsProjectIdInterestProfilePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: InterestProfile;
+};
+
+export type PutInterestProfileApiProjectsProjectIdInterestProfilePutResponse = PutInterestProfileApiProjectsProjectIdInterestProfilePutResponses[keyof PutInterestProfileApiProjectsProjectIdInterestProfilePutResponses];
