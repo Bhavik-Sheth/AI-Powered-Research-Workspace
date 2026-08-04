@@ -16,7 +16,7 @@ import { setCitationFindings } from "./citationDecorations";
 import { insertAtCursor, LatexSourceEditor } from "./LatexSourceEditor";
 import "./ManuscriptTab.css";
 import { renderMermaidToSvg } from "./renderMermaid";
-import { useSwiftLatexPreview } from "./useSwiftLatexPreview";
+import { useManuscriptPreview } from "./useManuscriptPreview";
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const STARTER_TEX = "\\documentclass{article}\n\\begin{document}\n\n\\end{document}\n";
@@ -35,16 +35,17 @@ function countCites(tex: string): number {
 }
 
 /** Manuscript Editor (MODULES.md) — `drafts list │ source/preview split`.
- * SwiftLaTeX WASM drives the always-on debounced preview; Tectonic-in-
- * Docker is the explicit escape hatch for a final full-package compile
- * (D34). `\cite` autocompletes from the project's own references, and
- * "Check citations" flags missing targets and uncited claims inline. */
+ * Tectonic-in-Docker, compiling against a TeX Live bundle baked into its
+ * image, drives the always-on debounced preview (Phase 4.1 — supersedes
+ * D34's SwiftLaTeX-WASM default, which could never work offline: its
+ * upstream release ships no format file, and even a working one would
+ * still fetch every `\usepackage` target from a third-party host at
+ * compile time). `\cite` autocompletes from the project's own references,
+ * and "Check citations" flags missing targets and uncited claims inline. */
 export function ManuscriptTab({ projectId }: { projectId: string }) {
   const [documents, setDocuments] = useState<Document[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [tex, setTex] = useState("");
-  const [tectonicResult, setTectonicResult] = useState<CompileResult | null>(null);
-  const [compiling, setCompiling] = useState(false);
   const [showMermaidPanel, setShowMermaidPanel] = useState(false);
   const [mermaidSource, setMermaidSource] = useState("graph TD\n  A[Idea] --> B[Result]\n");
   const [findings, setFindings] = useState<CitationFinding[]>([]);
@@ -55,7 +56,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   const dirtyRef = useRef(false);
 
   const active = documents?.find((d) => d.id === activeId) ?? null;
-  const preview = useSwiftLatexPreview(tex);
+  const preview = useManuscriptPreview(tex, projectId, activeId, active?.title ?? "");
 
   async function refresh(selectId?: string) {
     const { data } = await listDocumentsApiProjectsProjectIdDocumentsGet({ path: { project_id: projectId }, throwOnError: true });
@@ -74,7 +75,6 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   function openDraft(doc: Document) {
     setActiveId(doc.id);
     setTex(doc.body);
-    setTectonicResult(null);
     setFindings([]);
     setCitationFindings(viewRef.current, []);
   }
@@ -105,24 +105,6 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
       throwOnError: true,
     });
     setDocuments((prev) => prev?.map((d) => (d.id === active.id ? { ...d, body: nextTex } : d)) ?? prev);
-  }
-
-  async function compileWithTectonic() {
-    if (!active) return;
-    setCompiling(true);
-    try {
-      const { data } = await updateDocumentApiProjectsProjectIdDocumentsDocumentIdPut({
-        path: { project_id: projectId, document_id: active.id },
-        body: { title: active.title, tex, engine: "tectonic" },
-        throwOnError: true,
-      });
-      if (isCompileResult(data)) {
-        setTectonicResult(data);
-        if (data.success) await refresh(active.id);
-      }
-    } finally {
-      setCompiling(false);
-    }
   }
 
   async function uploadAsset(filename: string, blob: Blob) {
@@ -217,9 +199,6 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
               <button type="button" onClick={() => setShowMermaidPanel((prev) => !prev)}>
                 + Mermaid
               </button>
-              <button type="button" disabled={compiling} onClick={() => void compileWithTectonic()}>
-                {compiling ? "Compiling…" : "Compile with Tectonic"}
-              </button>
               <button type="button" disabled={checkingCitations} onClick={() => void checkCitations()}>
                 {checkingCitations ? "Checking…" : "Check citations"}
               </button>
@@ -241,32 +220,14 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
           <div className="writing__split">
             <LatexSourceEditor value={tex} onChange={onSourceChange} viewRef={viewRef} projectId={projectId} />
             <div className="writing__preview">
-              {preview.status === "unavailable" && (
-                <p className="writing__preview-note">
-                  Live preview unavailable — run <code>npm run setup:swiftlatex</code> in <code>frontend/</code>.
-                </p>
-              )}
-              {preview.status === "loading-engine" && <p className="writing__preview-note">Loading preview engine…</p>}
+              {preview.status === "idle" && <p className="writing__preview-note">Start typing to compile a preview.</p>}
               {preview.status === "compiling" && <p className="writing__preview-note">Compiling preview…</p>}
-              {preview.status === "error" && <pre className="writing__compile-error">{preview.log}</pre>}
+              {preview.status === "error" && <pre className="writing__compile-error">{preview.log.slice(-2000)}</pre>}
               {preview.status === "ok" && preview.pdfUrl && (
                 <iframe className="writing__preview-frame" src={preview.pdfUrl} title="LaTeX preview" />
               )}
             </div>
           </div>
-
-          {tectonicResult && (
-            <div className={`writing__tectonic-result ${tectonicResult.success ? "writing__tectonic-result--ok" : "writing__tectonic-result--error"}`}>
-              {tectonicResult.success ? (
-                <p>Compiled cleanly with Tectonic — written to the manuscript folder in your vault.</p>
-              ) : (
-                <>
-                  <p>Tectonic compile failed — the saved draft is unchanged.</p>
-                  <pre className="writing__compile-error">{tectonicResult.log.slice(-2000)}</pre>
-                </>
-              )}
-            </div>
-          )}
 
           {findings.length > 0 && (
             <div className="writing__citation-findings">

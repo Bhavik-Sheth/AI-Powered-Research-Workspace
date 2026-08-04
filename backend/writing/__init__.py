@@ -8,6 +8,7 @@ citation rule.
 
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import vault
 from db.models import Documents, Paper
+from settings import get_vault_path
 from vault.models import Document, DocumentInput
 from writing.citation_check import check_citations as _run_citation_check
 from writing.models import AssetInserted, CitationFinding, CompileResult, Reference
@@ -32,6 +34,7 @@ __all__ = [
     "save_document",
     "list_documents",
     "get_document",
+    "get_compiled_pdf_path",
     "insert_asset",
     "check_citations",
     "autocomplete_citations",
@@ -96,6 +99,21 @@ async def save_document(
         return CompileResult(success=True, engine="tectonic", log=log, document=_document_from_row(row))
 
     return await vault.write_document(session, project_id, DocumentInput(id=document_id, title=title, tex=tex))
+
+
+async def get_compiled_pdf_path(session: AsyncSession, document_id: uuid.UUID) -> str | None:
+    """The vault-relative path to `document_id`'s last successful Tectonic
+    compile (the `.tex`'s sibling `.pdf` — `vault.write_document`'s
+    `compiled_pdf` param is what puts it there) for the Manuscript Editor's
+    preview iframe. `None` when the document has never compiled
+    successfully — a fresh draft, or one whose only compile so far failed
+    (MODULES.md: a failed compile never touches what's already on disk, so
+    there is nothing new to serve)."""
+    row = await session.get(Documents, document_id)
+    if row is None or row.last_compiled_at is None:
+        return None
+    pdf_path = str(Path(row.file_path).with_suffix(".pdf"))
+    return pdf_path if (get_vault_path() / pdf_path).exists() else None
 
 
 async def insert_asset(session: AsyncSession, project_id: uuid.UUID, filename: str, content: bytes) -> AssetInserted:

@@ -8,12 +8,13 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 import db
 import vault
 import writing
+from settings import get_vault_path
 from writing.models import AssetInserted, CitationFinding, CompileResult, Document, Reference
 
 router = APIRouter()
@@ -64,6 +65,15 @@ async def update_document(project_id: uuid.UUID, document_id: uuid.UUID, body: S
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except vault.VaultWriteFailed as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_id}/documents/{document_id}/pdf")
+async def get_document_pdf(project_id: uuid.UUID, document_id: uuid.UUID) -> FileResponse:
+    async with db.session() as session:
+        pdf_path = await writing.get_compiled_pdf_path(session, document_id)
+    if pdf_path is None:
+        raise HTTPException(status_code=404, detail="document has no compiled PDF yet")
+    return FileResponse(get_vault_path() / pdf_path, media_type="application/pdf")
 
 
 @router.post("/api/projects/{project_id}/documents/{document_id}/assets", response_model=AssetInserted)

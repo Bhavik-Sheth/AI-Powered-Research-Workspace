@@ -19,12 +19,6 @@ __pycache__/
 # Env / secrets
 .env
 
-# SwiftLaTeX WASM engine — fetched by frontend/scripts/fetch-swiftlatex.mjs,
-# not committed (a compiled binary blob, same policy as a model weight file
-# — Rules.md). Flat in public/, not a subfolder: see the fetch script for why.
-/frontend/public/PdfTeXEngine.js
-/frontend/public/swiftlatexpdftex.js
-/frontend/public/swiftlatexpdftex.wasm
 .env.*
 !.env.example
 !.env.*.example

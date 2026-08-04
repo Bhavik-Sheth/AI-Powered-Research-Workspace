@@ -3815,6 +3815,44 @@ export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponses = 
 
 export type UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponse = UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponses[keyof UpdateDocumentApiProjectsProjectIdDocumentsDocumentIdPutResponses];
 
+export type GetDocumentPdfApiProjectsProjectIdDocumentsDocumentIdPdfGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/documents/{document_id}/pdf';
+};
+
+export type GetDocumentPdfApiProjectsProjectIdDocumentsDocumentIdPdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDocumentPdfApiProjectsProjectIdDocumentsDocumentIdPdfGetError = GetDocumentPdfApiProjectsProjectIdDocumentsDocumentIdPdfGetErrors[keyof GetDocumentPdfApiProjectsProjectIdDocumentsDocumentIdPdfGetErrors];
+
+export type GetDocumentPdfApiProjectsProjectIdDocumentsDocumentIdPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type InsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPostData = {
     body: BodyInsertAssetApiProjectsProjectIdDocumentsDocumentIdAssetsPost;
     headers?: {

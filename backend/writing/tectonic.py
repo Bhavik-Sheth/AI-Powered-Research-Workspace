@@ -1,16 +1,25 @@
 """The Tectonic-in-Docker escape hatch (D34, MODULES.md: "Hides: the
-Tectonic-in-Docker escape-hatch invocation"). A one-shot `docker run` per
-compile, same shape as Execution Sandbox's `nbclient` fallback but for
-typesetting, not user code — this is not a D31 consent-gated execution path
-(it runs a fixed compiler binary against LaTeX source, never arbitrary
-code), so it runs unconditionally on request rather than behind a
-confirmation token.
+Tectonic-in-Docker escape-hatch invocation") — and, as of Phase 4.1, the
+engine behind every manuscript compile, not just the final full-package
+one (see docker/tectonic.Dockerfile for why SwiftLaTeX WASM was retired).
+A one-shot `docker run` per compile, same shape as Execution Sandbox's
+`nbclient` fallback but for typesetting, not user code — this is not a D31
+consent-gated execution path (it runs a fixed compiler binary against
+LaTeX source, never arbitrary code), so it runs unconditionally on request
+rather than behind a confirmation token.
 
-Tectonic fetches its TeX Live bundle files on demand from its own public
-CDN on a cold cache (invariant #3 does not apply: these are open typesetting
-resource files, not a paper). `--network none` would make every compile
-fail, so this container gets network access; the persistent cache volume
-(`.research-os/tectonic-cache/`) keeps that to a one-time cost per machine.
+Compiles are fully offline: `docker/tectonic.Dockerfile` bakes Tectonic's
+TeX Live bundle into the image at build time, so `--network none` here
+costs nothing at compile time (contrast the previous revision of this
+file, which ran with `network_mode="bridge"` to fetch the bundle from
+Tectonic's CDN on a cold cache — that violated the 2026-08-04 "no network
+request to any host at compile time" decision, not just the SwiftLaTeX
+path this phase was scoped to fix). `--only-cached` is redundant with
+`--network none` here but kept as defense in depth against a future change
+that re-adds network access without noticing this invariant. The
+persistent cache volume (`.research-os/tectonic-cache/`) still matters: it
+holds Tectonic's index over the local bundle, built once per machine
+instead of once per compile.
 """
 
 import asyncio
@@ -23,6 +32,8 @@ import docker.errors
 from settings import get_vault_path
 
 TECTONIC_IMAGE = "research-os-tectonic:latest"
+_BUNDLE_PATH = "/opt/tectonic/bundle"  # a directory (DirBundle) — docker/tectonic.Dockerfile, and see its
+# comment on why: Tectonic's local `-b` loader rejects a bare `.tar`
 
 _COMPILE_TIMEOUT_SECONDS = 120
 
@@ -60,13 +71,13 @@ async def compile_tex(tex: str, manuscript_dir: Path) -> tuple[bool, str, bytes 
             container = await asyncio.to_thread(
                 docker_client.containers.run,
                 TECTONIC_IMAGE,
-                command=["--untrusted", "--chatter=minimal", tex_path.name],
+                command=["-b", _BUNDLE_PATH, "--only-cached", "--untrusted", "--chatter=minimal", tex_path.name],
                 volumes={
                     str(manuscript_dir): {"bind": "/workspace", "mode": "rw"},
                     str(cache_dir): {"bind": "/cache", "mode": "rw"},
                 },
                 environment={"XDG_CACHE_HOME": "/cache"},
-                network_mode="bridge",
+                network_mode="none",
                 mem_limit="1g",
                 detach=True,
             )
