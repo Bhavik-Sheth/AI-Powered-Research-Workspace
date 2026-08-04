@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { listProjectsApiProjectsGet, type ProjectResponse } from "@research-os/api-client";
 
 import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
@@ -14,11 +15,72 @@ import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
 import { SettingsPanel } from "../settings/SettingsPanel";
 import { useCollapsible } from "../state/useCollapsible";
+import { usePaneWidth } from "../state/usePaneWidth";
 import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
 import { ManuscriptTab } from "../writing/ManuscriptTab";
 import "./AppShell.css";
 import { ReadinessStrip } from "./ReadinessStrip";
+
+// Icon-rail minimum keeps the nav usable as a landmark even at its narrowest;
+// the Companion minimum keeps a chat bubble and its citation readable. The
+// center pane never gets a minimum of its own — it is the flex remainder.
+const NAV_MIN_WIDTH = 56;
+const NAV_DEFAULT_WIDTH = 200;
+const NAV_MAX_WIDTH = 420;
+const COMPANION_MIN_WIDTH = 240;
+const COMPANION_DEFAULT_WIDTH = 280;
+const COMPANION_MAX_WIDTH = 520;
+
+/** A drag handle between two panes. `direction` says which way the pointer
+ * must move to grow the pane it resizes (+1 = right grows it, -1 = left
+ * grows it), since the nav sits left of its handle and the Companion sits
+ * right of its own. Reads `width` once at drag-start so a fast drag never
+ * compounds against a stale render. */
+function ResizeHandle({
+  width,
+  onChange,
+  direction,
+  onDragStateChange,
+  label,
+}: {
+  width: number;
+  onChange: (next: number) => void;
+  direction: 1 | -1;
+  onDragStateChange: (dragging: boolean) => void;
+  label: string;
+}) {
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = width;
+    onDragStateChange(true);
+
+    function onMove(moveEvent: PointerEvent) {
+      onChange(startWidth + direction * (moveEvent.clientX - startX));
+    }
+    function onUp() {
+      target.releasePointerCapture(event.pointerId);
+      onDragStateChange(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  return (
+    <div
+      className="pane-resizer"
+      onPointerDown={handlePointerDown}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+    />
+  );
+}
 
 const NAV_GROUPS: { label: string | null; items: string[] }[] = [
   { label: null, items: ["Dashboard"] },
@@ -102,6 +164,15 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
   const [navCollapsed, toggleNav] = useCollapsible("leftNavCollapsed");
   const [companionCollapsed, toggleCompanion] = useCollapsible("companionCollapsed");
+  const [navWidth, setNavWidth] = usePaneWidth("leftNavWidth", NAV_DEFAULT_WIDTH, NAV_MIN_WIDTH, NAV_MAX_WIDTH);
+  const [companionWidth, setCompanionWidth] = usePaneWidth(
+    "companionWidth",
+    COMPANION_DEFAULT_WIDTH,
+    COMPANION_MIN_WIDTH,
+    COMPANION_MAX_WIDTH,
+  );
+  const [navResizing, setNavResizing] = useState(false);
+  const [companionResizing, setCompanionResizing] = useState(false);
   // The project's one WebSocket session (backend/ws/__init__.py: exactly one
   // live connection per project_id) — owned here, once, so CompanionPane and
   // ExperimentsBoard (via renderTabContent) can both consume it without
@@ -198,7 +269,10 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         <ProjectSwitcher projectId={projectId} onSwitch={onSwitchProject} />
       </header>
       <div className="shell-body">
-        <div className={`pane-shell pane-shell--left ${navCollapsed ? "pane-shell--collapsed" : ""}`}>
+        <div
+          className={`pane-shell pane-shell--left ${navCollapsed ? "pane-shell--collapsed" : ""} ${navResizing ? "pane-shell--resizing" : ""}`}
+          style={navCollapsed ? undefined : { width: navWidth }}
+        >
           <nav className="left-nav">
             {NAV_GROUPS.map((group) => (
               <div key={group.label ?? "root"}>
@@ -237,6 +311,15 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             </div>
           </nav>
         </div>
+        {!navCollapsed && (
+          <ResizeHandle
+            width={navWidth}
+            onChange={setNavWidth}
+            direction={1}
+            onDragStateChange={setNavResizing}
+            label="Resize navigation"
+          />
+        )}
         <button
           type="button"
           className="pane-toggle"
@@ -286,7 +369,19 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         >
           {companionCollapsed ? "‹" : "›"}
         </button>
-        <div className={`pane-shell pane-shell--right ${companionCollapsed ? "pane-shell--collapsed" : ""}`}>
+        {!companionCollapsed && (
+          <ResizeHandle
+            width={companionWidth}
+            onChange={setCompanionWidth}
+            direction={-1}
+            onDragStateChange={setCompanionResizing}
+            label="Resize companion"
+          />
+        )}
+        <div
+          className={`pane-shell pane-shell--right ${companionCollapsed ? "pane-shell--collapsed" : ""} ${companionResizing ? "pane-shell--resizing" : ""}`}
+          style={companionCollapsed ? undefined : { width: companionWidth }}
+        >
           <CompanionPane
             projectId={projectId}
             selection={selection}

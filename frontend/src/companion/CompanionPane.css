@@ -2,8 +2,8 @@
 
 .companion {
   box-sizing: border-box;
-  width: 280px;
-  min-width: 220px;
+  width: 100%;
+  min-width: 0;
   padding: 14px;
   display: flex;
   flex-direction: column;

@@ -54,16 +54,29 @@ body {
   transition: width 0.15s ease;
 }
 
-.pane-shell--left {
-  width: 200px;
-}
-
-.pane-shell--right {
-  width: 280px;
-}
-
 .pane-shell--collapsed {
   width: 0;
+}
+
+/* Dragging a resize handle sets width every pointermove; the collapse
+   transition would fight that and lag the pane behind the cursor. */
+.pane-shell--resizing {
+  transition: none;
+}
+
+/* The divider between two panes. Same footprint as `.pane-toggle` so the
+   two affordances (drag to resize, click to collapse) sit flush together. */
+.pane-resizer {
+  flex: none;
+  align-self: stretch;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.pane-resizer:hover,
+.pane-resizer:active {
+  background: var(--accent-tint-15);
 }
 
 .pane-toggle {
@@ -84,13 +97,14 @@ body {
 }
 
 .left-nav {
-  width: 200px;
-  min-width: 170px;
+  width: 100%;
+  min-width: 0;
   flex: none;
   background: var(--surface);
   border-radius: var(--radius-panel);
   box-shadow: var(--panel-shadow);
   padding: 14px 0;
+  overflow: auto;
 }
 
 .left-nav__group-label {
