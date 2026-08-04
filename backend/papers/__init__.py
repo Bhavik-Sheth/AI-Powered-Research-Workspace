@@ -105,6 +105,24 @@ def paper_from_row(row: PaperRow) -> Paper:
     )
 
 
+async def _fetch_pdf(session: AsyncSession, row: PaperRow, source_ids: SourceIds, pdf_url: str | None) -> None:
+    """OA-only fetch (invariant #3), shared by `add_paper` and `reprocess_paper`."""
+    oa = await resolve_oa_pdf_url(source_ids, pdf_url)
+    if oa is not None:
+        resolved_url, origin = oa
+        try:
+            pdf_bytes = await download_pdf(resolved_url)
+        except httpx.HTTPError:
+            row.fetch_state = "degraded"
+        else:
+            path = await write_paper_asset(session, row.id, "pdf", pdf_bytes)
+            row.pdf_path = str(path.relative_to(get_vault_path()))
+            row.pdf_origin = origin
+            row.fetch_state = "done"
+    else:
+        row.fetch_state = "degraded"
+
+
 async def add_paper(session: AsyncSession, paper_input: PaperInput) -> Paper:
     """Fetches (OA only) or dedupes on canonical id, then enqueues parse
     (embed lands in Phase 1.7, extract is dispatched once parse completes)."""
@@ -129,25 +147,48 @@ async def add_paper(session: AsyncSession, paper_input: PaperInput) -> Paper:
     session.add(row)
     await session.flush()
 
-    oa = await resolve_oa_pdf_url(paper_input.source_ids, paper_input.pdf_url)
-    if oa is not None:
-        pdf_url, origin = oa
-        try:
-            pdf_bytes = await download_pdf(pdf_url)
-        except httpx.HTTPError:
-            row.fetch_state = "degraded"
-        else:
-            path = await write_paper_asset(session, row.id, "pdf", pdf_bytes)
-            row.pdf_path = str(path.relative_to(get_vault_path()))
-            row.pdf_origin = origin
-            row.fetch_state = "done"
-    else:
-        row.fetch_state = "degraded"
-
+    await _fetch_pdf(session, row, paper_input.source_ids, paper_input.pdf_url)
     await session.flush()
 
     if row.fetch_state == "done":
         await jobs.enqueue("parse_paper_job", paper_id=str(row.id), timeout=_PARSE_JOB_TIMEOUT_S)
+
+    return paper_from_row(row)
+
+
+_TERMINAL_STAGE_STATES = ("done", "degraded")
+
+
+async def reprocess_paper(session: AsyncSession, paper_id: uuid.UUID) -> Paper | None:
+    """Re-drives whichever stage stalled or failed — the Library's `Retry`
+    action (Bug Fix Plan Phase 1.3). Only stages not already in a terminal
+    state (`done`/`degraded`) are reset to `queued` and re-enqueued; a stage
+    downstream of one still incomplete is left alone, since its job assumes
+    the stage before it already produced output."""
+    row = await session.get(PaperRow, paper_id)
+    if row is None:
+        return None
+
+    if row.fetch_state not in _TERMINAL_STAGE_STATES:
+        source_ids = SourceIds(doi=row.doi, arxiv_id=row.arxiv_id, openalex_id=row.openalex_id, s2_id=row.s2_id)
+        await _fetch_pdf(session, row, source_ids, None)
+        await session.flush()
+
+    if row.fetch_state == "done" and row.parse_state not in _TERMINAL_STAGE_STATES:
+        row.parse_state = "queued"
+        await session.flush()
+        await jobs.enqueue("parse_paper_job", paper_id=str(row.id), timeout=_PARSE_JOB_TIMEOUT_S)
+        return paper_from_row(row)
+
+    if row.parse_state == "done":
+        if row.extract_state not in _TERMINAL_STAGE_STATES:
+            row.extract_state = "queued"
+            await session.flush()
+            await jobs.enqueue("extract_card_job", paper_id=str(row.id), timeout=_EXTRACT_JOB_TIMEOUT_S)
+        if row.embed_state not in _TERMINAL_STAGE_STATES:
+            row.embed_state = "queued"
+            await session.flush()
+            await jobs.enqueue("embed_paper_job", paper_id=str(row.id), timeout=_EMBED_JOB_TIMEOUT_S)
 
     return paper_from_row(row)
 
@@ -243,8 +284,9 @@ _EXTRACTION_PROMPT = (
     "paper does not state it — never paraphrase, never guess."
 )
 
-# Keeps the extraction context bounded; very long papers are truncated for
-# v1 (Memory Index's section-aware chunking is Phase 1.7).
+# Per-window extraction budget: a paper longer than this is extracted over
+# several section-aware windows rather than one truncated whole-paper call
+# (Bug Fix Plan Phase 1.2) — this bounds each window, not the paper.
 _MAX_EXTRACTION_CHARS = 60_000
 
 
@@ -260,6 +302,33 @@ class _ExtractedCard(BaseModel):
     datasets: _ExtractedSpan | None = None
     results: _ExtractedSpan | None = None
     limitations: _ExtractedSpan | None = None
+
+
+def _section_windows(full_text: str, sections: list[dict]) -> list[str]:
+    """Groups the paper into bounded, section-aligned text windows, in
+    document order, each no larger than `_MAX_EXTRACTION_CHARS` — so a
+    long paper is extracted from in full rather than truncated to its
+    opening chars. Falls back to fixed-size chunks of `full_text` when
+    docling found no section boundaries."""
+    bounds = [(s["char_start"], s["char_end"]) for s in sections if s["char_end"] > s["char_start"]]
+    if not bounds:
+        bounds = [(0, len(full_text))]
+
+    merged: list[tuple[int, int]] = []
+    window_start, window_end = bounds[0]
+    for start, end in bounds[1:]:
+        if end - window_start <= _MAX_EXTRACTION_CHARS:
+            window_end = end
+        else:
+            merged.append((window_start, window_end))
+            window_start, window_end = start, end
+    merged.append((window_start, window_end))
+
+    windows: list[str] = []
+    for start, end in merged:
+        text = full_text[start:end]
+        windows.extend(text[i : i + _MAX_EXTRACTION_CHARS] for i in range(0, len(text), _MAX_EXTRACTION_CHARS))
+    return windows
 
 
 async def _set_extract_state(pid: uuid.UUID, state: str) -> None:
@@ -293,11 +362,17 @@ async def embed_paper_job(_ctx: dict, *, paper_id: str) -> None:
 
 
 async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
-    """Auxiliary-tier extraction of the five standard fields (D22), each
-    validated through Provenance before a `paper_cards` row is written."""
+    """Auxiliary-tier extraction of the five standard fields (D22) over
+    bounded, section-aware windows, each validated through Provenance
+    before a `paper_cards` row is written. One window's LLM call failing
+    skips just that window rather than the whole paper (Bug Fix Plan
+    Phase 1.2); the card/state commit is a separate unit of work from the
+    graph-edge write, so a failure writing edges can never roll back
+    cards that already validated."""
     pid = uuid.UUID(paper_id)
     await _set_extract_state(pid, "running")
 
+    llm_edges: list[LLMEdge] = []
     try:
         async with db.session() as session:
             content = await session.get(PaperContent, pid)
@@ -307,22 +382,34 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
             model_settings = await settings.get_settings(session)
             model_name = model_settings.auxiliary_model or model_settings.primary_model or "unknown"
 
-            extracted = await complete_structured(
-                messages=[
-                    Message(role="system", content=_EXTRACTION_PROMPT),
-                    Message(role="user", content=content.full_text[:_MAX_EXTRACTION_CHARS]),
-                ],
-                schema=_ExtractedCard,
-                tier="auxiliary",
-                timeout=60,
-            )
+            merged: dict[str, _ExtractedSpan] = {}
+            any_window_succeeded = False
+            for window_text in _section_windows(content.full_text, content.sections):
+                try:
+                    extracted = await complete_structured(
+                        messages=[
+                            Message(role="system", content=_EXTRACTION_PROMPT),
+                            Message(role="user", content=window_text),
+                        ],
+                        schema=_ExtractedCard,
+                        tier="auxiliary",
+                        timeout=60,
+                    )
+                except (*LLMError, RuntimeError):
+                    continue
+                any_window_succeeded = True
+                for field_key in _FIELD_KEYS:
+                    if field_key in merged:
+                        continue  # first window to state a field wins
+                    span = getattr(extracted, field_key)
+                    if span is not None and span.quote:
+                        merged[field_key] = span
+
+            if not any_window_succeeded:
+                raise RuntimeError(f"every extraction window failed for paper {pid}")
 
             paper = await session.get(PaperRow, pid)
-            llm_edges: list[LLMEdge] = []
-            for field_key in _FIELD_KEYS:
-                span = getattr(extracted, field_key)
-                if span is None or not span.quote:
-                    continue
+            for field_key, span in merged.items():
                 anchor = await validate_and_anchor(session, pid, span.quote, span.prefix, span.suffix)
                 if anchor is None:
                     continue  # dropped: absence of a row *is* "not stated" (Schema.md)
@@ -348,8 +435,6 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
                             relation=relation,
                         )
                     )
-            if llm_edges:
-                await write_llm_edges(session, pid, llm_edges)
 
             paper.extract_state = "done"
     except (*LLMError, RuntimeError):
@@ -358,6 +443,10 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
         # re-raised so SAQ's own job-failure tracking still sees it.
         await _set_extract_state(pid, "failed")
         raise
+
+    if llm_edges:
+        async with db.session() as session:
+            await write_llm_edges(session, pid, llm_edges)
 
     await jobs.enqueue("enrich_paper_job", paper_id=paper_id, timeout=_ENRICH_JOB_TIMEOUT_S)
 
