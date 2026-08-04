@@ -36,6 +36,13 @@
   margin-top: 4px;
 }
 
+.dashboard__stat-qualifier {
+  font: 10px var(--font-ui);
+  color: var(--text-muted);
+  margin-top: 2px;
+  min-height: 12px;
+}
+
 .dashboard__section-label {
   font: 700 10px var(--font-ui);
   letter-spacing: 0.06em;
@@ -90,4 +97,34 @@
 
 .dashboard__resume-link:hover {
   color: var(--link-hover);
+}
+
+/* NEEDS ATTENTION soft nudges (UI_DESIGN.md §3.4): dashed, no tint —
+ * a prompt, not a failure. Real errors reuse `design/ErrorCard`. */
+.dashboard__nudge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px dashed var(--border-dashed);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.dashboard__nudge-text {
+  font: 12px var(--font-ui);
+  color: var(--text-muted);
+  margin: 0;
+  flex: 1;
+}
+
+.dashboard__nudge-retry {
+  height: 28px;
+  border-radius: var(--radius-button);
+  padding: 0 12px;
+  font: 700 11px var(--font-ui);
+  background: none;
+  border: 1px solid var(--border-dashed);
+  color: var(--text-muted);
+  cursor: pointer;
 }

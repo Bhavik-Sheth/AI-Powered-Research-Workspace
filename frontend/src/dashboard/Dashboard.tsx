@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
-import { listNotesApiProjectsProjectIdNotesGet, listProjectPapersApiProjectsProjectIdPapersGet, type Note } from "@research-os/api-client";
+import {
+  getDashboardApiProjectsProjectIdDashboardGet,
+  reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost,
+  type DashboardSummary,
+  type NeedsAttentionItem,
+} from "@research-os/api-client";
 
+import { ErrorCard } from "../design/ErrorCard";
 import type { TabRef } from "../state/useTabStack";
 import "./Dashboard.css";
 
@@ -11,9 +17,14 @@ const TAB_KIND_LABEL: Record<string, string> = {
   search: "search",
 };
 
-/** The project's landing view (UI_DESIGN.md §4.1) — real counts, and the
+/** The project's landing view (UI_DESIGN.md §4.1) — real counts, the
  * persisted tab stack rendered as "continue where you left off" rows
- * (Phase 1.8 sign-off: resume position is real state, not a guess). */
+ * (Phase 1.8 sign-off: resume position is real state, not a guess), and
+ * `NEEDS ATTENTION` (Bug Fix Plan Phase 4.3): the same figures Library
+ * View, Notes, Experiments Board and Feed View already show, projected
+ * here so a failed or stalled paper is visible without opening the
+ * library. Every number this screen renders comes from one REST read
+ * (`GET /api/projects/:id/dashboard`) — Dashboard computes nothing itself. */
 export function Dashboard({
   projectId,
   projectName,
@@ -25,24 +36,37 @@ export function Dashboard({
   tabs: TabRef[];
   onResume: (tabId: string) => void;
 }) {
-  const [paperCount, setPaperCount] = useState<number | null>(null);
-  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+
+  async function refresh() {
+    const { data } = await getDashboardApiProjectsProjectIdDashboardGet({
+      path: { project_id: projectId },
+      throwOnError: true,
+    });
+    setSummary(data);
+  }
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [papers, noteList] = await Promise.all([
-        listProjectPapersApiProjectsProjectIdPapersGet({ path: { project_id: projectId }, throwOnError: true }),
-        listNotesApiProjectsProjectIdNotesGet({ path: { project_id: projectId }, throwOnError: true }),
-      ]);
-      if (cancelled) return;
-      setPaperCount(papers.data.length);
-      setNotes(noteList.data);
+      const { data } = await getDashboardApiProjectsProjectIdDashboardGet({
+        path: { project_id: projectId },
+        throwOnError: true,
+      });
+      if (!cancelled) setSummary(data);
     })();
     return () => {
       cancelled = true;
     };
   }, [projectId]);
+
+  async function retry(paperId: string) {
+    await reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost({
+      path: { project_id: projectId, paper_id: paperId },
+      throwOnError: true,
+    });
+    await refresh();
+  }
 
   const resumable = tabs.filter((t) => t.kind !== "dashboard");
 
@@ -53,11 +77,23 @@ export function Dashboard({
       <div className="dashboard__stats">
         <div className="dashboard__stat">
           <div className="dashboard__stat-label">Papers</div>
-          <div className="dashboard__stat-value">{paperCount ?? "…"}</div>
+          <div className="dashboard__stat-value">{summary?.papers.total ?? "…"}</div>
+          <div className="dashboard__stat-qualifier">{summary?.papers.qualifier ?? ""}</div>
         </div>
         <div className="dashboard__stat">
           <div className="dashboard__stat-label">Notes</div>
-          <div className="dashboard__stat-value">{notes?.length ?? "…"}</div>
+          <div className="dashboard__stat-value">{summary?.notes.total ?? "…"}</div>
+          <div className="dashboard__stat-qualifier">{summary?.notes.qualifier ?? ""}</div>
+        </div>
+        <div className="dashboard__stat">
+          <div className="dashboard__stat-label">Experiments</div>
+          <div className="dashboard__stat-value">{summary?.experiments.total ?? "…"}</div>
+          <div className="dashboard__stat-qualifier">{summary?.experiments.qualifier ?? ""}</div>
+        </div>
+        <div className="dashboard__stat">
+          <div className="dashboard__stat-label">Feed</div>
+          <div className="dashboard__stat-value">{summary?.feed.total ?? "…"}</div>
+          <div className="dashboard__stat-qualifier">{summary?.feed.qualifier ?? ""}</div>
         </div>
       </div>
 
@@ -78,6 +114,39 @@ export function Dashboard({
           ))
         )}
       </div>
+
+      <div className="dashboard__section">
+        <h2 className="dashboard__section-label">Needs attention</h2>
+        {summary && summary.needs_attention.length === 0 ? (
+          <p className="dashboard__empty">Nothing needs attention right now.</p>
+        ) : (
+          summary?.needs_attention.map((item, index) => <NeedsAttentionRow key={index} item={item} onRetry={retry} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NeedsAttentionRow({ item, onRetry }: { item: NeedsAttentionItem; onRetry: (paperId: string) => void }) {
+  if (item.severity === "error") {
+    return (
+      <ErrorCard
+        title="Processing failed"
+        message={item.message}
+        onRetry={() => {
+          if (item.paper_id) void onRetry(item.paper_id);
+        }}
+      />
+    );
+  }
+  return (
+    <div className="dashboard__nudge">
+      <p className="dashboard__nudge-text">{item.message}</p>
+      {item.action === "retry" && item.paper_id && (
+        <button type="button" className="dashboard__nudge-retry" onClick={() => onRetry(item.paper_id!)}>
+          Retry
+        </button>
+      )}
     </div>
   );
 }
