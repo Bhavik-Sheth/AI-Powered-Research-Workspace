@@ -48,7 +48,10 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   const [tex, setTex] = useState("");
   const [showMermaidPanel, setShowMermaidPanel] = useState(false);
   const [mermaidSource, setMermaidSource] = useState("graph TD\n  A[Idea] --> B[Result]\n");
-  const [findings, setFindings] = useState<CitationFinding[]>([]);
+  // `null` = no "Check citations" run yet for this draft; `[]` = a run
+  // completed and found nothing — the panel must tell those two apart so a
+  // clean draft doesn't read as a dead button (Phase 4.2).
+  const [findings, setFindings] = useState<CitationFinding[] | null>(null);
   const [checkingCitations, setCheckingCitations] = useState(false);
   const viewRef = useRef<EditorView | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -75,7 +78,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   function openDraft(doc: Document) {
     setActiveId(doc.id);
     setTex(doc.body);
-    setFindings([]);
+    setFindings(null);
     setCitationFindings(viewRef.current, []);
   }
 
@@ -229,13 +232,17 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          {findings.length > 0 && (
+          {findings !== null && (
             <div className="writing__citation-findings">
-              {findings.map((finding, index) => (
-                <p key={index} className={`writing__citation-finding writing__citation-finding--${finding.kind}`}>
-                  {finding.kind === "missing" ? finding.note : "unsupported claim — no linked source yet"}
-                </p>
-              ))}
+              {findings.length === 0 ? (
+                <p className="writing__citation-finding writing__citation-finding--clean">No issues found.</p>
+              ) : (
+                findings.map((finding, index) => (
+                  <p key={index} className={`writing__citation-finding writing__citation-finding--${finding.kind}`}>
+                    {finding.kind === "missing" ? finding.note : "unsupported claim — no linked source yet"}
+                  </p>
+                ))
+              )}
             </div>
           )}
         </div>
