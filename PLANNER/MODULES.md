@@ -166,6 +166,7 @@ Modules are listed in dependency order — a module never depends on one defined
 | `parse_paper_job` | `(paper_id: UUID) -> None` | docling parse; writes `paper_content` and section boundaries. |
 | `extract_card_job` | `(paper_id: UUID) -> None` | Auxiliary-tier extraction of the five standard fields, each validated through Provenance before a `paper_cards` row is written; also calls Knowledge Graph's `write_llm_edges`. |
 | `enrich_paper_job` | `(paper_id: UUID) -> None` | Papers with Code / GitHub, on open only; calls Knowledge Graph's `write_metadata_edges`. |
+| `reprocess_paper` | `(paper_id: UUID) -> Paper` | Re-drives whichever stage (`fetch`/`parse`/`embed`/`extract`) stalled or failed, re-enqueuing only the incomplete ones (Bug Fix Plan Phase 1.3). |
 
 **Depends on:** Database Layer, Vault Writer, Provenance, LLM Gateway, Knowledge Graph
 **Errors:** No OA copy and no upload leaves `pdf_path` NULL and `fetch_state = 'degraded'`; callers render abstract + source link, never a paywall attempt. A field failing Provenance validation is simply not written.

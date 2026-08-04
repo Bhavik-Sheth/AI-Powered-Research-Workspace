@@ -30,6 +30,28 @@
   border-color: transparent;
 }
 
+.library__badge--failed {
+  background: color-mix(in srgb, var(--danger-fill) 12%, transparent);
+  color: var(--danger-text);
+  border-color: var(--danger-badge-border);
+}
+
+.library__stages {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.library__retry {
+  font: 700 10px var(--font-ui);
+  padding: 4px 10px;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--danger-border);
+  background: var(--surface-raised);
+  color: var(--danger-text);
+  cursor: pointer;
+}
+
 .library__relevance {
   display: flex;
   border: 1px solid var(--border);

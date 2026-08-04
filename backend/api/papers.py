@@ -85,6 +85,19 @@ async def get_paper_pdf(paper_id: uuid.UUID) -> FileResponse:
     return FileResponse(get_vault_path() / Path(pdf_path), media_type="application/pdf")
 
 
+@router.post("/api/projects/{project_id}/papers/{paper_id}/reprocess", response_model=Paper)
+async def reprocess_paper(project_id: uuid.UUID, paper_id: uuid.UUID) -> Paper:
+    """The Library's `Retry` action (Bug Fix Plan Phase 1.3): re-enqueues
+    only the paper's incomplete pipeline stages."""
+    async with db.session() as session:
+        if await projects.get_project(session, project_id) is None:
+            raise HTTPException(status_code=404, detail="project not found")
+        paper = await papers.reprocess_paper(session, paper_id)
+        if paper is None:
+            raise HTTPException(status_code=404, detail="paper not found")
+        return paper
+
+
 class PatchProjectPaperRequest(BaseModel):
     relevance: Literal["relevant", "somewhat", "not", "unset"] | None = None
     why_relevant: str | None = None

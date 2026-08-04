@@ -1505,6 +1505,10 @@ export type ProviderCredentials = {
      * Tier
      */
     tier?: 'primary' | 'auxiliary';
+    /**
+     * Request Token Budget
+     */
+    request_token_budget?: number | null;
 };
 
 /**
@@ -1525,6 +1529,10 @@ export type ProviderInfo = {
      * Validated At
      */
     validated_at?: string | null;
+    /**
+     * Request Token Budget
+     */
+    request_token_budget?: number | null;
 };
 
 /**
@@ -3169,6 +3177,46 @@ export type GetPaperPdfApiPapersPaperIdPdfGetResponses = {
      */
     200: unknown;
 };
+
+export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Paper Id
+         */
+        paper_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/papers/{paper_id}/reprocess';
+};
+
+export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostError = ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostErrors[keyof ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostErrors];
+
+export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Paper;
+};
+
+export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponse = ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponses[keyof ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponses];
 
 export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData = {
     body: PatchProjectPaperRequest;

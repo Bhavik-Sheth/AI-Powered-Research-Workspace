@@ -2032,6 +2032,73 @@
         }
       }
     },
+    "/api/projects/{project_id}/papers/{paper_id}/reprocess": {
+      "post": {
+        "summary": "Reprocess Paper",
+        "description": "The Library's `Retry` action (Bug Fix Plan Phase 1.3): re-enqueues\nonly the paper's incomplete pipeline stages.",
+        "operationId": "reprocess_paper_api_projects__project_id__papers__paper_id__reprocess_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paper"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/papers/{paper_id}": {
       "patch": {
         "summary": "Patch Project Paper",
@@ -6034,6 +6101,17 @@
             ],
             "title": "Tier",
             "default": "primary"
+          },
+          "request_token_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Token Budget"
           }
         },
         "type": "object",
@@ -6078,6 +6156,17 @@
               }
             ],
             "title": "Validated At"
+          },
+          "request_token_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Token Budget"
           }
         },
         "type": "object",
