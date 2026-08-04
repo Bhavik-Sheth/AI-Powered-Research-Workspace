@@ -12,7 +12,7 @@ import { MatrixView } from "../matrix/MatrixView";
 import { NotesView } from "../notes/NotesView";
 import { ReaderTab } from "../reader/ReaderTab";
 import { SearchResults } from "../search/SearchResults";
-import { InterestProfileForm } from "../settings/InterestProfileForm";
+import { SettingsPanel } from "../settings/SettingsPanel";
 import { useCollapsible } from "../state/useCollapsible";
 import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
@@ -176,7 +176,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         return (
           <>
             <h1 className="center-pane__title">Settings</h1>
-            <InterestProfileForm projectId={projectId} />
+            <SettingsPanel projectId={projectId} />
           </>
         );
       case "readiness":

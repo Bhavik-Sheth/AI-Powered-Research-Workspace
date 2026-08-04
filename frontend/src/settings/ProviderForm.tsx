@@ -15,8 +15,19 @@ const PROVIDERS = Object.keys(providerLabel) as Provider[];
  * Add-and-validate-one-provider form (D13/D35) — shared by the onboarding
  * wizard and the Settings Panel. The local-provider path never shows an API
  * key field, and models are discovered, never typed (D11).
+ *
+ * `tier` picks which slot this save writes to (Schema.md `api_keys.primary_model`
+ * / `auxiliary_model`) — the onboarding wizard only ever sets "primary"; the
+ * Settings Panel renders one instance per tier so the auxiliary model is a
+ * distinct, independently-settable field (Bug Fix Plan Phase 4.4).
  */
-export function ProviderForm({ onSaved }: { onSaved: () => void }) {
+export function ProviderForm({
+  tier = "primary",
+  onSaved,
+}: {
+  tier?: SaveProviderRequest["credentials"]["tier"];
+  onSaved: () => void;
+}) {
   const [provider, setProvider] = useState<Provider>("google");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -62,7 +73,7 @@ export function ProviderForm({ onSaved }: { onSaved: () => void }) {
             api_key: isLocal ? null : apiKey,
             base_url: isLocal ? baseUrl : null,
             model,
-            tier: "primary",
+            tier,
           },
         },
         throwOnError: true,
