@@ -55,13 +55,51 @@ PROVIDER_PREFIX: dict[str, str] = {
 }
 
 
+class ToolCall(BaseModel):
+    """One complete tool call an assistant message carries, matching the
+    provider wire shape the harness re-sends on the next turn of the loop."""
+
+    id: str
+    name: str
+    arguments: str  # JSON-encoded, per the wire protocol — the harness decodes it
+
+
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str
+    tool_calls: list[ToolCall] | None = None
+    tool_call_id: str | None = None
+
+
+def _to_wire_message(message: Message) -> dict:
+    """Per-provider tool-call wire shaping — the Gateway's job (MODULES.md:
+    "Hides: ... per-provider request shaping"), not something a caller
+    building a `Message` should have to know."""
+    wire: dict = {"role": message.role, "content": message.content}
+    if message.tool_calls:
+        wire["tool_calls"] = [
+            {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": tc.arguments}}
+            for tc in message.tool_calls
+        ]
+    if message.tool_call_id is not None:
+        wire["tool_call_id"] = message.tool_call_id
+    return wire
+
+
+class ToolCallDelta(BaseModel):
+    """One streamed fragment of a tool call — `index` identifies which
+    call across fragments; `name`/`arguments` arrive whole or in pieces
+    depending on the provider, so the caller accumulates by index."""
+
+    index: int
+    id: str | None = None
+    name: str | None = None
+    arguments: str = ""
 
 
 class LLMChunk(BaseModel):
-    delta: str
+    delta: str = ""
+    tool_calls: list[ToolCallDelta] = []
 
 
 class ProviderOverride(BaseModel):
@@ -127,7 +165,7 @@ def _fit_to_budget(model: str, messages: list[Message], budget: int | None, max_
         return messages
     reserve = max_tokens if max_tokens is not None else _COMPLETION_TOKEN_MARGIN
     available = budget - reserve
-    dumped = [m.model_dump() for m in messages]
+    dumped = [_to_wire_message(m) for m in messages]
     if litellm.token_counter(model=model, messages=dumped) <= available:
         return messages
 
@@ -164,7 +202,7 @@ async def complete_structured(
     fitted = _fit_to_budget(model, messages, budget, max_tokens=None)
     response = await litellm.acompletion(
         model=model,
-        messages=[m.model_dump() for m in fitted],
+        messages=[_to_wire_message(m) for m in fitted],
         api_key=api_key,
         base_url=base_url,
         response_format=schema,
@@ -189,7 +227,7 @@ async def complete(
 
     response = await litellm.acompletion(
         model=model,
-        messages=[m.model_dump() for m in fitted],
+        messages=[_to_wire_message(m) for m in fitted],
         api_key=api_key,
         base_url=base_url,
         tools=tools,
@@ -199,6 +237,16 @@ async def complete(
         num_retries=_NUM_RETRIES,
     )
     async for chunk in response:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            yield LLMChunk(delta=delta)
+        delta = chunk.choices[0].delta
+        content = delta.content
+        tool_call_deltas = [
+            ToolCallDelta(
+                index=tc.index,
+                id=tc.id,
+                name=tc.function.name if tc.function else None,
+                arguments=(tc.function.arguments if tc.function and tc.function.arguments else ""),
+            )
+            for tc in (delta.tool_calls or [])
+        ]
+        if content or tool_call_deltas:
+            yield LLMChunk(delta=content or "", tool_calls=tool_call_deltas)

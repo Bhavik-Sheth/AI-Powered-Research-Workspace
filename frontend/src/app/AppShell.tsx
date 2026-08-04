@@ -131,6 +131,19 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     openTab({ id: `reader:${paperId}`, kind: "reader", params: { paperId, projectId }, label: title });
   }
 
+  // A tool result's `ui_action` produces the same route transition the
+  // user's own click would (Bug Fix Plan Phase 2.3) — one dispatch point,
+  // not a callback per tool.
+  function handleCompanionUIAction(action: string, payload: Record<string, unknown>) {
+    if (action === "open_paper" && typeof payload.paper_id === "string") {
+      openReaderTab(payload.paper_id, typeof payload.title === "string" ? payload.title : "");
+    } else if (action === "open_search_results" && typeof payload.result_id === "string") {
+      openTab({ id: `search:${payload.result_id}`, kind: "search", params: { resultId: payload.result_id }, label: "Search" });
+    } else if (action === "open_note") {
+      openTab(NOTES_TAB);
+    }
+  }
+
   // The read set a cross-paper compare claim (US4) is allowed to cite —
   // every paper currently open as a reader tab (MODULES.md Agent Harness).
   const openPaperIds = tabs
@@ -158,7 +171,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
-        return <SearchResults projectId={projectId} />;
+        return <SearchResults projectId={projectId} initialResultId={tab.params?.resultId} />;
       case "settings":
         return (
           <>
@@ -280,6 +293,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             pendingAsk={pendingAsk}
             socket={socket}
             openPaperIds={openPaperIds}
+            onUIAction={handleCompanionUIAction}
           />
         </div>
       </div>

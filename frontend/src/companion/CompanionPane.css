@@ -150,6 +150,15 @@
   color: var(--danger-body);
 }
 
+.companion__tool-result {
+  border-left: 2px solid var(--accent-rule, var(--border));
+  background: var(--accent-tint-12);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 10px;
+  font: 11px/1.5 var(--font-ui);
+  color: var(--text-muted);
+}
+
 .companion__composer {
   display: flex;
   align-items: center;

@@ -7,7 +7,7 @@ import "./CompanionPane.css";
 import { renderAssistantContent } from "./parseCitations";
 import type { DownstreamEvent, SelectionState } from "./wsTypes";
 
-const DOWNSTREAM_EVENT_KINDS = new Set(["status", "text_delta", "turn_complete", "error"]);
+const DOWNSTREAM_EVENT_KINDS = new Set(["status", "text_delta", "tool_call", "tool_result", "ui_action", "turn_complete", "error"]);
 
 function isDownstreamEvent(message: unknown): message is DownstreamEvent {
   return (
@@ -20,7 +20,7 @@ function isDownstreamEvent(message: unknown): message is DownstreamEvent {
 
 interface TranscriptEntry {
   id: number;
-  role: "user" | "assistant" | "error";
+  role: "user" | "assistant" | "error" | "tool";
   content: string;
 }
 
@@ -57,6 +57,7 @@ export function CompanionPane({
   pendingAsk,
   socket,
   openPaperIds,
+  onUIAction,
 }: {
   projectId: string;
   selection: SelectionState | null;
@@ -65,6 +66,9 @@ export function CompanionPane({
   /** Paper ids currently open as reader tabs — the read set a cross-paper
    * compare claim (US4) is allowed to cite (MODULES.md Agent Harness). */
   openPaperIds: string[];
+  /** A tool result's `ui_action` — the same route transition the user's
+   * own click would produce (Bug Fix Plan Phase 2.3). */
+  onUIAction: (action: string, payload: Record<string, unknown>) => void;
 }) {
   const [statusText, setStatusText] = useState<string | null>(null);
   const [turnInFlight, setTurnInFlight] = useState(false);
@@ -105,6 +109,13 @@ export function CompanionPane({
       if (content) {
         setTranscript((prev) => [...prev, { id: nextId(), role: "assistant", content }]);
       }
+    } else if (evt.event === "tool_call") {
+      setStatusText(`${evt.tool_name}…`);
+    } else if (evt.event === "tool_result") {
+      setStatusText(null);
+      setTranscript((prev) => [...prev, { id: nextId(), role: "tool", content: evt.model_view }]);
+    } else if (evt.event === "ui_action") {
+      onUIAction(evt.action, evt.payload);
     } else if (evt.event === "error") {
       setTurnInFlight(false);
       setStatusText(null);
@@ -254,6 +265,13 @@ export function CompanionPane({
           if (entry.role === "error") {
             return (
               <div key={entry.id} className="companion__error">
+                {entry.content}
+              </div>
+            );
+          }
+          if (entry.role === "tool") {
+            return (
+              <div key={entry.id} className="companion__tool-result">
                 {entry.content}
               </div>
             );

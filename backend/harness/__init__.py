@@ -2,13 +2,12 @@
 events, and persists the transcript for one agent turn (MODULES.md, D18).
 
 Phase 1.5 shipped the reader-Q&A path (D19: "Reader Q&A is not a tool — it
-is the core agent loop answering from ambient UI-state"). Phase 1.7 adds
-the first real tool, `query_memory` (D19 Memory), wired as a lightweight
-decide-then-retrieve step via `complete_structured` rather than a full
-streamed function-calling loop — with exactly one tool and a query-only
-contract, a structured yes/no-plus-query decision is the same capability
-with far less machinery, and the iteration cap this would otherwise need
-lands with Phase 1.8 once a second tool actually requires looping.
+is the core agent loop answering from ambient UI-state"). Phase 1.7 added
+`query_memory` (D19 Memory) as a lightweight decide-then-retrieve step via
+`complete_structured` rather than a full function-calling loop. Bug Fix
+Plan Phase 2.3 adds the real thing: a single-agent tool-calling loop
+(D18 node 1) with a hard iteration cap and a graceful stop, dispatching
+through `harness.tools` (D19's Discovery/Navigation/Mutations groups).
 
 Citations are enforced structurally either way (D24): the model wraps every
 quoted claim in `<cite>` tags, and every tag is independently re-verified
@@ -20,6 +19,7 @@ never trusted from the model's own say-so.
 """
 
 import asyncio
+import json
 import re
 import uuid
 from collections.abc import AsyncIterator
@@ -30,13 +30,29 @@ from sqlalchemy import func, select
 import db
 import papers
 from db.models import Messages
-from harness.models import ErrorEvent, SessionRef, StatusEvent, TextDeltaEvent, TurnCompleteEvent, TurnEvent, UIState
-from llm import LLMError, Message, complete, complete_structured
+from harness.models import (
+    ErrorEvent,
+    SessionRef,
+    StatusEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    TurnCompleteEvent,
+    TurnEvent,
+    UIActionEvent,
+    UIState,
+)
+from harness.tools import TOOL_SCHEMAS
+from harness.tools import dispatch as dispatch_tool
+from llm import LLMError, Message, ToolCall, complete, complete_structured
 from memory import query_memory
 from memory.models import CitedRow
 from provenance import validate_and_anchor
 
 __all__ = ["begin_turn", "run_turn", "interrupt"]
+
+# D18 node 1: "Hard iteration cap (~8-10) with a graceful stop."
+_MAX_ITERATIONS = 8
 
 # Matches an explicit `<cite>` span, or a quotation-marked span the model
 # left untagged in plain prose — a 20B model routinely writes a fabricated
@@ -322,24 +338,93 @@ async def run_turn(
         llm_messages += history
         llm_messages.append(Message(role="user", content=message))
 
-        yield StatusEvent(text="thinking…")
-
+        # D18 node 1: single-agent tool-calling loop, hard iteration cap
+        # with a graceful stop — each pass either produces a final answer
+        # (no tool call) or dispatches every tool call the model made and
+        # feeds the results back for another pass.
         full_text = ""
         interrupted = False
-        try:
-            async for chunk in complete(llm_messages, tier="primary", timeout=_COMPLETION_TIMEOUT_S):
-                full_text += chunk.delta
-                if cancel_flag.is_set():
-                    interrupted = True
-                    break
-        except LLMError as exc:
-            yield ErrorEvent(code=type(exc).__name__, message=str(exc), recoverable=True, what_still_worked="nothing — the turn produced no answer")
-            yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
-            return
-        except RuntimeError as exc:
-            yield ErrorEvent(code="not_configured", message=str(exc), recoverable=True, what_still_worked=None)
-            yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=1)
-            return
+        iterations = 0
+        while iterations < _MAX_ITERATIONS:
+            iterations += 1
+            yield StatusEvent(text="thinking…")
+            full_text = ""
+            tool_call_acc: dict[int, dict] = {}
+            try:
+                async for chunk in complete(llm_messages, tools=TOOL_SCHEMAS, tier="primary", timeout=_COMPLETION_TIMEOUT_S):
+                    full_text += chunk.delta
+                    for tc_delta in chunk.tool_calls:
+                        acc = tool_call_acc.setdefault(tc_delta.index, {"id": None, "name": None, "arguments": ""})
+                        acc["id"] = tc_delta.id or acc["id"]
+                        acc["name"] = tc_delta.name or acc["name"]
+                        acc["arguments"] += tc_delta.arguments
+                    if cancel_flag.is_set():
+                        interrupted = True
+                        break
+            except LLMError as exc:
+                yield ErrorEvent(code=type(exc).__name__, message=str(exc), recoverable=True, what_still_worked="nothing — the turn produced no answer")
+                yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=iterations)
+                return
+            except RuntimeError as exc:
+                yield ErrorEvent(code="not_configured", message=str(exc), recoverable=True, what_still_worked=None)
+                yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=iterations)
+                return
+
+            if interrupted or not tool_call_acc:
+                break  # a final answer, an interruption, or no tool call requested
+
+            llm_messages.append(
+                Message(
+                    role="assistant",
+                    content=full_text,
+                    tool_calls=[
+                        ToolCall(id=tc["id"] or str(uuid.uuid4()), name=tc["name"] or "", arguments=tc["arguments"])
+                        for tc in tool_call_acc.values()
+                    ],
+                )
+            )
+            for tc in tool_call_acc.values():
+                tool_name = tc["name"] or ""
+                tool_call_id = tc["id"] or str(uuid.uuid4())
+                try:
+                    args = json.loads(tc["arguments"]) if tc["arguments"] else {}
+                except json.JSONDecodeError:
+                    args = {}
+                yield ToolCallEvent(tool_name=tool_name, args=args)
+                async with db.session() as db_session:
+                    seq = await _next_seq(db_session, session_ref.conversation_id)
+                    db_session.add(
+                        Messages(
+                            conversation_id=session_ref.conversation_id,
+                            seq=seq,
+                            turn_id=turn_id,
+                            role="tool_call",
+                            content=json.dumps({"name": tool_name, "arguments": args}),
+                            tool_name=tool_name,
+                        )
+                    )
+                    result = await dispatch_tool(db_session, session_ref.project_id, tool_name, args)
+                    seq = await _next_seq(db_session, session_ref.conversation_id)
+                    db_session.add(
+                        Messages(
+                            conversation_id=session_ref.conversation_id,
+                            seq=seq,
+                            turn_id=turn_id,
+                            role="tool_result",
+                            content=result.model_view,
+                            tool_name=tool_name,
+                            result_id=result.ui_view_result_id,
+                        )
+                    )
+                yield ToolResultEvent(tool_name=tool_name, model_view=result.model_view, result_id=result.ui_view_result_id)
+                for action in result.ui_actions:
+                    yield UIActionEvent(action=action.get("action", ""), payload=action)
+                llm_messages.append(Message(role="tool", content=result.model_view, tool_call_id=tool_call_id))
+        else:
+            # Hit the iteration cap without a final answer — a graceful
+            # stop (D18 node 1), never an exception.
+            if not full_text:
+                full_text = "I reached my step limit before finishing this — try asking again, more narrowly."
 
         async with db.session() as db_session:
             cleaned_text, citations = await _validate_citations(db_session, citation_paper_ids, memory_rows, full_text)
@@ -365,7 +450,7 @@ async def run_turn(
             if piece:
                 yield TextDeltaEvent(delta=piece)
 
-        yield TurnCompleteEvent(turn_id=turn_id, interrupted=interrupted, iterations=1)
+        yield TurnCompleteEvent(turn_id=turn_id, interrupted=interrupted, iterations=iterations)
     finally:
         _in_flight.pop(key, None)
 

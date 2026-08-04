@@ -1,5 +1,11 @@
-import { useState } from "react";
-import { addPaperApiProjectsProjectIdPapersPost, postSearchApiSearchPost, type PaperSummary, type ResultSet } from "@research-os/api-client";
+import { useEffect, useState } from "react";
+import {
+  addPaperApiProjectsProjectIdPapersPost,
+  getResultApiResultsResultIdGet,
+  postSearchApiSearchPost,
+  type PaperSummary,
+  type ResultSet,
+} from "@research-os/api-client";
 
 import { ErrorCard } from "../design/ErrorCard";
 import "./SearchResults.css";
@@ -13,14 +19,46 @@ const SOURCE_LABEL: Record<string, string> = { arxiv: "arXiv", openalex: "OpenAl
  * (Phase 1.5+), so this shows one loading state rather than per-source
  * progress, and renders `sources_failed` as the "what still worked" error
  * card once the response (partial or complete) arrives.
+ *
+ * `initialResultId`, when set, loads an already-cached result set instead
+ * of requiring a fresh query — the Companion's `search_papers` tool opens
+ * this same view onto the result it already produced (Bug Fix Plan
+ * Phase 2.3), rather than making the user re-type the search.
  */
-export function SearchResults({ projectId, onAdded }: { projectId: string; onAdded?: (paperId: string) => void }) {
+export function SearchResults({
+  projectId,
+  onAdded,
+  initialResultId,
+}: {
+  projectId: string;
+  onAdded?: (paperId: string) => void;
+  initialResultId?: string;
+}) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ResultSet | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [addingId, setAddingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!initialResultId) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const { data } = await getResultApiResultsResultIdGet({ path: { result_id: initialResultId }, throwOnError: true });
+        if (!cancelled) setResult(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load this result set");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialResultId]);
 
   async function handleAdd(paper: PaperSummary) {
     setAddingId(paper.canonical_id);

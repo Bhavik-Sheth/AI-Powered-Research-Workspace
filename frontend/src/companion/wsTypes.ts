@@ -30,6 +30,9 @@ export interface UIState {
 export type DownstreamEvent =
   | { event: "status"; text: string }
   | { event: "text_delta"; delta: string }
+  | { event: "tool_call"; tool_name: string; args: Record<string, unknown> }
+  | { event: "tool_result"; tool_name: string; model_view: string; result_id: string | null }
+  | { event: "ui_action"; action: string; payload: Record<string, unknown> }
   | { event: "turn_complete"; turn_id: string; interrupted: boolean; iterations: number }
   | { event: "error"; code: string; message: string; recoverable: boolean; what_still_worked: string | null };
 
