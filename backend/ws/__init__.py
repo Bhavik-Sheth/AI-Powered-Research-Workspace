@@ -96,7 +96,17 @@ async def _get_or_create_conversation(project_id: uuid.UUID) -> uuid.UUID:
 
 async def handle_connect(project_id: uuid.UUID, token: str, websocket: WebSocket) -> Session | None:
     """`401`s (via WS close code 4401) before a session exists if the token
-    is missing or wrong."""
+    is missing or wrong.
+
+    Bug Fix Plan Phase 3.4: a second connect for a `project_id` that
+    already has a live session (React StrictMode's dev-only double-mount,
+    or a genuine reconnect racing its predecessor) used to just overwrite
+    `_sessions[project_id]`, leaving the old socket registered nowhere but
+    still open and still able to deliver a `handle_message` call for a
+    stray in-flight send. Defining the race out of existence rather than
+    de-duping its symptom: the old socket is actively closed *before* the
+    new one is registered, so its `receive_json` loop raises
+    `WebSocketDisconnect` and can never reach `handle_message` again."""
     if token != get_config().bearer_token:
         await websocket.close(code=4401)
         return None
@@ -104,8 +114,25 @@ async def handle_connect(project_id: uuid.UUID, token: str, websocket: WebSocket
     await websocket.accept()
     conversation_id = await _get_or_create_conversation(project_id)
     session = Session(project_id=project_id, websocket=websocket, conversation_id=conversation_id)
+
+    evicted = _sessions.get(project_id)
     _sessions[project_id] = session
+    if evicted is not None:
+        await _close_evicted(evicted)
+
     return session
+
+
+async def _close_evicted(session: Session) -> None:
+    """Best-effort close of a session's socket being replaced by a newer
+    connection for the same `project_id`. The old socket may already be
+    closing on its own (e.g. the client navigated away right as it
+    reconnected) — any error here just means it's already gone, which is
+    the outcome this function wants anyway."""
+    try:
+        await session.websocket.close()
+    except RuntimeError:
+        logger.info("event=ws_evicted_already_closed project_id=%s", session.project_id)
 
 
 def get_session(project_id: uuid.UUID) -> Session | None:
@@ -193,4 +220,10 @@ async def session_endpoint(websocket: WebSocket, project_id: uuid.UUID, token: s
     except WebSocketDisconnect:
         logger.info("event=ws_session_disconnected project_id=%s", project_id)
     finally:
-        _sessions.pop(project_id, None)
+        # Identity check, not a bare pop: this session may have already
+        # been evicted and replaced by a newer connect (`handle_connect`
+        # above) by the time its own receive loop unwinds — removing the
+        # registry entry unconditionally here would delete the *new*
+        # session instead of this stale one.
+        if _sessions.get(project_id) is session:
+            _sessions.pop(project_id, None)

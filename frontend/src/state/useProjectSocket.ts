@@ -46,13 +46,16 @@ export function useProjectSocket(projectId: string): ProjectSocket {
   const closedByUsRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     closedByUsRef.current = false;
     reconnectAttemptRef.current = 0;
 
     function connect(): void {
+      if (cancelled) return;
       const ws = new WebSocket(wsSessionUrl(projectId));
       wsRef.current = ws;
       ws.onopen = () => {
+        if (cancelled) return;
         setConnected(true);
         setReconnecting(false);
         reconnectAttemptRef.current = 0;
@@ -60,7 +63,7 @@ export function useProjectSocket(projectId: string): ProjectSocket {
       ws.onclose = () => {
         setConnected(false);
         wsRef.current = null;
-        if (closedByUsRef.current) return;
+        if (cancelled || closedByUsRef.current) return;
         setReconnecting(true);
         const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttemptRef.current, RECONNECT_MAX_MS);
         reconnectAttemptRef.current += 1;
@@ -72,9 +75,23 @@ export function useProjectSocket(projectId: string): ProjectSocket {
       };
     }
 
-    connect();
+    // Deferred to a macrotask rather than called inline: React StrictMode
+    // (dev only) mounts this effect, runs its cleanup, and mounts it again
+    // synchronously in the same tick. Calling `connect()` inline would open
+    // a real socket on the throwaway first mount, only to `.close()` it
+    // while still `CONNECTING` from that mount's cleanup — the source of
+    // both the "WebSocket is closed before the connection is established"
+    // warning and the eviction race this hook exists to prevent (backend
+    // `ws.handle_connect` closes whichever socket it replaces). Deferring
+    // the actual connect lets the throwaway mount's cleanup cancel the
+    // timer before any socket is ever created; only the mount that
+    // survives the tick actually opens one.
+    const connectTimer = setTimeout(connect, 0);
+
     return () => {
+      cancelled = true;
       closedByUsRef.current = true;
+      clearTimeout(connectTimer);
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
       wsRef.current = null;

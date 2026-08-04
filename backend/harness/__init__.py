@@ -16,6 +16,16 @@ or by checking it is a substring of a row `query_memory` actually returned
 (D24: "memory recall cites source row ids; verification is trivial — the
 row exists"). A tag that resolves neither way is relabelled `<unverified>`,
 never trusted from the model's own say-so.
+
+Bug Fix Plan Phase 3.4 adds turn de-duplication against `messages.turn_id`
+as defense-in-depth behind Session Transport's connection-layer fix (which
+now closes a session's socket the moment it's evicted, so a stray send
+from a stale connection can no longer reach `handle_message` at all): if
+the *same* user text somehow starts a second turn within
+`_DUPLICATE_TURN_WINDOW_S` of the first — e.g. a duplicate `user_message`
+that was already in flight over the socket at the instant it was
+evicted — `run_turn` recognizes the immediately preceding row as that turn
+and returns without persisting a second copy or calling the LLM again.
 """
 
 import asyncio
@@ -23,6 +33,7 @@ import json
 import re
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -221,6 +232,32 @@ async def _next_seq(session, conversation_id: uuid.UUID) -> int:
     return (last or 0) + 1
 
 
+# Generous enough to catch a duplicate send that straddled a socket
+# eviction (the whole round trip is normally well under a second) without
+# ever mistaking a deliberate identical follow-up message — "yes" sent
+# twice minutes apart — for a resubmission.
+_DUPLICATE_TURN_WINDOW_S = 5.0
+
+
+async def _duplicate_turn_id(session, conversation_id: uuid.UUID, text: str) -> uuid.UUID | None:
+    """The `turn_id` of an already-persisted turn to fold this call into,
+    if the conversation's most recent message is a `user` row with this
+    exact text, persisted within `_DUPLICATE_TURN_WINDOW_S` — i.e. this
+    call is very likely the same turn arriving a second time, not a new
+    one. `None` means this is a genuinely new turn."""
+    last = (
+        await session.scalars(
+            select(Messages).where(Messages.conversation_id == conversation_id).order_by(Messages.seq.desc()).limit(1)
+        )
+    ).first()
+    if last is None or last.role != "user" or last.content != text:
+        return None
+    age_s = (datetime.now(UTC) - last.created_at).total_seconds()
+    if age_s > _DUPLICATE_TURN_WINDOW_S:
+        return None
+    return last.turn_id
+
+
 def _matching_memory_row(quote: str, memory_rows: list[CitedRow]) -> CitedRow | None:
     return next((row for row in memory_rows if quote in row.text), None)
 
@@ -288,6 +325,19 @@ async def run_turn(
         paper_id = ui_state.selection.paper_id if ui_state.selection is not None else None
 
         async with db.session() as db_session:
+            duplicate_turn_id = await _duplicate_turn_id(db_session, session_ref.conversation_id, message)
+            if duplicate_turn_id is not None:
+                # Defense-in-depth (Bug Fix Plan Phase 3.4): Session
+                # Transport now closes a socket the instant it's evicted,
+                # which is the primary fix for the double-send this guards
+                # against — this is the fallback for a send that got far
+                # enough to reach `handle_message` before that close took
+                # effect. Neither the user message nor an answer gets
+                # persisted a second time; the already-completed turn owns
+                # this text.
+                yield TurnCompleteEvent(turn_id=duplicate_turn_id, interrupted=False, iterations=0)
+                return
+
             history = await _history(db_session, session_ref.conversation_id)
             seq = await _next_seq(db_session, session_ref.conversation_id)
             db_session.add(
