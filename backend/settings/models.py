@@ -17,6 +17,10 @@ class ProviderCredentials(BaseModel):
     base_url: str | None = None
     model: str
     tier: Literal["primary", "auxiliary"] = "primary"
+    request_token_budget: int | None = None
+    """Per-request input-token ceiling for this provider's rate-limited tier
+    (e.g. a free-tier TPM cap). NULL leaves requests unbounded — the caller's
+    own provider limit is the only ceiling (Bug Fix Plan Phase 1.1)."""
 
 
 class ProviderInfo(BaseModel):
@@ -25,6 +29,7 @@ class ProviderInfo(BaseModel):
     last4: str | None = None
     base_url: str | None = None
     validated_at: datetime | None = None
+    request_token_budget: int | None = None
 
 
 class ModelSettings(BaseModel):

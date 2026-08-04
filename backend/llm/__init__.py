@@ -32,6 +32,16 @@ LLMError = (
     litellm.ContextWindowExceededError,
 )
 
+# RateLimitError/Timeout/connection-level failures are retried by the
+# provider client under the hood (litellm's `num_retries` sets its
+# `max_retries`, honouring a `Retry-After` header when the provider sends
+# one) rather than surfacing on the first transient failure.
+_NUM_RETRIES = 3
+
+# Reserved out of a tier's request-token budget for the completion itself,
+# when the caller does not pass an explicit `max_tokens`.
+_COMPLETION_TOKEN_MARGIN = 512
+
 PROVIDER_PREFIX: dict[str, str] = {
     "google": "gemini",
     "groq": "groq",
@@ -63,8 +73,8 @@ class ProviderOverride(BaseModel):
     base_url: str | None = None
 
 
-async def _resolve_tier(tier: Literal["primary", "auxiliary"]) -> tuple[str, str | None, str | None]:
-    """Resolves a tier to a real litellm model string + credentials.
+async def _resolve_tier(tier: Literal["primary", "auxiliary"]) -> tuple[str, str | None, str | None, int | None]:
+    """Resolves a tier to a real litellm model string + credentials + request-token budget.
 
     Imports `db`/`settings` locally, not at module top: `settings/` imports
     this module for the override path, so a top-level import here would
@@ -92,16 +102,49 @@ async def _resolve_tier(tier: Literal["primary", "auxiliary"]) -> tuple[str, str
         if "ciphertext" in provider_info:
             api_key = crypto.decrypt(provider_info["ciphertext"], provider_info["nonce"])
         base_url = provider_info.get("base_url")
+        request_token_budget = provider_info.get("request_token_budget")
 
-    return f"{PROVIDER_PREFIX[our_provider]}/{model}", api_key, base_url
+    return f"{PROVIDER_PREFIX[our_provider]}/{model}", api_key, base_url, request_token_budget
 
 
 async def _resolve(
     tier: Literal["primary", "auxiliary"], override: ProviderOverride | None
-) -> tuple[str, str | None, str | None]:
+) -> tuple[str, str | None, str | None, int | None]:
     if override is not None:
-        return f"{PROVIDER_PREFIX[override.provider]}/{override.model}", override.api_key, override.base_url
+        return f"{PROVIDER_PREFIX[override.provider]}/{override.model}", override.api_key, override.base_url, None
     return await _resolve_tier(tier)
+
+
+def _fit_to_budget(model: str, messages: list[Message], budget: int | None, max_tokens: int | None) -> list[Message]:
+    """Truncates the largest message so the request fits the tier's token budget.
+
+    Definitive section-aware windowing is the caller's job (Bug Fix Plan
+    Phase 1.2); this is the Gateway's last-resort guard so an oversized
+    request degrades to a truncated one instead of a terminal
+    `RateLimitError`. `budget=None` (no ceiling configured) is a no-op.
+    """
+    if budget is None:
+        return messages
+    reserve = max_tokens if max_tokens is not None else _COMPLETION_TOKEN_MARGIN
+    available = budget - reserve
+    dumped = [m.model_dump() for m in messages]
+    if litellm.token_counter(model=model, messages=dumped) <= available:
+        return messages
+
+    longest_index = max(range(len(messages)), key=lambda i: len(messages[i].content))
+    longest = messages[longest_index]
+    low, high = 0, len(longest.content)
+    while low < high:
+        mid = (low + high + 1) // 2
+        candidate = [*dumped[:longest_index], {**dumped[longest_index], "content": longest.content[:mid]}, *dumped[longest_index + 1 :]]
+        if litellm.token_counter(model=model, messages=candidate) <= available:
+            low = mid
+        else:
+            high = mid - 1
+
+    fitted = list(messages)
+    fitted[longest_index] = Message(role=longest.role, content=longest.content[:low])
+    return fitted
 
 
 ResponseSchema = TypeVar("ResponseSchema", bound=BaseModel)
@@ -117,14 +160,16 @@ async def complete_structured(
 ) -> ResponseSchema:
     """Structured extraction; the prompted-JSON fallback for models without
     native structured output is LiteLLM's own concern, not this wrapper's."""
-    model, api_key, base_url = await _resolve(tier, override)
+    model, api_key, base_url, budget = await _resolve(tier, override)
+    fitted = _fit_to_budget(model, messages, budget, max_tokens=None)
     response = await litellm.acompletion(
         model=model,
-        messages=[m.model_dump() for m in messages],
+        messages=[m.model_dump() for m in fitted],
         api_key=api_key,
         base_url=base_url,
         response_format=schema,
         timeout=timeout,
+        num_retries=_NUM_RETRIES,
     )
     return schema.model_validate_json(response.choices[0].message.content)
 
@@ -139,17 +184,19 @@ async def complete(
     timeout: float | None = None,
 ) -> AsyncIterator[LLMChunk]:
     """Streaming completion; auxiliary falls back to primary when unset (D11)."""
-    model, api_key, base_url = await _resolve(tier, override)
+    model, api_key, base_url, budget = await _resolve(tier, override)
+    fitted = _fit_to_budget(model, messages, budget, max_tokens)
 
     response = await litellm.acompletion(
         model=model,
-        messages=[m.model_dump() for m in messages],
+        messages=[m.model_dump() for m in fitted],
         api_key=api_key,
         base_url=base_url,
         tools=tools,
         max_tokens=max_tokens,
         timeout=timeout,
         stream=True,
+        num_retries=_NUM_RETRIES,
     )
     async for chunk in response:
         delta = chunk.choices[0].delta.content

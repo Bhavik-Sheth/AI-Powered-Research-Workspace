@@ -64,7 +64,12 @@ async def get_settings(session: AsyncSession) -> ModelSettings:
     """Provider config with keys redacted to `…last4`."""
     row = await _get_or_create_row(session)
     providers = {
-        name: ProviderInfo(last4=info.get("last4"), base_url=info.get("base_url"), validated_at=info.get("validated_at"))
+        name: ProviderInfo(
+            last4=info.get("last4"),
+            base_url=info.get("base_url"),
+            validated_at=info.get("validated_at"),
+            request_token_budget=info.get("request_token_budget"),
+        )
         for name, info in row.providers.items()
     }
     return ModelSettings(
@@ -111,6 +116,8 @@ async def save_provider(session: AsyncSession, provider: Provider, credentials: 
         entry.update(ciphertext=ciphertext, nonce=nonce, last4=credentials.api_key[-4:])
     if credentials.base_url:
         entry["base_url"] = credentials.base_url
+    if credentials.request_token_budget is not None:
+        entry["request_token_budget"] = credentials.request_token_budget
     row.providers = {**row.providers, provider: entry}
     model_string = f"{override.provider}/{override.model}"
     if credentials.tier == "primary":

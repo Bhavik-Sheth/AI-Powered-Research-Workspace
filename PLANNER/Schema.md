@@ -526,7 +526,7 @@ exactly one row, forever, because there is exactly one user on one machine.
 | Column | Type | Constraints | Business meaning |
 |---|---|---|---|
 | `id` | SMALLINT | PK, NOT NULL, DEFAULT 1, **CHECK (`id` = 1)** | Enforces single-row-ness at DB level. |
-| `providers` | JSONB | NOT NULL, DEFAULT `'{}'` | `{provider: {ciphertext, nonce, last4, base_url?, validated_at}}`. **Keys are AES-256-GCM ciphertext only; the master key lives in the OS keyring (`libsecret`), never here.** Local providers (Ollama, vLLM) store a `base_url` and **no key at all** — the UI must not demand one. The UI renders `…last4`. |
+| `providers` | JSONB | NOT NULL, DEFAULT `'{}'` | `{provider: {ciphertext, nonce, last4, base_url?, validated_at, request_token_budget?}}`. **Keys are AES-256-GCM ciphertext only; the master key lives in the OS keyring (`libsecret`), never here.** Local providers (Ollama, vLLM) store a `base_url` and **no key at all** — the UI must not demand one. The UI renders `…last4`. `request_token_budget` is an optional per-request input-token ceiling (e.g. a free-tier TPM cap) read by LLM Gateway's `_resolve_tier`; NULL leaves requests unbounded (Bug Fix Plan Phase 1.1). |
 | `primary_model` | TEXT | NULL | The user's chat model. |
 | `auxiliary_model` | TEXT | NULL | Cheaper tier for extraction / summarisation / interest classification; falls back to `primary_model` when NULL. |
 | `vault_path` | TEXT | NULL | Absolute path chosen at onboarding step 2, default `~/ResearchOS`. |
