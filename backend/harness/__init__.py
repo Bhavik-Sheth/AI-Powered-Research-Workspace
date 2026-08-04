@@ -38,7 +38,22 @@ from provenance import validate_and_anchor
 
 __all__ = ["begin_turn", "run_turn", "interrupt"]
 
-_CITE_PATTERN = re.compile(r"<cite>(.*?)</cite>", re.DOTALL)
+# Matches an explicit `<cite>` span, or a quotation-marked span the model
+# left untagged in plain prose — a 20B model routinely writes a fabricated
+# "quote" instead of wrapping it, and the prompt's citation discipline is
+# advisory only (Bug Fix Plan Phase 2.2), so both are validated the same
+# way rather than letting the untagged case pass through untouched. The
+# length floor keeps this to sentence-like spans, not every quoted term.
+_MIN_UNTAGGED_QUOTE_CHARS = 20
+_CITE_OR_QUOTE_PATTERN = re.compile(
+    r"<cite>(?P<cite>.*?)</cite>"
+    # `[^<>]`, not just excluding the quote char: a model that wraps its
+    # own `<cite>` tag in quote marks (`"<cite>...</cite>"`) must not have
+    # the quote-span alternative swallow the tag markup as "quoted" text.
+    rf'|"(?P<straight>[^"<>]{{{_MIN_UNTAGGED_QUOTE_CHARS},}}?)"'
+    rf"|“(?P<curly>[^”<>]{{{_MIN_UNTAGGED_QUOTE_CHARS},}}?)”",
+    re.DOTALL,
+)
 
 # Every other LLM call in this codebase passes an explicit timeout
 # (memory-decision, extraction, scoped-column queries); the primary
@@ -128,6 +143,36 @@ async def _open_papers(session, open_paper_ids: list[uuid.UUID]) -> list[tuple[u
     return out
 
 
+# Bounded excerpt from `paper_content.full_text` when a paper has no
+# extracted card yet — guaranteed substring-matchable against full_text,
+# unlike the separate `papers.abstract` metadata column, so a verbatim
+# copy the model makes still validates (D24).
+_PAPER_EXCERPT_CHARS = 4000
+
+
+async def _paper_evidence(session, paper_id: uuid.UUID, title: str) -> str:
+    """Deterministic evidence for one paper the turn can cite from — the
+    selected paper and every open reader tab always get this, rather than
+    depending on `_maybe_retrieve`'s LLM-gated decision (Bug Fix Plan
+    Phase 2.1). Prefers the extractive card's validated quotes; falls back
+    to a bounded excerpt of the parsed text when extraction has not
+    produced one yet."""
+    card = await papers.get_paper_card(session, paper_id)
+    if card:
+        lines = [f'Extracted fields for "{title}" (validated verbatim quotes — cite these exactly to make a claim about this paper):']
+        for field in card:
+            heading = f" (§{field.section_heading})" if field.section_heading else ""
+            lines.append(f'- {field.field_key}{heading}: "{field.value}"')
+        return "\n".join(lines)
+
+    content = await papers.get_paper_content(session, paper_id)
+    if content is not None and content.full_text:
+        excerpt = content.full_text[:_PAPER_EXCERPT_CHARS]
+        return f'Excerpt from "{title}" (no extracted fields yet — quote verbatim from this excerpt to cite):\n{excerpt}'
+
+    return f'No extracted text is available yet for "{title}".'
+
+
 def _format_open_papers(open_papers: list[tuple[uuid.UUID, str]]) -> str:
     lines = ["Papers currently open in the reader (the read set for cross-paper comparison):"]
     for paper_id, title in open_papers:
@@ -167,18 +212,20 @@ def _matching_memory_row(quote: str, memory_rows: list[CitedRow]) -> CitedRow | 
 async def _validate_citations(
     session, paper_ids: list[uuid.UUID], memory_rows: list[CitedRow], text: str
 ) -> tuple[str, list[dict]]:
-    """D24's substring validator, applied to every `<cite>` span the model
-    produced — against any paper in `paper_ids` (the selected paper plus any
-    open reader tabs, so a cross-paper claim can resolve against either
-    paper — US4) via Provenance, or against a row `query_memory` actually
-    retrieved. Returns the text with failed tags relabelled `<unverified>`,
-    plus the structured citation list `messages.citations` stores."""
+    """D24's substring validator, applied to every `<cite>` span *and* every
+    untagged quotation-marked span the model produced — against any paper in
+    `paper_ids` (the selected paper plus any open reader tabs, so a
+    cross-paper claim can resolve against either paper — US4) via
+    Provenance, or against a row `query_memory` actually retrieved. Returns
+    the text with every span relabelled `<cite>` or `<unverified>` as
+    appropriate, plus the structured citation list `messages.citations`
+    stores."""
     citations: list[dict] = []
     pieces: list[str] = []
     cursor = 0
-    for match in _CITE_PATTERN.finditer(text):
+    for match in _CITE_OR_QUOTE_PATTERN.finditer(text):
         pieces.append(text[cursor : match.start()])
-        quote = match.group(1)
+        quote = match.group("cite") or match.group("straight") or match.group("curly")
         anchor = None
         for paper_id in paper_ids:
             anchor = await validate_and_anchor(session, paper_id, quote, "", "")
@@ -240,13 +287,22 @@ async def run_turn(
             )
             open_papers = await _open_papers(db_session, ui_state.open_paper_ids)
 
-        # The selected paper plus every open reader tab — the candidate set
-        # a `<cite>` span is checked against (US4 cross-paper compare).
-        # De-duplicated, order preserved, so the selected paper is tried first.
-        citation_paper_ids: list[uuid.UUID] = []
-        for pid in ([paper_id] if paper_id is not None else []) + [p[0] for p in open_papers]:
-            if pid not in citation_paper_ids:
-                citation_paper_ids.append(pid)
+            # The selected paper plus every open reader tab — the candidate
+            # set a `<cite>` span is checked against (US4 cross-paper
+            # compare), and the set each `_paper_evidence` block is built
+            # for. De-duplicated, order preserved, selected paper first.
+            evidence_papers: list[tuple[uuid.UUID, str]] = []
+            if paper_id is not None:
+                selected_paper = await papers.get_paper(db_session, paper_id)
+                if selected_paper is not None:
+                    evidence_papers.append((selected_paper.id, selected_paper.title))
+            for pid, title in open_papers:
+                if pid not in {p[0] for p in evidence_papers}:
+                    evidence_papers.append((pid, title))
+
+            evidence_blocks = [await _paper_evidence(db_session, pid, title) for pid, title in evidence_papers]
+
+        citation_paper_ids = [pid for pid, _ in evidence_papers]
 
         memory_rows = await _maybe_retrieve(session_ref.project_id, message)
         if memory_rows:
@@ -257,6 +313,8 @@ async def run_turn(
             llm_messages.append(
                 Message(role="system", content=f'The user has highlighted this passage from the paper:\n"{ui_state.selection.anchor.quote}"')
             )
+        if evidence_blocks:
+            llm_messages.append(Message(role="system", content="\n\n".join(evidence_blocks)))
         if len(open_papers) > 1:
             llm_messages.append(Message(role="system", content=_format_open_papers(open_papers)))
         if memory_rows:
