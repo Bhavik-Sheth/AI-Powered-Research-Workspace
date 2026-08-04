@@ -214,6 +214,39 @@ export type CreateProjectRequest = {
 };
 
 /**
+ * DashboardStat
+ *
+ * One stat-row tile (UI_DESIGN.md §4.1): `total` is the tile's big
+ * number, `qualifier` is the always-actionable-subset phrase rendered
+ * under it (`"4 unmarked"`, `"1 in progress"`, `"new since Tue"`) — never
+ * a bare count on its own.
+ */
+export type DashboardStat = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Qualifier
+     */
+    qualifier: string;
+};
+
+/**
+ * DashboardSummary
+ */
+export type DashboardSummary = {
+    papers: DashboardStat;
+    notes: DashboardStat;
+    experiments: DashboardStat;
+    feed: DashboardStat;
+    /**
+     * Needs Attention
+     */
+    needs_attention: Array<NeedsAttentionItem>;
+};
+
+/**
  * DiscoverModelsRequest
  */
 export type DiscoverModelsRequest = {
@@ -1044,6 +1077,34 @@ export type MountSpec = {
      * Mode
      */
     mode: 'ro' | 'rw';
+};
+
+/**
+ * NeedsAttentionItem
+ *
+ * One row of the `NEEDS ATTENTION` stack, mixing two severities on
+ * purpose (UI_DESIGN.md §4.1): `nudge` renders as the dashed soft-prompt
+ * block (§3.4), `error` as the danger error card. `paper_id` is present
+ * only on a `retry`-actionable error, so the frontend can call the
+ * existing Phase 1.3 reprocess endpoint directly from this row.
+ */
+export type NeedsAttentionItem = {
+    /**
+     * Severity
+     */
+    severity: 'nudge' | 'error';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Paper Id
+     */
+    paper_id?: string | null;
+    /**
+     * Action
+     */
+    action?: 'retry' | null;
 };
 
 /**
@@ -2271,6 +2332,42 @@ export type GetProjectApiProjectsProjectIdGetResponses = {
 };
 
 export type GetProjectApiProjectsProjectIdGetResponse = GetProjectApiProjectsProjectIdGetResponses[keyof GetProjectApiProjectsProjectIdGetResponses];
+
+export type GetDashboardApiProjectsProjectIdDashboardGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/dashboard';
+};
+
+export type GetDashboardApiProjectsProjectIdDashboardGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDashboardApiProjectsProjectIdDashboardGetError = GetDashboardApiProjectsProjectIdDashboardGetErrors[keyof GetDashboardApiProjectsProjectIdDashboardGetErrors];
+
+export type GetDashboardApiProjectsProjectIdDashboardGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DashboardSummary;
+};
+
+export type GetDashboardApiProjectsProjectIdDashboardGetResponse = GetDashboardApiProjectsProjectIdDashboardGetResponses[keyof GetDashboardApiProjectsProjectIdDashboardGetResponses];
 
 export type SaveTabStackApiProjectsProjectIdTabStackPutData = {
     body: SaveTabStackRequest;
