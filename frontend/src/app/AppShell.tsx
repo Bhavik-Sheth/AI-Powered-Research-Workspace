@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { listProjectsApiProjectsGet, type ProjectResponse } from "@research-os/api-client";
 
 import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
@@ -82,6 +82,24 @@ function ResizeHandle({
   );
 }
 
+/** Tracks whether `ref`'s content is wider than its visible box, re-checked
+ * whenever the box or its content resizes (ResizeObserver) — driving the
+ * tab strip's overflow control rather than a one-shot measurement. */
+function useOverflow<T extends HTMLElement>(ref: React.RefObject<T | null>, deps: unknown[]) {
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setOverflowing(el.scrollWidth > el.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return overflowing;
+}
+
 const NAV_GROUPS: { label: string | null; items: string[] }[] = [
   { label: null, items: ["Dashboard"] },
   { label: "Library", items: ["Papers", "Notes"] },
@@ -158,7 +176,11 @@ function ProjectSwitcher({ projectId, onSwitch }: { projectId: string; onSwitch:
  * scrolled tab."
  */
 function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwitchProject: (id: string) => void }) {
-  const { tabs, activeTab, loaded, openTab, closeTab, activateTab } = useTabStack(projectId);
+  const { tabs, activeTab, loaded, openTab, closeTab, activateTab, reorderTab } = useTabStack(projectId);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
+  const tabBarOverflowing = useOverflow(tabBarRef, [tabs.length]);
   const [projectName, setProjectName] = useState("");
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
@@ -330,27 +352,78 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         </button>
         <div className="center-pane-column">
           {tabs.length > 1 && (
-            <div className="tab-bar">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  className={`tab-bar__tab ${tab.id === activeTab ? "tab-bar__tab--active" : ""}`}
-                  onClick={() => activateTab(tab.id)}
-                >
-                  <span className="tab-bar__label">{tab.label}</span>
-                  {tab.kind !== "dashboard" && (
-                    <span
-                      className="tab-bar__close"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        closeTab(tab.id);
-                      }}
-                    >
-                      ×
-                    </span>
+            <div className="tab-bar-row">
+              <div className="tab-bar" ref={tabBarRef}>
+                {tabs.map((tab, index) => (
+                  <div
+                    key={tab.id}
+                    data-tab-id={tab.id}
+                    draggable
+                    className={`tab-bar__tab ${tab.id === activeTab ? "tab-bar__tab--active" : ""} ${tab.id === draggingTabId ? "tab-bar__tab--dragging" : ""}`}
+                    onClick={() => activateTab(tab.id)}
+                    onDragStart={(event: ReactDragEvent<HTMLDivElement>) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      setDraggingTabId(tab.id);
+                    }}
+                    onDragEnd={() => setDraggingTabId(null)}
+                    onDragOver={(event: ReactDragEvent<HTMLDivElement>) => {
+                      if (!draggingTabId || draggingTabId === tab.id) return;
+                      event.preventDefault();
+                    }}
+                    onDrop={(event: ReactDragEvent<HTMLDivElement>) => {
+                      if (!draggingTabId || draggingTabId === tab.id) return;
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const dropBeforeThisTab = event.clientX < rect.left + rect.width / 2;
+                      const beforeId = dropBeforeThisTab ? tab.id : (tabs[index + 1]?.id ?? null);
+                      reorderTab(draggingTabId, beforeId);
+                      setDraggingTabId(null);
+                    }}
+                  >
+                    <span className="tab-bar__label">{tab.label}</span>
+                    {tab.kind !== "dashboard" && (
+                      <span
+                        className="tab-bar__close"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          closeTab(tab.id);
+                        }}
+                      >
+                        ×
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {tabBarOverflowing && (
+                <div className="tab-bar__overflow">
+                  <button
+                    type="button"
+                    className="tab-bar__overflow-toggle"
+                    aria-label="Show hidden tabs"
+                    onClick={() => setOverflowOpen((open) => !open)}
+                  >
+                    »
+                  </button>
+                  {overflowOpen && (
+                    <ul className="tab-bar__overflow-menu">
+                      {tabs.map((tab) => (
+                        <li
+                          key={tab.id}
+                          className={tab.id === activeTab ? "tab-bar__overflow-item--active" : ""}
+                          onClick={() => {
+                            activateTab(tab.id);
+                            setOverflowOpen(false);
+                            document.querySelector(`[data-tab-id="${tab.id}"]`)?.scrollIntoView({ inline: "nearest" });
+                          }}
+                        >
+                          {tab.label}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
-              ))}
+              )}
             </div>
           )}
           <main className="center-pane-stack">

@@ -61,5 +61,21 @@ export function useTabStack(projectId: string) {
     persist(tabs, id);
   }
 
-  return { tabs, activeTab, loaded, openTab, closeTab, activateTab };
+  /** Moves `id` to sit immediately before `beforeId` (or to the end when
+   * `beforeId` is null) — the one place tab order changes. */
+  function reorderTab(id: string, beforeId: string | null) {
+    setTabs((prev) => {
+      if (id === beforeId) return prev;
+      const dragged = prev.find((t) => t.id === id);
+      if (!dragged) return prev;
+      const withoutDragged = prev.filter((t) => t.id !== id);
+      const insertAt = beforeId === null ? withoutDragged.length : withoutDragged.findIndex((t) => t.id === beforeId);
+      if (insertAt === -1) return prev;
+      const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
+      persist(next, activeTab);
+      return next;
+    });
+  }
+
+  return { tabs, activeTab, loaded, openTab, closeTab, activateTab, reorderTab };
 }
