@@ -2,6 +2,17 @@
    renders against these custom properties; no component inlines a color,
    font or spacing literal of its own (Rules.md). */
 
+/* Self-hosted font faces (no CDN request at runtime — offline-first). Weights
+   are limited to what the app actually sets via font-weight/font-style
+   (grepped across frontend/src): Space Grotesk 400/600/700 upright, Newsreader
+   400 upright + italic, JetBrains Mono 400 upright. */
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/newsreader/400.css";
+@import "@fontsource/newsreader/400-italic.css";
+@import "@fontsource/jetbrains-mono/400.css";
+
 :root {
   /* Color */
   --page-bg: #e4e0d8;
@@ -52,9 +63,10 @@
   --danger-text: oklch(45% 0.15 25);
   --danger-fill: oklch(52% 0.19 25);
 
-  /* Typography — three families (UI_DESIGN.md §1 Typography). Self-hosted
-     font files are not yet vendored (tracked for a later phase); the stack
-     falls back to the closest system fonts until then. */
+  /* Typography — three families (UI_DESIGN.md §1 Typography), self-hosted via
+     the @fontsource packages imported above (no Google Fonts CDN request at
+     runtime). System fonts remain only as the fallback if a face fails to
+     load. */
   --font-ui: "Space Grotesk", system-ui, sans-serif;
   --font-reading: "Newsreader", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
