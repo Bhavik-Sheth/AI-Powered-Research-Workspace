@@ -141,6 +141,13 @@
   vertical-align: middle;
 }
 
+.companion__code {
+  font: 11px var(--font-mono);
+  background: var(--accent-tint-10);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
 .companion__error {
   border-left: 2px solid var(--danger-rule);
   background: var(--danger-border);
