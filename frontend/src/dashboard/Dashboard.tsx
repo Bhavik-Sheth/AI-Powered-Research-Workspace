@@ -29,11 +29,13 @@ export function Dashboard({
   projectId,
   projectName,
   tabs,
+  activeTabId,
   onResume,
 }: {
   projectId: string;
   projectName: string;
   tabs: TabRef[];
+  activeTabId: string | null;
   onResume: (tabId: string) => void;
 }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -102,16 +104,23 @@ export function Dashboard({
         {resumable.length === 0 ? (
           <p className="dashboard__empty">Nothing open yet — open a paper or a note to see it here.</p>
         ) : (
-          resumable.map((tab) => (
-            <div className="dashboard__resume-row" key={tab.id}>
-              <span className="dashboard__resume-bullet" />
-              <span className="dashboard__resume-title">{tab.label}</span>
-              <span className="dashboard__resume-context">{TAB_KIND_LABEL[tab.kind] ?? tab.kind}</span>
-              <button type="button" className="dashboard__resume-link" onClick={() => onResume(tab.id)}>
-                Resume →
-              </button>
-            </div>
-          ))
+          resumable.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                className={`dashboard__resume-row${isActive ? " dashboard__resume-row--active" : ""}`}
+                key={tab.id}
+              >
+                <span className="dashboard__resume-bullet" />
+                <span className="dashboard__resume-title">{tab.label}</span>
+                {isActive && <span className="dashboard__resume-badge">Current</span>}
+                <span className="dashboard__resume-context">{TAB_KIND_LABEL[tab.kind] ?? tab.kind}</span>
+                <button type="button" className="dashboard__resume-link" onClick={() => onResume(tab.id)}>
+                  Resume →
+                </button>
+              </div>
+            );
+          })
         )}
       </div>
 

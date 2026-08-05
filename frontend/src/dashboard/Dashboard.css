@@ -61,24 +61,49 @@
   align-items: center;
   gap: 12px;
   background: var(--surface-raised);
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
   box-shadow: var(--panel-shadow);
   padding: 12px 14px;
   margin-bottom: 8px;
 }
 
+/* The row for the tab that is actually on screen right now — same
+ * accent-tint + accent-border language the tab strip and notes list use
+ * for "this one is active" (AppShell.css .tab-bar__tab--active,
+ * NotesView.css .notes-view__row--active). */
+.dashboard__resume-row--active {
+  background: var(--accent-tint-12);
+  border-color: var(--accent);
+}
+
 .dashboard__resume-bullet {
   width: 9px;
   height: 9px;
   border-radius: 2px;
-  background: var(--accent);
+  background: var(--border);
   flex: none;
+}
+
+.dashboard__resume-row--active .dashboard__resume-bullet {
+  background: var(--accent);
 }
 
 .dashboard__resume-title {
   font: 600 13px var(--font-reading);
   color: var(--text-strong);
   flex: 1;
+}
+
+.dashboard__resume-badge {
+  font: 700 9px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+  background: var(--accent-tint-15);
+  border-radius: var(--radius-badge);
+  padding: 2px 7px;
+  flex: none;
 }
 
 .dashboard__resume-context {

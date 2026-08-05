@@ -82,22 +82,53 @@ function ResizeHandle({
   );
 }
 
-/** Tracks whether `ref`'s content is wider than its visible box, re-checked
- * whenever the box or its content resizes (ResizeObserver) — driving the
- * tab strip's overflow control rather than a one-shot measurement. */
+// Subpixel rounding on getBoundingClientRect means an edge-to-edge fit can
+// report a fraction of a pixel of "overhang" that isn't real overflow.
+const OVERFLOW_EPSILON_PX = 1;
+
+/** Tracks whether `ref`'s content is wider than its visible box, and which
+ * of its direct children (matched by `data-tab-id`) are actually scrolled
+ * outside that visible box — re-checked whenever the box or its content
+ * resizes (ResizeObserver) or the box scrolls, driving both the tab strip's
+ * overflow control and its overflow menu's contents from one measurement
+ * rather than a one-shot pass or a second parallel mechanism. */
 function useOverflow<T extends HTMLElement>(ref: React.RefObject<T | null>, deps: unknown[]) {
   const [overflowing, setOverflowing] = useState(false);
+  const [hiddenTabIds, setHiddenTabIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const check = () => setOverflowing(el.scrollWidth > el.clientWidth);
+
+    const check = () => {
+      setOverflowing(el.scrollWidth > el.clientWidth);
+
+      const containerRect = el.getBoundingClientRect();
+      const hidden = new Set<string>();
+      for (const child of el.children) {
+        const tabId = (child as HTMLElement).dataset.tabId;
+        if (!tabId) continue;
+        const childRect = child.getBoundingClientRect();
+        const fullyVisible =
+          childRect.left >= containerRect.left - OVERFLOW_EPSILON_PX &&
+          childRect.right <= containerRect.right + OVERFLOW_EPSILON_PX;
+        if (!fullyVisible) hidden.add(tabId);
+      }
+      setHiddenTabIds(hidden);
+    };
+
     check();
     const observer = new ResizeObserver(check);
     observer.observe(el);
-    return () => observer.disconnect();
+    el.addEventListener("scroll", check, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", check);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  return overflowing;
+
+  return { overflowing, hiddenTabIds };
 }
 
 const NAV_GROUPS: { label: string | null; items: string[] }[] = [
@@ -180,7 +211,12 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
-  const tabBarOverflowing = useOverflow(tabBarRef, [tabs.length]);
+  const { overflowing: tabBarOverflowing, hiddenTabIds } = useOverflow(
+    tabBarRef,
+    // Order matters as much as count — reordering the strip changes which
+    // tabs are scrolled out of view without changing tabs.length.
+    [tabs.map((tab) => tab.id).join("|")],
+  );
   const [projectName, setProjectName] = useState("");
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
@@ -246,7 +282,15 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   function renderTabContent(tab: TabRef) {
     switch (tab.kind) {
       case "dashboard":
-        return <Dashboard projectId={projectId} projectName={projectName} tabs={tabs} onResume={activateTab} />;
+        return (
+          <Dashboard
+            projectId={projectId}
+            projectName={projectName}
+            tabs={tabs}
+            activeTabId={activeTab}
+            onResume={activateTab}
+          />
+        );
       case "library":
         return <LibraryView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "notes":
@@ -407,7 +451,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                   </button>
                   {overflowOpen && (
                     <ul className="tab-bar__overflow-menu">
-                      {tabs.map((tab) => (
+                      {tabs.filter((tab) => hiddenTabIds.has(tab.id)).map((tab) => (
                         <li
                           key={tab.id}
                           className={tab.id === activeTab ? "tab-bar__overflow-item--active" : ""}
