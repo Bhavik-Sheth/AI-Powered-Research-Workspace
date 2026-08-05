@@ -21,7 +21,20 @@ RUN pip install --no-cache-dir nbclient nbformat ipykernel && \
 # Jupyter's own HTTP/WebSocket protocol on a published TCP port (proven
 # working in this project's own spikes) rather than raw jupyter_client/ZMQ.
 # `notebook` (Jupyter Notebook 7) brings jupyter-server transitively.
-RUN pip install --no-cache-dir notebook
+#
+# Pinned, not left to float (investigated 2026-08-05, PLANNER/IssueFixes.md
+# "the notebook iframe loads with a clean console"): an unpinned install
+# silently took whatever `notebook`/`jupyterlab`/`jupyter-server` triple was
+# current at build time, so the running Jupyter version was not reproducible
+# between rebuilds. These three are the latest mutually-compatible set on
+# PyPI as of the pin date — `notebook==7.6.1` itself declares
+# `jupyterlab<4.7,>=4.6.2` and `jupyter-server<3,>=2.19.0`, so 4.6.2/2.20.0
+# are already the newest versions its own constraints allow, not an
+# arbitrarily older "safe" choice. Bump only as a deliberate, tested change.
+RUN pip install --no-cache-dir \
+    notebook==7.6.1 \
+    jupyterlab==4.6.2 \
+    jupyter-server==2.20.0
 
 COPY run_notebook.py /opt/run_notebook.py
 COPY jupyter_server_config.py /opt/jupyter_server_config.py
