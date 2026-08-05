@@ -6,7 +6,14 @@ import { getProjectGraphApiProjectsProjectIdGraphGet, type GraphEdge } from "@re
 import "./GraphView.css";
 import { categoryOf, colorFor, fillOpacityFor, LEGEND, nodesFromEdges, shapeFor } from "./nodeStyle";
 
-const LAYOUT = { name: "cose", animate: false, padding: 40 } as const;
+// `padding` reserves space around the *node* bounding box, not the label
+// text drawn under each node — a node the cose layout places near the
+// canvas edge had its centered, up-to-90px-wide label (`text-max-width`
+// below) clipped by the container before the label's own ellipsis ever
+// kicked in, rendering as an unreadable mid-word fragment (e.g. "ion Is
+// All Y…" for "Attention Is All You Need"). 80px covers half that label
+// width plus the node's own radius on either side.
+const LAYOUT = { name: "cose", animate: false, padding: 80 } as const;
 
 function elementsFor(edges: GraphEdge[], paperTitles: Record<string, string>) {
   const nodes = nodesFromEdges(edges).map((node) => ({
