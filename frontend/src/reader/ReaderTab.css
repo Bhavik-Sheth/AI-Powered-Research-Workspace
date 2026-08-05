@@ -36,13 +36,21 @@
 
 .reader__pages {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   background: var(--surface-muted);
   border-radius: var(--radius-panel);
   padding: 24px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Plain `center` here center-crops a page wider than this pane — a
+     narrower Companion/nav split makes that the common case at 1.4x
+     scale (ReaderTab.tsx), and centering an overflowing flex item hides
+     its start rather than its end, so the page opens mid-line with the
+     left margin already scrolled off. `safe center` keeps pages centered
+     when they fit and falls back to start-aligned (scrollable from the
+     true top-left) once a page is wider than the pane, instead of ever
+     opening pre-scrolled into the middle of a line. */
+  align-items: safe center;
   gap: 24px;
 }
 
