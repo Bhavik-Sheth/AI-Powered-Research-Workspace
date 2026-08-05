@@ -129,6 +129,17 @@ def _dedupe(hits: list[RawFeedHit]) -> dict[str, RawFeedHit]:
     return seen
 
 
+def _select_unseen(candidates: dict[str, RawFeedHit], unseen_ids: set[str]) -> dict[str, RawFeedHit]:
+    """Of `candidates` (already deduped within this poll's own fetch by
+    `_dedupe`), only the ones `db.filter_unseen`'s seen-set anti-join didn't
+    already know about. This is what makes a second catch-up poll over a
+    window overlapping the first one a no-op for any item the first poll
+    already surfaced, the user already read or saved to the library, or the
+    user already dismissed — the seen-set row from that earlier poll (or
+    action) is still there, so the item never reaches `feed_items` twice."""
+    return {canonical_id: hit for canonical_id, hit in candidates.items() if canonical_id in unseen_ids}
+
+
 def score_candidate(hit: RawFeedHit, profile: InterestProfile, similarity: float = 0.0) -> tuple[float, WhyRelevant]:
     """The synonym-keyword-match and category-match terms of the
     deterministic rank (D28) — no LLM anywhere in this path. `similarity`
@@ -213,9 +224,7 @@ async def poll_feed_job(_ctx: dict, *, project_id: str, since: str) -> None:
         unseen_ids = set(await db.filter_unseen(session, pid, list(candidates.keys())))
 
     scored: list[_ScoredCandidate] = []
-    for canonical_id, hit in candidates.items():
-        if canonical_id not in unseen_ids:
-            continue
+    for canonical_id, hit in _select_unseen(candidates, unseen_ids).items():
         score, why_relevant = score_candidate(hit, profile)
         if not why_relevant.matched_keywords and not why_relevant.matched_categories:
             continue  # Never rendered without a reason, by construction (MODULES.md).
