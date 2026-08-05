@@ -136,13 +136,21 @@ export function LiveNotebookPanel({
           Stop notebook
         </button>
       </div>
-      <iframe
-        src={status.url}
-        className="live-notebook__iframe"
-        title="Jupyter notebook"
-        // A per-container, per-launch ephemeral loopback server (D2) — the
-        // real security boundary here, not sandboxing this iframe further.
-      />
+      {/* JupyterLab's own UI (running inside the iframe) hard-codes a
+          760px "mobile layout" breakpoint below which its toolbar, kernel
+          picker and cell gutter start overlapping — that floor isn't ours
+          to change, so this wrapper scrolls horizontally on its own when
+          the pane is narrower, instead of the framed app squeezing into a
+          broken layout or the whole board scrolling. */}
+      <div className="live-notebook__iframe-frame">
+        <iframe
+          src={status.url}
+          className="live-notebook__iframe"
+          title="Jupyter notebook"
+          // A per-container, per-launch ephemeral loopback server (D2) — the
+          // real security boundary here, not sandboxing this iframe further.
+        />
+      </div>
     </div>
   );
 }
