@@ -7,6 +7,7 @@ extractive-card extraction (D22/D24), and open-only enrichment.
 """
 
 import asyncio
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -32,6 +33,8 @@ from papers.parser import parse_pdf
 from provenance import validate_and_anchor
 from settings import get_vault_path
 from vault import write_paper_asset
+
+logger = logging.getLogger(__name__)
 
 _DOI_PREFIX = re.compile(r"^\s*(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", re.IGNORECASE)
 _ARXIV_PREFIX = re.compile(r"^\s*arxiv:\s*", re.IGNORECASE)
@@ -395,7 +398,19 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
                         tier="auxiliary",
                         timeout=60,
                     )
-                except (*LLMError, RuntimeError):
+                except (*LLMError, RuntimeError) as exc:
+                    # Skipping just this window (Phase 1.2) must not mean
+                    # losing the reason why — without this, every window
+                    # failing surfaces only as the generic "every
+                    # extraction window failed" below, with no way to tell
+                    # a rate limit from a schema/timeout failure short of
+                    # reproducing it by hand.
+                    logger.warning(
+                        "event=extraction_window_failed paper_id=%s model=%s error=%r",
+                        pid,
+                        model_name,
+                        exc,
+                    )
                     continue
                 any_window_succeeded = True
                 for field_key in _FIELD_KEYS:

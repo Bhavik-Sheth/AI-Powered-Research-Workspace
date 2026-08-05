@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Provider = Literal["google", "groq", "openai", "anthropic", "openrouter", "deepseek", "custom", "ollama", "vllm"]
 
@@ -17,10 +17,14 @@ class ProviderCredentials(BaseModel):
     base_url: str | None = None
     model: str
     tier: Literal["primary", "auxiliary"] = "primary"
-    request_token_budget: int | None = None
-    """Per-request input-token ceiling for this provider's rate-limited tier
-    (e.g. a free-tier TPM cap). NULL leaves requests unbounded — the caller's
-    own provider limit is the only ceiling (Bug Fix Plan Phase 1.1)."""
+    model_budgets: dict[str, int] = Field(default_factory=dict)
+    """Per-request input-token ceiling per model hosted by this provider,
+    keyed by the full stored model string (e.g. `"groq/llama-3.1-8b-instant"`
+    — exactly the form `primary_model`/`auxiliary_model` store). One provider
+    can host models with different TPM ceilings, so a single flat budget
+    cannot serve all of them. A model absent from this map is unbounded —
+    the caller's own provider limit is the only ceiling — until LLM
+    Gateway's self-heal path (Phase 2.1) learns it from a 429 body."""
 
 
 class ProviderInfo(BaseModel):
@@ -29,7 +33,7 @@ class ProviderInfo(BaseModel):
     last4: str | None = None
     base_url: str | None = None
     validated_at: datetime | None = None
-    request_token_budget: int | None = None
+    model_budgets: dict[str, int] = Field(default_factory=dict)
 
 
 class ModelSettings(BaseModel):

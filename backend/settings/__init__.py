@@ -68,7 +68,7 @@ async def get_settings(session: AsyncSession) -> ModelSettings:
             last4=info.get("last4"),
             base_url=info.get("base_url"),
             validated_at=info.get("validated_at"),
-            request_token_budget=info.get("request_token_budget"),
+            model_budgets=info.get("model_budgets", {}),
         )
         for name, info in row.providers.items()
     }
@@ -116,8 +116,8 @@ async def save_provider(session: AsyncSession, provider: Provider, credentials: 
         entry.update(ciphertext=ciphertext, nonce=nonce, last4=credentials.api_key[-4:])
     if credentials.base_url:
         entry["base_url"] = credentials.base_url
-    if credentials.request_token_budget is not None:
-        entry["request_token_budget"] = credentials.request_token_budget
+    if credentials.model_budgets:
+        entry["model_budgets"] = dict(credentials.model_budgets)
     row.providers = {**row.providers, provider: entry}
     model_string = f"{override.provider}/{override.model}"
     if credentials.tier == "primary":
@@ -126,6 +126,24 @@ async def save_provider(session: AsyncSession, provider: Provider, credentials: 
         row.auxiliary_model = model_string
     await session.flush()
     return await get_settings(session)
+
+
+async def save_model_budget(session: AsyncSession, provider: Provider, model: str, budget: int) -> None:
+    """Persists a learned per-model token ceiling without `save_provider`'s
+    live validation call — the caller (LLM Gateway's rate-limit self-heal
+    path, Phase 2.1) already has proof of the ceiling from the provider's
+    own 429 body, so re-validating would just spend another request.
+
+    Keyed by the full `provider/model` string (e.g. `"groq/llama-3.1-8b-instant"`),
+    matching `primary_model`/`auxiliary_model` and exactly what `_resolve_tier`
+    (`backend/llm/__init__.py`) looks up — not the bare `model` argument, which
+    would silently never be found by a real request."""
+    row = await _get_or_create_row(session)
+    entry = dict(row.providers.get(provider, {}))
+    model_key = f"{provider}/{model}"
+    entry["model_budgets"] = {**entry.get("model_budgets", {}), model_key: budget}
+    row.providers = {**row.providers, provider: entry}
+    await session.flush()
 
 
 async def discover_models(provider: Literal["ollama", "vllm"], base_url: str) -> list[str]:

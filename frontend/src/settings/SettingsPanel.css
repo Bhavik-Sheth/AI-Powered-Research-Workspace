@@ -57,3 +57,13 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-button);
 }
+
+.settings-panel__budget {
+  font: 12px var(--font-ui);
+  color: var(--text-muted);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}

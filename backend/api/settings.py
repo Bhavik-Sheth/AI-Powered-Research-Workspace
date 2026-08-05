@@ -34,6 +34,29 @@ async def put_models(body: SaveProviderRequest) -> ModelSettings:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+class SaveModelBudgetRequest(BaseModel):
+    provider: Provider
+    model: str
+    budget: int
+
+
+@router.put("/api/settings/models/budget", response_model=ModelSettings)
+async def put_model_budget(body: SaveModelBudgetRequest) -> ModelSettings:
+    """Hand-set override for `model_budgets[f"{provider}/{model}"]` (Bug Fix
+    Plan Phase 2.2) — the same map LLM Gateway's rate-limit self-heal path
+    (Phase 2.1) writes to automatically, exposed here so a known free-tier
+    ceiling can be entered before the first 429 rather than learned after it.
+    `model` is the bare model name (the form the Settings panel already
+    splits a stored `provider/model` string into); `save_model_budget`
+    rejoins it with `provider` to build the full key `_resolve_tier` looks
+    up — never key this map by the bare model name."""
+    if body.budget <= 0:
+        raise HTTPException(status_code=422, detail="budget must be a positive number of tokens")
+    async with db.session() as session:
+        await settings.save_model_budget(session, body.provider, body.model, body.budget)
+        return await settings.get_settings(session)
+
+
 class DiscoverModelsRequest(BaseModel):
     provider: Literal["ollama", "vllm"]
     base_url: str

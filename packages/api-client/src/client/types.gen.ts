@@ -1567,9 +1567,11 @@ export type ProviderCredentials = {
      */
     tier?: 'primary' | 'auxiliary';
     /**
-     * Request Token Budget
+     * Model Budgets
      */
-    request_token_budget?: number | null;
+    model_budgets?: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -1591,9 +1593,11 @@ export type ProviderInfo = {
      */
     validated_at?: string | null;
     /**
-     * Request Token Budget
+     * Model Budgets
      */
-    request_token_budget?: number | null;
+    model_budgets?: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -1800,6 +1804,24 @@ export type SaveDocumentRequest = {
      * Engine
      */
     engine?: 'swiftlatex' | 'tectonic' | null;
+};
+
+/**
+ * SaveModelBudgetRequest
+ */
+export type SaveModelBudgetRequest = {
+    /**
+     * Provider
+     */
+    provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Budget
+     */
+    budget: number;
 };
 
 /**
@@ -2135,6 +2157,37 @@ export type PutModelsApiSettingsModelsPutResponses = {
 };
 
 export type PutModelsApiSettingsModelsPutResponse = PutModelsApiSettingsModelsPutResponses[keyof PutModelsApiSettingsModelsPutResponses];
+
+export type PutModelBudgetApiSettingsModelsBudgetPutData = {
+    body: SaveModelBudgetRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/models/budget';
+};
+
+export type PutModelBudgetApiSettingsModelsBudgetPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutModelBudgetApiSettingsModelsBudgetPutError = PutModelBudgetApiSettingsModelsBudgetPutErrors[keyof PutModelBudgetApiSettingsModelsBudgetPutErrors];
+
+export type PutModelBudgetApiSettingsModelsBudgetPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: ModelSettings;
+};
+
+export type PutModelBudgetApiSettingsModelsBudgetPutResponse = PutModelBudgetApiSettingsModelsBudgetPutResponses[keyof PutModelBudgetApiSettingsModelsBudgetPutResponses];
 
 export type DiscoverModelsApiSettingsModelsDiscoverPostData = {
     body: DiscoverModelsRequest;

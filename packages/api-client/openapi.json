@@ -151,6 +151,63 @@
         }
       }
     },
+    "/api/settings/models/budget": {
+      "put": {
+        "summary": "Put Model Budget",
+        "description": "Hand-set override for `model_budgets[f\"{provider}/{model}\"]` (Bug Fix\nPlan Phase 2.2) \u2014 the same map LLM Gateway's rate-limit self-heal path\n(Phase 2.1) writes to automatically, exposed here so a known free-tier\nceiling can be entered before the first 429 rather than learned after it.\n`model` is the bare model name (the form the Settings panel already\nsplits a stored `provider/model` string into); `save_model_budget`\nrejoins it with `provider` to build the full key `_resolve_tier` looks\nup \u2014 never key this map by the bare model name.",
+        "operationId": "put_model_budget_api_settings_models_budget_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveModelBudgetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings/models/discover": {
       "post": {
         "summary": "Discover Models",
@@ -6321,16 +6378,12 @@
             "title": "Tier",
             "default": "primary"
           },
-          "request_token_budget": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Token Budget"
+          "model_budgets": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Model Budgets"
           }
         },
         "type": "object",
@@ -6376,16 +6429,12 @@
             ],
             "title": "Validated At"
           },
-          "request_token_budget": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Token Budget"
+          "model_budgets": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Model Budgets"
           }
         },
         "type": "object",
@@ -6682,6 +6731,40 @@
           "tex"
         ],
         "title": "SaveDocumentRequest"
+      },
+      "SaveModelBudgetRequest": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "google",
+              "groq",
+              "openai",
+              "anthropic",
+              "openrouter",
+              "deepseek",
+              "custom",
+              "ollama",
+              "vllm"
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "budget": {
+            "type": "integer",
+            "title": "Budget"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "model",
+          "budget"
+        ],
+        "title": "SaveModelBudgetRequest"
       },
       "SaveProviderRequest": {
         "properties": {
