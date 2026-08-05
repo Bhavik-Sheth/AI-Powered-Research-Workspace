@@ -42,7 +42,10 @@ export interface PendingAsk {
  * transcript that keeps cited evidence visually distinct from reasoning
  * (D24), the split the UI must never collapse. Reconnects with backoff on
  * a dropped socket (TRD §4.1); a send while disconnected queues and the
- * composer says so, rather than silently failing.
+ * composer says so, rather than silently failing. A send while a turn is
+ * already running is not blocked client-side either — it goes out and the
+ * backend's `turn_in_progress` error comes back into the transcript, next
+ * to the still-live `✕ Stop` for the turn that's actually in the way.
  *
  * The socket itself is owned by `ProjectShell` (`useProjectSocket`), not by
  * this component — Phase 2.3 added a second consumer of the same
@@ -117,8 +120,15 @@ export function CompanionPane({
     } else if (evt.event === "ui_action") {
       onUIAction(evt.action, evt.payload);
     } else if (evt.event === "error") {
-      setTurnInFlight(false);
-      setStatusText(null);
+      // `turn_in_progress` means this specific send was refused — the turn
+      // it collided with is still running (backend/ws/__init__.py never
+      // schedules a task for the rejected message), so the status line and
+      // ✕ Stop must keep reflecting that turn rather than going idle under
+      // a message that never actually stopped anything.
+      if (evt.code !== "turn_in_progress") {
+        setTurnInFlight(false);
+        setStatusText(null);
+      }
       setTranscript((prev) => [...prev, { id: nextId(), role: "error", content: evt.message }]);
     }
   }
@@ -193,7 +203,12 @@ export function CompanionPane({
   }, [socket.connected]);
 
   function sendMessage(text: string, withSelection: SelectionState | null, inputModality: "text" | "voice" = "text"): void {
-    if (turnInFlight || !text.trim()) return;
+    // Empty input has nothing to say anything about, so it stays a silent
+    // no-op. A turn already being in flight is different: the backend
+    // already has an answer for that case (the `turn_in_progress` error
+    // below), so the message goes out regardless and lets that answer
+    // reach the transcript instead of being swallowed here first.
+    if (!text.trim()) return;
     const sent = socket.send({
       event: "user_message",
       text,
