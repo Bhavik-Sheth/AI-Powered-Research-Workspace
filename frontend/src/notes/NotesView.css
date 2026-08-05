@@ -130,6 +130,12 @@
   outline: none;
 }
 
+.notes-view__hint {
+  font: 12px/1.5 var(--font-ui);
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .notes-view__actions {
   display: flex;
   justify-content: flex-end;
@@ -149,4 +155,11 @@
 .notes-view__save:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Clean/settled state — the note is saved and matches the editor exactly,
+   distinct from the accent "Save" call-to-action shown while dirty. */
+.notes-view__save--clean {
+  background: var(--surface-muted);
+  color: var(--text-muted);
 }

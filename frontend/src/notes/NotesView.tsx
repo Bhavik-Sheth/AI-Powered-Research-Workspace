@@ -33,6 +33,11 @@ export function NotesView({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  // Last-saved (or loaded) values — compared against the live editor state
+  // to drive the Save control's dirty/clean appearance. Client-only UI
+  // state; never sent on the wire (MODULES.md Notes Editor: State).
+  const [savedTitle, setSavedTitle] = useState("");
+  const [savedBody, setSavedBody] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +56,8 @@ export function NotesView({ projectId }: { projectId: string }) {
     setSelectedId(note?.id ?? null);
     setTitle(note?.title ?? "");
     setBody(note?.body ?? "");
+    setSavedTitle(note?.title ?? "");
+    setSavedBody(note?.body ?? "");
     setError(null);
   }
 
@@ -71,6 +78,8 @@ export function NotesView({ projectId }: { projectId: string }) {
           });
       await queryClient.invalidateQueries({ queryKey: ["notes", projectId] });
       setSelectedId(data.id);
+      setSavedTitle(data.title);
+      setSavedBody(data.body);
     } catch (err) {
       // The draft in the editor is left exactly as typed — a save failure
       // never discards user text (MODULES.md Notes Editor: Errors).
@@ -79,6 +88,11 @@ export function NotesView({ projectId }: { projectId: string }) {
       setSaving(false);
     }
   }
+
+  const titleMissing = title.trim().length === 0;
+  const isDirty = title !== savedTitle || body !== savedBody;
+  const saveDisabled = saving || titleMissing || !isDirty;
+  const saveLabel = saving ? "Saving…" : !titleMissing && !isDirty ? "Saved" : "Save";
 
   if (notesQuery.isPending) {
     return null;
@@ -141,9 +155,20 @@ export function NotesView({ projectId }: { projectId: string }) {
           placeholder="Write in markdown…"
         />
         {error && <ErrorCard title="Could not save the note" message={error} onRetry={handleSave} />}
+        {titleMissing && <p className="notes-view__hint">Add a title before this note can be saved.</p>}
         <div className="notes-view__actions">
-          <button type="button" className="notes-view__save" onClick={handleSave} disabled={saving || !title}>
-            {saving ? "Saving…" : "Save"}
+          <button
+            type="button"
+            className={
+              !titleMissing && !isDirty && !saving
+                ? "notes-view__save notes-view__save--clean"
+                : "notes-view__save"
+            }
+            onClick={handleSave}
+            disabled={saveDisabled}
+            title={titleMissing ? "Add a title before this note can be saved." : undefined}
+          >
+            {saveLabel}
           </button>
         </div>
       </div>
