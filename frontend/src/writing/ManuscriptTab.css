@@ -171,6 +171,15 @@
   color: var(--text-muted);
 }
 
+.writing__preview-note--empty {
+  margin: 14px;
+  padding: 12px;
+  border: 1px dashed var(--border-dashed);
+  border-radius: var(--radius-card);
+  font: italic 12px/1.5 var(--font-ui);
+  color: var(--text-muted);
+}
+
 .writing__compile-error {
   padding: 12px;
   margin: 0;

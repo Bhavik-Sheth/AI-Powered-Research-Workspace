@@ -5,8 +5,23 @@ import { updateDocumentApiProjectsProjectIdDocumentsDocumentIdPut } from "@resea
 import { fetchBinary } from "../state/bridge";
 
 const DEBOUNCE_MS = 1500;
+const DOCUMENT_BODY = /\\begin\{document\}([\s\S]*?)\\end\{document\}/;
+// An unescaped `%` starts a LaTeX comment that runs to end of line; `\%` is
+// a literal percent sign and must not be stripped.
+const LINE_COMMENT = /(?<!\\)%.*$/gm;
 
-export type PreviewStatus = "idle" | "compiling" | "ok" | "error";
+export type PreviewStatus = "idle" | "compiling" | "ok" | "error" | "empty";
+
+/** True when the manuscript has no real content to compile: no text between
+ * `\begin{document}` and `\end{document}` once comments and whitespace are
+ * discounted. Tests the document body rather than the raw source, so
+ * `STARTER_TEX`'s boilerplate preamble never counts as "content" on its
+ * own — a fresh draft reads as empty until the writer adds real body text. */
+export function isManuscriptBodyEmpty(tex: string): boolean {
+  const match = tex.match(DOCUMENT_BODY);
+  const body = match ? match[1] : tex;
+  return body.replace(LINE_COMMENT, "").trim() === "";
+}
 
 /** Manuscript Editor's debounced compiled preview (MODULES.md, D34 as
  * superseded by Phase 4.1 — see docker/tectonic.Dockerfile). Compiles
@@ -20,7 +35,12 @@ export type PreviewStatus = "idle" | "compiling" | "ok" | "error";
  * Owns the debounce timer, one instance per open document tab, same as the
  * hook it replaces. A compile failure surfaces `log` for the compile-error
  * panel without discarding editor content — the caller already keeps `tex`
- * in its own state regardless of this hook's outcome. */
+ * in its own state regardless of this hook's outcome.
+ *
+ * Skips the compile entirely (status `"empty"`) while `isManuscriptBodyEmpty`
+ * holds — a fresh draft's boilerplate preamble has zero pages of output,
+ * which Tectonic treats as fatal rather than benign, so compiling it would
+ * only ever surface an `xdvipdfmx`/"No pages of output" error (Phase 4.1). */
 export function useManuscriptPreview(tex: string, projectId: string, documentId: string | null, title: string) {
   const [status, setStatus] = useState<PreviewStatus>("idle");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -29,7 +49,11 @@ export function useManuscriptPreview(tex: string, projectId: string, documentId:
   const generationRef = useRef(0);
 
   useEffect(() => {
-    if (documentId === null || tex.trim() === "") return;
+    if (documentId === null) return;
+    if (isManuscriptBodyEmpty(tex)) {
+      setStatus("empty");
+      return;
+    }
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {

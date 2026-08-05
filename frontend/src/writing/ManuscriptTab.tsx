@@ -224,6 +224,9 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
             <LatexSourceEditor value={tex} onChange={onSourceChange} viewRef={viewRef} projectId={projectId} />
             <div className="writing__preview">
               {preview.status === "idle" && <p className="writing__preview-note">Start typing to compile a preview.</p>}
+              {preview.status === "empty" && (
+                <p className="writing__preview-note writing__preview-note--empty">Nothing to preview yet — add some text to the document body.</p>
+              )}
               {preview.status === "compiling" && <p className="writing__preview-note">Compiling preview…</p>}
               {preview.status === "error" && <pre className="writing__compile-error">{preview.log.slice(-2000)}</pre>}
               {preview.status === "ok" && preview.pdfUrl && (
