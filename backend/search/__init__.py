@@ -68,11 +68,18 @@ def _to_summary(hit: RawHit) -> PaperSummary:
     )
 
 
-async def _rank(query: str, hits: list[RawHit]) -> list[RawHit]:
+async def _rank(query: str, hits: list[RawHit]) -> tuple[list[RawHit], bool]:
+    """Cross-encoder reranks the top `_RERANK_TOP_N`; a reranker that isn't
+    loaded within its bound degrades to the fan-out's own order — same
+    partial-failure shape as one literature source timing out in
+    `_fan_out`, never a block on the search."""
     head, tail = hits[:_RERANK_TOP_N], hits[_RERANK_TOP_N:]
-    scores = await rerank(query, [f"{hit.title}\n{hit.abstract or ''}" for hit in head])
+    try:
+        scores = await rerank(query, [f"{hit.title}\n{hit.abstract or ''}" for hit in head])
+    except TimeoutError:
+        return hits, False
     ranked_head = [hit for hit, _ in sorted(zip(head, scores), key=lambda pair: pair[1], reverse=True)]
-    return ranked_head + tail
+    return ranked_head + tail, True
 
 
 async def _cache(result_set: ResultSet) -> None:
@@ -94,7 +101,9 @@ async def search_papers(query: str, filters: SearchFilters | None = None) -> Res
     effective_filters = filters or understanding.filters
 
     hits, failed = await _fan_out(understanding.keywords, effective_filters)
-    ranked = await _rank(query, _dedupe(hits))
+    ranked, reranked = await _rank(query, _dedupe(hits))
+    if not reranked:
+        failed = [*failed, "reranker"]
 
     result_set = ResultSet(
         result_id=str(uuid.uuid4()), query=query, results=[_to_summary(hit) for hit in ranked], sources_failed=failed
