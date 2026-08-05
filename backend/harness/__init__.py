@@ -26,6 +26,25 @@ the *same* user text somehow starts a second turn within
 that was already in flight over the socket at the instant it was
 evicted — `run_turn` recognizes the immediately preceding row as that turn
 and returns without persisting a second copy or calling the LLM again.
+
+Bug Fix Plan Phase 1.1 closes the other gap the completion timeout above
+never covered: the tool-dispatch branch had neither a timeout nor a
+`cancel_flag` check of its own, so a tool call that never returned hung the
+turn forever and, because the in-flight slot was only ever released after
+that same await, every later turn on the session too. `_dispatch_tool_bounded`
+races the dispatch against both a timeout and `cancel_flag`; either ends the
+turn with an `error` event and `turn_complete(interrupted=true)` rather than
+leaving the status pill stuck, and the slot-releasing `finally` at the
+bottom of `run_turn` runs on that path exactly as it does on every other.
+
+Bug Fix Plan Phase 3.1 closes a gap in the citation validator above: a
+doubled or quote-wrapped `<cite>` tag can make `_CITE_OR_QUOTE_PATTERN`'s
+lazy match pair an opening tag with the wrong closing tag, leaving literal
+tag markup stranded inside a capture group or in the untouched text between
+matches. `_validate_citations` now strips that markup — from the captured
+span and from the text around it — before re-wrapping, so `⚠ unverified`
+always renders as clean text, never a real tag nested or stranded inside
+another.
 """
 
 import asyncio
@@ -92,6 +111,14 @@ _CITE_OR_QUOTE_PATTERN = re.compile(
 # duration, so a genuinely long reasoning response that keeps producing
 # chunks is unaffected.
 _COMPLETION_TIMEOUT_S = 90
+
+# Bounds a single tool dispatch (Bug Fix Plan Phase 1.1) — a search API call,
+# an LLM extraction, or any other awaited step inside `harness.tools.dispatch`
+# that never yields back to `run_turn`'s own cancel-flag check is otherwise
+# unbounded, unlike the completion call above which at least streams. Set
+# generously above the slowest legitimate tool (a federated literature
+# search) so it only fires on a genuinely stuck call.
+_TOOL_DISPATCH_TIMEOUT_S = 60
 
 # One in-flight turn per session (MODULES.md's Agent Harness state note).
 # Cancellation is cooperative rather than a real `asyncio.Task.cancel()`
@@ -262,6 +289,27 @@ def _matching_memory_row(quote: str, memory_rows: list[CitedRow]) -> CitedRow | 
     return next((row for row in memory_rows if quote in row.text), None)
 
 
+# A doubled or quote-wrapped `<cite>` tag (Bug Fix Plan Phase 3.1) can make
+# `_CITE_OR_QUOTE_PATTERN`'s lazy `.*?` pair an opening tag with the wrong
+# closing tag, leaving literal `<cite>`/`</cite>`/`<unverified>`/`</unverified>`
+# markup stranded either inside a capture group or in the untouched text
+# between matches. Neither location is allowed to reach `messages.citations`
+# still carrying that markup — `renderAssistantContent` (Companion Pane)
+# splits on the outermost match only and does not recurse into one, so a
+# leftover tag prints as visible raw characters instead of being masked
+# behind `⚠ unverified`.
+_TAG_MARKUP_PATTERN = re.compile(r"</?(?:cite|unverified)>")
+
+
+def _strip_tag_markup(text: str) -> str:
+    """Removes any literal citation-tag markup from `text` — applied to a
+    captured span before it is re-wrapped, and to the untouched text between
+    matches, so no shape or depth of malformed tag the model emits can leave
+    a real `<cite>`/`<unverified>` tag nested or stranded inside the
+    validated result."""
+    return _TAG_MARKUP_PATTERN.sub("", text)
+
+
 async def _validate_citations(
     session, paper_ids: list[uuid.UUID], memory_rows: list[CitedRow], text: str
 ) -> tuple[str, list[dict]]:
@@ -277,8 +325,8 @@ async def _validate_citations(
     pieces: list[str] = []
     cursor = 0
     for match in _CITE_OR_QUOTE_PATTERN.finditer(text):
-        pieces.append(text[cursor : match.start()])
-        quote = match.group("cite") or match.group("straight") or match.group("curly")
+        pieces.append(_strip_tag_markup(text[cursor : match.start()]))
+        quote = _strip_tag_markup(match.group("cite") or match.group("straight") or match.group("curly"))
         anchor = None
         for paper_id in paper_ids:
             anchor = await validate_and_anchor(session, paper_id, quote, "", "")
@@ -294,8 +342,44 @@ async def _validate_citations(
         else:
             pieces.append(f"<unverified>{quote}</unverified>")
         cursor = match.end()
-    pieces.append(text[cursor:])
+    pieces.append(_strip_tag_markup(text[cursor:]))
     return "".join(pieces), citations
+
+
+class _ToolDispatchInterrupted(Exception):
+    """Raised by `_dispatch_tool_bounded` when `cancel_flag` fires before the
+    dispatch finishes. Caught only in `run_turn`, right where it's raised —
+    it never crosses that boundary, so it adds no second `CancelledError`
+    catch site (Rules.md's cancellation-in-one-place rule): the turn's own
+    task is never cancelled, only the tool-dispatch coroutine this function
+    itself spawned."""
+
+
+async def _dispatch_tool_bounded(
+    session, project_id: uuid.UUID, tool_name: str, args: dict, cancel_flag: asyncio.Event
+):
+    """Runs `dispatch_tool`, but returns no later than
+    `_TOOL_DISPATCH_TIMEOUT_S` after starting, and no later than
+    `cancel_flag` firing — whichever comes first. Raises `TimeoutError` on
+    the former, `_ToolDispatchInterrupted` on the latter; on either, the
+    still-running dispatch coroutine is cancelled and awaited out so it
+    never keeps running unobserved after this returns."""
+    dispatch_task = asyncio.ensure_future(dispatch_tool(session, project_id, tool_name, args))
+    cancel_task = asyncio.ensure_future(cancel_flag.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {dispatch_task, cancel_task}, timeout=_TOOL_DISPATCH_TIMEOUT_S, return_when=asyncio.FIRST_COMPLETED
+        )
+        if dispatch_task in done:
+            return dispatch_task.result()
+        if cancel_task in done:
+            raise _ToolDispatchInterrupted(f"{tool_name} interrupted")
+        raise TimeoutError(f'"{tool_name}" did not respond within {_TOOL_DISPATCH_TIMEOUT_S}s')
+    finally:
+        for task in (dispatch_task, cancel_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(dispatch_task, cancel_task, return_exceptions=True)
 
 
 async def run_turn(
@@ -441,31 +525,51 @@ async def run_turn(
                 except json.JSONDecodeError:
                     args = {}
                 yield ToolCallEvent(tool_name=tool_name, args=args)
-                async with db.session() as db_session:
-                    seq = await _next_seq(db_session, session_ref.conversation_id)
-                    db_session.add(
-                        Messages(
-                            conversation_id=session_ref.conversation_id,
-                            seq=seq,
-                            turn_id=turn_id,
-                            role="tool_call",
-                            content=json.dumps({"name": tool_name, "arguments": args}),
-                            tool_name=tool_name,
+                try:
+                    async with db.session() as db_session:
+                        seq = await _next_seq(db_session, session_ref.conversation_id)
+                        db_session.add(
+                            Messages(
+                                conversation_id=session_ref.conversation_id,
+                                seq=seq,
+                                turn_id=turn_id,
+                                role="tool_call",
+                                content=json.dumps({"name": tool_name, "arguments": args}),
+                                tool_name=tool_name,
+                            )
                         )
-                    )
-                    result = await dispatch_tool(db_session, session_ref.project_id, tool_name, args)
-                    seq = await _next_seq(db_session, session_ref.conversation_id)
-                    db_session.add(
-                        Messages(
-                            conversation_id=session_ref.conversation_id,
-                            seq=seq,
-                            turn_id=turn_id,
-                            role="tool_result",
-                            content=result.model_view,
-                            tool_name=tool_name,
-                            result_id=result.ui_view_result_id,
+                        result = await _dispatch_tool_bounded(db_session, session_ref.project_id, tool_name, args, cancel_flag)
+                        seq = await _next_seq(db_session, session_ref.conversation_id)
+                        db_session.add(
+                            Messages(
+                                conversation_id=session_ref.conversation_id,
+                                seq=seq,
+                                turn_id=turn_id,
+                                role="tool_result",
+                                content=result.model_view,
+                                tool_name=tool_name,
+                                result_id=result.ui_view_result_id,
+                            )
                         )
+                except TimeoutError as exc:
+                    # The whole tool_call/tool_result transaction rolled
+                    # back with the timeout (db.session()'s own exception
+                    # handling) — the turn ends the same way an interrupt
+                    # does, rather than leaving the status pill stuck.
+                    yield ErrorEvent(
+                        code="tool_timeout", message=str(exc), recoverable=True, what_still_worked="the conversation so far"
                     )
+                    yield TurnCompleteEvent(turn_id=turn_id, interrupted=True, iterations=iterations)
+                    return
+                except _ToolDispatchInterrupted:
+                    yield ErrorEvent(
+                        code="turn_interrupted",
+                        message=f'"{tool_name}" was interrupted before it returned.',
+                        recoverable=True,
+                        what_still_worked="the conversation so far",
+                    )
+                    yield TurnCompleteEvent(turn_id=turn_id, interrupted=True, iterations=iterations)
+                    return
                 yield ToolResultEvent(tool_name=tool_name, model_view=result.model_view, result_id=result.ui_view_result_id)
                 for action in result.ui_actions:
                     yield UIActionEvent(action=action.get("action", ""), payload=action)
