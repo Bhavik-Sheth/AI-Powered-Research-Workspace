@@ -28,6 +28,7 @@ import vault
 from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
 from api.health import Capability, ReadinessState
+from api.anchors import router as anchors_router
 from api.conversations import router as conversations_router
 from api.experiments import router as experiments_router
 from api.feed import router as feed_router
@@ -169,6 +170,7 @@ def create_app() -> FastAPI:
     app.include_router(runs_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(voice_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(papers_router, dependencies=[Depends(require_bearer_token)])
+    app.include_router(anchors_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(search_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(matrix_router, dependencies=[Depends(require_bearer_token)])
     app.include_router(graph_router, dependencies=[Depends(require_bearer_token)])

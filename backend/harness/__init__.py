@@ -604,7 +604,7 @@ async def run_turn(
             if piece:
                 yield TextDeltaEvent(delta=piece)
 
-        yield TurnCompleteEvent(turn_id=turn_id, interrupted=interrupted, iterations=iterations)
+        yield TurnCompleteEvent(turn_id=turn_id, interrupted=interrupted, iterations=iterations, citations=citations)
     finally:
         _in_flight.pop(key, None)
 

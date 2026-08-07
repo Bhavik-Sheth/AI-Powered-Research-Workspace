@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import type { Citation } from "./wsTypes";
+
 /**
  * Splits an assistant message on the `<cite>` / `<unverified>` tags the
  * harness emits (D24) into renderable pieces — cited evidence gets its own
@@ -55,7 +57,19 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-export function renderAssistantContent(text: string): ReactNode[] {
+/**
+ * `citations[n]` is the `n`th `<cite>` span's resolved source, in the
+ * document order the harness's own citation list already matches
+ * (`_validate_citations` appends one entry per resolved match, in text
+ * order — the same order this regex walks). `onCiteClick` fires only for
+ * an `"anchor"`-kind citation (Phase 6.1) — a `"memory"` citation has no
+ * reader position to jump to, so it renders identically but inert.
+ */
+export function renderAssistantContent(
+  text: string,
+  citations: Citation[] = [],
+  onCiteClick?: (citation: Citation) => void,
+): ReactNode[] {
   const pieces: ReactNode[] = [];
   let cursor = 0;
   let citeIndex = 0;
@@ -68,12 +82,24 @@ export function renderAssistantContent(text: string): ReactNode[] {
     }
     const [, kind, quote] = match;
     if (kind === "cite") {
+      const citation = citations[citeIndex];
       citeIndex += 1;
-      pieces.push(
-        <span className="companion__cite" key={match.index}>
+      const body = (
+        <>
           {renderInline(quote, `cite-${match.index}`)}
           <sup className="companion__cite-index">[{citeIndex}]</sup>
-        </span>,
+        </>
+      );
+      pieces.push(
+        citation?.kind === "anchor" ? (
+          <button type="button" className="companion__cite companion__cite--clickable" key={match.index} onClick={() => onCiteClick?.(citation)}>
+            {body}
+          </button>
+        ) : (
+          <span className="companion__cite" key={match.index}>
+            {body}
+          </span>
+        ),
       );
     } else {
       pieces.push(

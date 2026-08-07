@@ -39,6 +39,18 @@ function isRunEvent(message: unknown): message is RunLogEvent | RunStatusEvent {
   return kind === "run_log" || kind === "run_status";
 }
 
+/** The Companion's `log_experiment`/`update_experiment` tools (D19) emit a
+ * `ui_action` of the same name over this same shared socket — this board
+ * already subscribes to it for run events, so reacting here (a `refresh()`
+ * call, not a route transition) is one fewer prop threaded through
+ * `AppShell`'s dispatcher, which exists for navigation, not this (Phase 6.3).
+ */
+function isExperimentLogAction(message: unknown): boolean {
+  if (typeof message !== "object" || message === null || !("event" in message) || !("action" in message)) return false;
+  const m = message as { event: unknown; action: unknown };
+  return m.event === "ui_action" && (m.action === "log_experiment" || m.action === "update_experiment");
+}
+
 interface RunPanelState {
   experimentId: string;
   runId: string | null;
@@ -188,6 +200,10 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
 
   useEffect(() => {
     return socket.subscribe((message) => {
+      if (isExperimentLogAction(message)) {
+        void refresh();
+        return;
+      }
       if (!isRunEvent(message)) return; // not ours — e.g. a Companion turn event
       if (message.experiment_id !== runPanelExperimentIdRef.current) return;
       if (message.event === "run_log") {

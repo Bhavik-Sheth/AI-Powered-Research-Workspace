@@ -4,17 +4,27 @@ import { useState } from "react";
  * client layout state, persisted in localStorage so it survives a reload.
  * Not project data, so it never touches the backend.
  */
-export function useCollapsible(key: string): [boolean, () => void] {
+export function useCollapsible(key: string): [boolean, () => void, (next: boolean) => void] {
   const storageKey = `researchos.${key}`;
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(storageKey) === "true");
+  const [collapsed, setCollapsedState] = useState(() => localStorage.getItem(storageKey) === "true");
 
   function toggle() {
-    setCollapsed((prev) => {
+    setCollapsedState((prev) => {
       const next = !prev;
       localStorage.setItem(storageKey, String(next));
       return next;
     });
   }
 
-  return [collapsed, toggle];
+  // The direct setter — distinct from `toggle` because a viewport-width
+  // trigger (Phase 6.2's auto-collapse) needs to force a specific state
+  // ("below this width, collapsed") rather than flip whatever it currently
+  // is, which a plain toggle can't express without risking re-expanding a
+  // nav the user had already collapsed on purpose.
+  function setCollapsed(next: boolean) {
+    setCollapsedState(next);
+    localStorage.setItem(storageKey, String(next));
+  }
+
+  return [collapsed, toggle, setCollapsed];
 }

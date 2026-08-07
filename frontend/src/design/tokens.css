@@ -79,6 +79,10 @@
   --radius-button: 8px;
   --shell-column-gap: 12px;
   --panel-shadow: 0 1px 4px oklch(26% 0.079 210 / 0.16);
+  /* The center pane's floor (Phase 6.2) — a PDF page maxes out at 420px
+     (UI_DESIGN.md §4.2) plus its own padding; this is the narrowest the
+     column gets before it scrolls horizontally instead of compressing. */
+  --center-pane-min-width: 360px;
 }
 
 /* Global focus ring (UI_DESIGN.md §6 "the mock already sets a global

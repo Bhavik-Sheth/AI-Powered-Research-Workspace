@@ -73,6 +73,18 @@ export function useTabStack(projectId: string) {
     persist(tabs, id);
   }
 
+  /** Fills in a tab's label after the fact — the one case that needs this
+   * is a reader tab opened from a bare paper id with no title yet known
+   * (a deep link or a back/forward step reopening a closed tab, Phase 6.4);
+   * every other `openTab` call already has a real label up front. */
+  function updateTabLabel(id: string, label: string) {
+    setTabs((prev) => {
+      const next = prev.map((tab) => (tab.id === id ? { ...tab, label } : tab));
+      persist(next, activeTab);
+      return next;
+    });
+  }
+
   /** Moves `id` to sit immediately before `beforeId` (or to the end when
    * `beforeId` is null) — the one place tab order changes. */
   function reorderTab(id: string, beforeId: string | null) {
@@ -89,5 +101,5 @@ export function useTabStack(projectId: string) {
     });
   }
 
-  return { tabs, activeTab, loaded, error, reload, openTab, closeTab, activateTab, reorderTab };
+  return { tabs, activeTab, loaded, error, reload, openTab, closeTab, activateTab, updateTabLabel, reorderTab };
 }

@@ -12,7 +12,7 @@ from db.models import PaperContent, QuoteAnchors
 from provenance.locator import CharSpan, locate, locate_all
 from provenance.models import QuoteAnchor
 
-__all__ = ["validate_and_anchor", "locate"]
+__all__ = ["validate_and_anchor", "locate", "get_anchor"]
 
 _CONTEXT_WINDOW = 40
 
@@ -77,4 +77,25 @@ async def validate_and_anchor(
         char_end=span.end,
         section_heading=section_heading,
         validated_at=validated_at,
+    )
+
+
+async def get_anchor(session: AsyncSession, anchor_id: uuid.UUID) -> QuoteAnchor | None:
+    """Reads back an anchor `validate_and_anchor` already produced — the
+    Companion citation click path (Phase 6.1) resolves an `anchor_id` to the
+    paper and offsets `scroll_to`/`highlight_span` need this way, the same
+    object a card field or a highlight already cites."""
+    row = await session.get(QuoteAnchors, anchor_id)
+    if row is None:
+        return None
+    return QuoteAnchor(
+        id=row.id,
+        paper_id=row.paper_id,
+        quote=row.quote,
+        prefix=row.prefix,
+        suffix=row.suffix,
+        char_start=row.char_start,
+        char_end=row.char_end,
+        section_heading=row.section_heading,
+        validated_at=row.validated_at,
     )

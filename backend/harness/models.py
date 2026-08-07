@@ -24,6 +24,31 @@ class UIState(BaseModel):
     open_paper_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
+class AnchorCitation(BaseModel):
+    """A `<cite>` span the substring validator resolved against a paper's
+    parsed text (D24) — `anchor_id` is a `quote_anchors` row, fetched via
+    `GET /api/anchors/:id` to drive `scroll_to` + `highlight_span` in the
+    reader (Phase 6.1)."""
+
+    kind: Literal["anchor"] = "anchor"
+    anchor_id: uuid.UUID
+    quote: str
+
+
+class MemoryCitation(BaseModel):
+    """A `<cite>` span resolved against a `query_memory` row instead of a
+    live paper anchor — no reader position to scroll to, so this kind is
+    rendered but not clickable."""
+
+    kind: Literal["memory"] = "memory"
+    row_id: uuid.UUID
+    source_type: str
+    quote: str
+
+
+Citation = AnchorCitation | MemoryCitation
+
+
 class SessionRef(BaseModel):
     """An opaque handle Session Transport passes in — the harness knows
     nothing about WebSocket framing (MODULES.md: "must not know transport
@@ -77,6 +102,11 @@ class TurnCompleteEvent(BaseModel):
     turn_id: uuid.UUID
     interrupted: bool
     iterations: int
+    # Mirrors `messages.citations` for the message this turn just produced —
+    # without this a citation is only clickable after a reload re-fetches
+    # conversation history, since no earlier event on this stream carries it
+    # (Phase 6.1).
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class ErrorEvent(BaseModel):

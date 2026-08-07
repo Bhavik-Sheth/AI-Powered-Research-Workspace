@@ -5,6 +5,29 @@ export type ClientOptions = {
 };
 
 /**
+ * AnchorCitation
+ *
+ * A `<cite>` span the substring validator resolved against a paper's
+ * parsed text (D24) — `anchor_id` is a `quote_anchors` row, fetched via
+ * `GET /api/anchors/:id` to drive `scroll_to` + `highlight_span` in the
+ * reader (Phase 6.1).
+ */
+export type AnchorCitation = {
+    /**
+     * Kind
+     */
+    kind?: 'anchor';
+    /**
+     * Anchor Id
+     */
+    anchor_id: string;
+    /**
+     * Quote
+     */
+    quote: string;
+};
+
+/**
  * AnchorHint
  *
  * A cached rendering hint only — never identity (TRD §4.1).
@@ -946,6 +969,32 @@ export type MatrixView = {
 };
 
 /**
+ * MemoryCitation
+ *
+ * A `<cite>` span resolved against a `query_memory` row instead of a
+ * live paper anchor — no reader position to scroll to, so this kind is
+ * rendered but not clickable.
+ */
+export type MemoryCitation = {
+    /**
+     * Kind
+     */
+    kind?: 'memory';
+    /**
+     * Row Id
+     */
+    row_id: string;
+    /**
+     * Source Type
+     */
+    source_type: string;
+    /**
+     * Quote
+     */
+    quote: string;
+};
+
+/**
  * MemoryQueryRequest
  */
 export type MemoryQueryRequest = {
@@ -988,7 +1037,7 @@ export type MessageOut = {
     /**
      * Citations
      */
-    citations: Array<unknown>;
+    citations: Array<AnchorCitation | MemoryCitation>;
     /**
      * Interrupted
      */
@@ -1598,6 +1647,55 @@ export type ProviderInfo = {
     model_budgets?: {
         [key: string]: number;
     };
+};
+
+/**
+ * QuoteAnchor
+ *
+ * The shared quote-anchor object (D33) — one shape for a card field, a
+ * highlight, a matrix cell and a Companion citation.
+ */
+export type QuoteAnchor = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Paper Id
+     */
+    paper_id: string;
+    /**
+     * Quote
+     */
+    quote: string;
+    /**
+     * Prefix
+     */
+    prefix: string;
+    /**
+     * Suffix
+     */
+    suffix: string;
+    /**
+     * Char Start
+     */
+    char_start: number;
+    /**
+     * Char End
+     */
+    char_end: number;
+    /**
+     * Section Heading
+     */
+    section_heading?: string | null;
+    /**
+     * Page Hint
+     */
+    page_hint?: number | null;
+    /**
+     * Validated At
+     */
+    validated_at: string;
 };
 
 /**
@@ -3407,6 +3505,42 @@ export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses = {
 };
 
 export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponse = PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses[keyof PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchResponses];
+
+export type GetAnchorApiAnchorsAnchorIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Anchor Id
+         */
+        anchor_id: string;
+    };
+    query?: never;
+    url: '/api/anchors/{anchor_id}';
+};
+
+export type GetAnchorApiAnchorsAnchorIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnchorApiAnchorsAnchorIdGetError = GetAnchorApiAnchorsAnchorIdGetErrors[keyof GetAnchorApiAnchorsAnchorIdGetErrors];
+
+export type GetAnchorApiAnchorsAnchorIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: QuoteAnchor;
+};
+
+export type GetAnchorApiAnchorsAnchorIdGetResponse = GetAnchorApiAnchorsAnchorIdGetResponses[keyof GetAnchorApiAnchorsAnchorIdGetResponses];
 
 export type PostSearchApiSearchPostData = {
     body: SearchRequest;

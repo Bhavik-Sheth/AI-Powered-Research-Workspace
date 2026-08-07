@@ -4,10 +4,11 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { listProjectsApiProjectsGet, type ProjectResponse } from "@research-os/api-client";
+import { getAnchorApiAnchorsAnchorIdGet, listProjectsApiProjectsGet, type ProjectResponse } from "@research-os/api-client";
+import { Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
-import type { SelectionState } from "../companion/wsTypes";
+import type { Citation, SelectionState } from "../companion/wsTypes";
 import { Dashboard } from "../dashboard/Dashboard";
 import { ExperimentsBoard } from "../experiments/ExperimentsBoard";
 import { FeedView } from "../feed/FeedView";
@@ -29,13 +30,17 @@ import { ReadinessStrip } from "./ReadinessStrip";
 
 // Icon-rail minimum keeps the nav usable as a landmark even at its narrowest;
 // the Companion minimum keeps a chat bubble and its citation readable. The
-// center pane never gets a minimum of its own — it is the flex remainder.
+// center pane's own minimum (CENTER_PANE_MIN_WIDTH, AppShell.css) keeps a
+// PDF page or a matrix row from being squeezed toward zero (Phase 6.2) —
+// below it the layout scrolls horizontally rather than compressing further.
 const NAV_MIN_WIDTH = 56;
 const NAV_DEFAULT_WIDTH = 200;
 const NAV_MAX_WIDTH = 420;
 const COMPANION_MIN_WIDTH = 240;
 const COMPANION_DEFAULT_WIDTH = 280;
 const COMPANION_MAX_WIDTH = 520;
+// UI_DESIGN.md §7's "responsive story for ~1280px and below" (§9.2 item I).
+const RESPONSIVE_BREAKPOINT_PX = 1280;
 
 /** A drag handle between two panes. `direction` says which way the pointer
  * must move to grow the pane it resizes (+1 = right grows it, -1 = left
@@ -187,12 +192,91 @@ const NAV_ITEM_TABS: Record<string, TabRef> = {
 // (UI_DESIGN.md §7 / §9.2 item H).
 const QUIET_GRID_KINDS = new Set<TabRef["kind"]>(["reader", "writing", "notes"]);
 
-/** Picks up where the user left off (Phase 1.8 sign-off): most-recently-
- * opened project, or the first project if none has been opened yet. */
-function ProjectGate({ children }: { children: (projectId: string) => React.ReactNode }) {
+/** A resolved Companion citation, on its way to whichever reader tab
+ * `paperId` names (Phase 6.1) — `nonce` marks each click distinct so the
+ * same anchor clicked twice in a row is still consumed (mirrors
+ * `PendingAsk`). */
+interface PendingAnchor {
+  paperId: string;
+  quote: string;
+  charStart: number;
+  charEnd: number;
+  nonce: number;
+}
+
+// The static tab a bare (paramless) route kind opens or activates — every
+// kind except "reader" and "search" has exactly one instance, so the same
+// TabRef this project already uses for its nav rows and initial-tab checks
+// doubles as the URL <-> tab mapping's other direction.
+const STATIC_TAB_BY_KIND: Record<string, TabRef> = {
+  dashboard: DASHBOARD_TAB,
+  library: LIBRARY_TAB,
+  notes: NOTES_TAB,
+  experiments: EXPERIMENTS_TAB,
+  matrix: MATRIX_TAB,
+  graph: GRAPH_TAB,
+  feed: FEED_TAB,
+  writing: WRITING_TAB,
+  settings: SETTINGS_TAB,
+  readiness: READINESS_TAB,
+};
+
+/**
+ * The one place a tab's identity becomes a URL and back (Phase 6.4, D32).
+ * Deliberately narrow: it only knows the same `TabRef` shapes `useTabStack`
+ * already persists, not a general routing scheme — reader and search are
+ * the only two kinds that carry an identifying param in the path, matching
+ * how their tab ids already embed that same param (`reader:<paperId>`,
+ * `search:<resultId>`).
+ */
+function tabPath(projectId: string, tab: TabRef): string {
+  const base = `/p/${projectId}`;
+  switch (tab.kind) {
+    case "reader":
+      return `${base}/paper/${tab.params?.paperId ?? ""}`;
+    case "search":
+      return tab.params?.resultId ? `${base}/search/${tab.params.resultId}` : `${base}/search`;
+    case "dashboard":
+      return base;
+    // UI_DESIGN.md §4.3 names this route "papers", not the module/tab-kind
+    // name "library" — the one place that distinction is made.
+    case "library":
+      return `${base}/papers`;
+    default:
+      return `${base}/${tab.kind}`;
+  }
+}
+
+/** The reverse of `tabPath` — parses the part of the URL after `/p/:projectId`
+ * back into the `TabRef` it names, so a browser back/forward step or a
+ * pasted deep link can be resolved the same way a click already is. Returns
+ * `null` for a path this app doesn't recognise (left for the caller to
+ * treat as "stay put" rather than a hard 404 — there is no not-found screen
+ * to route to, this app has ten fixed views). */
+function pathToTabRef(projectId: string, subpath: string): TabRef | null {
+  const parts = subpath.split("/").filter(Boolean);
+  if (parts.length === 0) return DASHBOARD_TAB;
+  if (parts[0] === "paper" && parts[1]) {
+    return { id: `reader:${parts[1]}`, kind: "reader", params: { paperId: parts[1], projectId }, label: "" };
+  }
+  if (parts[0] === "search") {
+    return parts[1]
+      ? { id: `search:${parts[1]}`, kind: "search", params: { resultId: parts[1] }, label: "Search" }
+      : SEARCH_TAB;
+  }
+  if (parts[0] === "papers") return LIBRARY_TAB;
+  return STATIC_TAB_BY_KIND[parts[0]] ?? null;
+}
+
+/** Landing at `/` (Phase 1.8 sign-off / Phase 6.4): resolves the most-
+ * recently-opened project, or the first project if none has been opened
+ * yet, and redirects to its dashboard (`/p/:projectId`) — deep-linking
+ * straight to `/p/:projectId/...` skips this entirely. */
+function RootRedirect() {
   const [projects, setProjects] = useState<ProjectResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -212,6 +296,12 @@ function ProjectGate({ children }: { children: (projectId: string) => React.Reac
     };
   }, [reloadNonce]);
 
+  useEffect(() => {
+    if (!projects || projects.length === 0) return;
+    const mostRecent = [...projects].sort((a, b) => (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? ""))[0];
+    navigate(`/p/${mostRecent.id}`, { replace: true });
+  }, [projects, navigate]);
+
   if (error) {
     return (
       <AppBootScreen title="Could not load projects" message={error} onRetry={() => setReloadNonce((n) => n + 1)} />
@@ -220,15 +310,12 @@ function ProjectGate({ children }: { children: (projectId: string) => React.Reac
   if (projects === null) {
     return <AppBootScreen title="Loading…" />;
   }
-  const mostRecent = [...projects].sort((a, b) => (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? ""))[0];
-  if (!mostRecent) {
+  if (projects.length === 0) {
     return <div className="center-pane__title">No project yet — create one to get started.</div>;
   }
-  return (
-    <>
-      {children(mostRecent.id)}
-    </>
-  );
+  // The redirect effect above fires on this same render pass; this is only
+  // ever visible for the instant before it does.
+  return <AppBootScreen title="Loading…" />;
 }
 
 /** The project switcher chip (UI_DESIGN.md §2 "Top bar"). Styled as a chip
@@ -281,6 +368,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     openTab,
     closeTab,
     activateTab,
+    updateTabLabel,
     reorderTab,
   } = useTabStack(projectId);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
@@ -301,8 +389,31 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   // building a second, parallel search mechanism.
   const [topSearchValue, setTopSearchValue] = useState("");
   const [pendingSearch, setPendingSearch] = useState<{ text: string; nonce: number } | null>(null);
-  const [navCollapsed, toggleNav] = useCollapsible("leftNavCollapsed");
+  // A Companion citation click, resolved to the paper + span it names
+  // (Phase 6.1) — opens/activates that reader tab and, once mounted, is
+  // consumed there the same one-shot way `pendingAsk` already is.
+  const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
+  const [navCollapsed, toggleNav, setNavCollapsed] = useCollapsible("leftNavCollapsed");
   const [companionCollapsed, toggleCompanion] = useCollapsible("companionCollapsed");
+
+  // Below UI_DESIGN.md §7's ~1280px threshold, the nav collapses to icons
+  // automatically — "the nav collapses to icons before the companion is
+  // ever squeezed" (§7/§9.2 item I), since dropping the companion breaks
+  // the product's premise (D32). One-directional: crossing under the
+  // threshold forces a collapse; crossing back over it does not force a
+  // re-expand, so a nav the user re-opened at a narrow width (the manual
+  // toggle still works either way) isn't yanked shut again on the next tick.
+  useEffect(() => {
+    const query = window.matchMedia(`(max-width: ${RESPONSIVE_BREAKPOINT_PX}px)`);
+    function applyBreakpoint(matches: boolean) {
+      if (matches) setNavCollapsed(true);
+    }
+    applyBreakpoint(query.matches);
+    const handler = (event: MediaQueryListEvent) => applyBreakpoint(event.matches);
+    query.addEventListener("change", handler);
+    return () => query.removeEventListener("change", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [navWidth, setNavWidth] = usePaneWidth("leftNavWidth", NAV_DEFAULT_WIDTH, NAV_MIN_WIDTH, NAV_MAX_WIDTH);
   const [companionWidth, setCompanionWidth] = usePaneWidth(
     "companionWidth",
@@ -317,6 +428,17 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   // ExperimentsBoard (via renderTabContent) can both consume it without
   // either opening a second connection that would evict the other's.
   const socket = useProjectSocket(projectId);
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Bidirectional URL <-> active-tab sync (Phase 6.4, D32). One shared flag
+  // instead of two, so whichever effect below causes the other's deps to
+  // change, that one run is recognised as "caused by us" and skipped —
+  // without it the two effects would navigate at each other forever. Only
+  // the *active* tab is reflected in the URL; the rest of the stack (which
+  // tabs are open at all, their scroll position) stays exactly what it
+  // already was — real state owned by `useTabStack`, not derived from the
+  // address bar.
+  const syncingRef = useRef<"fromUrl" | "fromState" | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -324,6 +446,44 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       setProjectName(data.find((p) => p.id === projectId)?.name ?? "");
     })();
   }, [projectId]);
+
+  // State -> URL: the active tab changed (by a click, a Companion
+  // `ui_action`, or `closeTab` picking a new one) — push the matching path
+  // so back/forward and a relaunch land on the right screen.
+  useEffect(() => {
+    if (!loaded) return;
+    const active = tabs.find((tab) => tab.id === activeTab);
+    if (!active) return;
+    const path = tabPath(projectId, active);
+    if (path === location.pathname) return;
+    if (syncingRef.current === "fromUrl") {
+      syncingRef.current = null;
+      return;
+    }
+    syncingRef.current = "fromState";
+    navigate(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, loaded]);
+
+  // URL -> state: a back/forward step, or a deep link opened directly,
+  // changed the address bar without going through `openTab`/`activateTab` —
+  // resolve it to a tab and activate it (opening it first if it isn't
+  // already in the stack, e.g. a reader tab closed earlier that back now
+  // wants to revisit).
+  useEffect(() => {
+    if (!loaded) return;
+    if (syncingRef.current === "fromState") {
+      syncingRef.current = null;
+      return;
+    }
+    const subpath = location.pathname.startsWith(`/p/${projectId}`) ? location.pathname.slice(`/p/${projectId}`.length) : "";
+    const target = pathToTabRef(projectId, subpath);
+    if (!target || target.id === activeTab) return;
+    syncingRef.current = "fromUrl";
+    if (tabs.some((tab) => tab.id === target.id)) activateTab(target.id);
+    else openTab(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, loaded]);
 
   useEffect(() => {
     if (loaded && tabs.length === 0) {
@@ -339,6 +499,28 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
 
   function openReaderTab(paperId: string, title: string) {
     openTab({ id: `reader:${paperId}`, kind: "reader", params: { paperId, projectId }, label: title });
+  }
+
+  // A Companion citation click (Phase 6.1) — only an "anchor" citation has
+  // a reader position to jump to; a "memory" citation renders inert
+  // (parseCitations.tsx never calls this for one). Opens the cited paper's
+  // tab (its title fills in via `onTitleResolved` if it wasn't already
+  // open) and hands it the resolved span the same one-shot way
+  // `pendingAsk` already reaches the Companion.
+  async function handleCiteClick(citation: Citation) {
+    if (citation.kind !== "anchor") return;
+    const { data: anchor } = await getAnchorApiAnchorsAnchorIdGet({
+      path: { anchor_id: citation.anchor_id },
+      throwOnError: true,
+    });
+    openReaderTab(anchor.paper_id, "");
+    setPendingAnchor({
+      paperId: anchor.paper_id,
+      quote: anchor.quote,
+      charStart: anchor.char_start,
+      charEnd: anchor.char_end,
+      nonce: Date.now(),
+    });
   }
 
   function submitTopSearch() {
@@ -395,7 +577,15 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       case "writing":
         return <ManuscriptTab projectId={projectId} />;
       case "reader":
-        return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
+        return (
+          <ReaderTab
+            paperId={tab.params?.paperId ?? ""}
+            projectId={projectId}
+            onAskCompanion={askCompanion}
+            onTitleResolved={tab.label ? undefined : (title) => updateTabLabel(tab.id, title)}
+            pendingAnchor={pendingAnchor?.paperId === tab.params?.paperId ? pendingAnchor : null}
+          />
+        );
       case "search":
         return (
           <SearchResults
@@ -658,6 +848,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             socket={socket}
             openPaperIds={openPaperIds}
             onUIAction={handleCompanionUIAction}
+            onCiteClick={(citation) => void handleCiteClick(citation)}
           />
         </div>
       </div>
@@ -666,10 +857,20 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
 }
 
 export function AppShell() {
-  return <ProjectGate>{(projectId) => <ProjectShellWithSwitch initialProjectId={projectId} />}</ProjectGate>;
+  return (
+    <Routes>
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/p/:projectId/*" element={<ProjectShellRoute />} />
+    </Routes>
+  );
 }
 
-function ProjectShellWithSwitch({ initialProjectId }: { initialProjectId: string }) {
-  const [projectId, setProjectId] = useState(initialProjectId);
-  return <ProjectShell projectId={projectId} onSwitchProject={setProjectId} />;
+/** Reads `projectId` off the URL and mounts the shell for it — switching
+ * projects (`ProjectSwitcher`) is just a `navigate` to another project's
+ * dashboard, the same as any other in-app navigation (Phase 6.4). */
+function ProjectShellRoute() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
+  if (!projectId) return null; // the route pattern guarantees this; narrows the type
+  return <ProjectShell projectId={projectId} onSwitchProject={(id) => navigate(`/p/${id}`)} />;
 }

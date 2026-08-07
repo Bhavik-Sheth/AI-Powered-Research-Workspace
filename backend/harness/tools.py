@@ -14,10 +14,12 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import experiments
 import papers
 import projects
 import search
 import vault
+from experiments.models import ExperimentInput
 from papers.models import PaperInput, SourceIds
 from vault.models import NoteInput
 
@@ -89,6 +91,40 @@ TOOL_SCHEMAS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "log_experiment",
+            "description": "Log a new entry on this project's experiments board (a lab notebook, not a run tracker) — records a hypothesis to test, not a result.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Short experiment title"},
+                    "hypothesis": {"type": "string", "description": "What this experiment is meant to test or show"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_experiment",
+            "description": "Patch an existing experiment's title, hypothesis, notes, or status. Only the fields given are changed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "experiment_id": {"type": "string", "description": "The experiment's UUID"},
+                    "title": {"type": "string"},
+                    "hypothesis": {"type": "string"},
+                    "notes": {"type": "string"},
+                    "status": {"type": "string", "enum": ["planned", "remaining", "in-progress", "done"]},
+                },
+                "required": ["experiment_id"],
+            },
+        },
+    },
 ]
 
 
@@ -137,6 +173,40 @@ async def dispatch(session: AsyncSession, project_id: uuid.UUID, tool_name: str,
         return ToolResult(
             model_view=f'Saved note "{note.title}".',
             ui_actions=[{"action": "open_note", "note_id": str(note.id), "title": note.title}],
+        )
+
+    if tool_name == "log_experiment":
+        try:
+            experiment = await experiments.create_experiment(
+                session,
+                project_id,
+                ExperimentInput(title=args.get("title"), hypothesis=args.get("hypothesis"), notes=args.get("notes")),
+            )
+        except ValueError as exc:
+            return ToolResult(model_view=str(exc))
+        return ToolResult(
+            model_view=f'Logged experiment "{experiment.title}".',
+            ui_actions=[{"action": "log_experiment", "experiment_id": str(experiment.id)}],
+        )
+
+    if tool_name == "update_experiment":
+        try:
+            experiment_id = uuid.UUID(args.get("experiment_id", ""))
+        except ValueError:
+            return ToolResult(model_view="That is not a valid experiment id.")
+        try:
+            experiment = await experiments.update_experiment(
+                session,
+                experiment_id,
+                ExperimentInput(
+                    title=args.get("title"), hypothesis=args.get("hypothesis"), notes=args.get("notes"), status=args.get("status")
+                ),
+            )
+        except ValueError as exc:
+            return ToolResult(model_view=str(exc))
+        return ToolResult(
+            model_view=f'Updated experiment "{experiment.title}".',
+            ui_actions=[{"action": "update_experiment", "experiment_id": str(experiment.id)}],
         )
 
     return ToolResult(model_view=f"Unknown tool: {tool_name}")

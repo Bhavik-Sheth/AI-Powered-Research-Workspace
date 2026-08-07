@@ -2,8 +2,16 @@
  * of the OpenAPI schema `packages/api-client` generates from, so these are
  * the one place they're declared, matching `backend/harness/models.py` /
  * `backend/ws/__init__.py` field for field (Rules.md: names match the wire
- * shape).
+ * shape). `Citation`'s two variants are the one exception — that same shape
+ * is also `MessageOut.citations` on the REST conversation-history response,
+ * so it's imported from the generated client rather than redeclared here
+ * (Rules.md: never hand-declare a type the generated client already
+ * exports).
  */
+
+import type { AnchorCitation, MemoryCitation } from "@research-os/api-client";
+
+export type Citation = AnchorCitation | MemoryCitation;
 
 export interface AnchorHint {
   page: number;
@@ -33,7 +41,7 @@ export type DownstreamEvent =
   | { event: "tool_call"; tool_name: string; args: Record<string, unknown> }
   | { event: "tool_result"; tool_name: string; model_view: string; result_id: string | null }
   | { event: "ui_action"; action: string; payload: Record<string, unknown> }
-  | { event: "turn_complete"; turn_id: string; interrupted: boolean; iterations: number }
+  | { event: "turn_complete"; turn_id: string; interrupted: boolean; iterations: number; citations: Citation[] }
   | { event: "error"; code: string; message: string; recoverable: boolean; what_still_worked: string | null };
 
 export type UpstreamEvent =

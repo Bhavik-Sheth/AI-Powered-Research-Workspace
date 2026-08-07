@@ -242,7 +242,12 @@ button.left-nav__item {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 0;
+  /* A real floor (Phase 6.2, UI_DESIGN.md §7/§9.2 item I) — below it the
+     column scrolls horizontally (shell-body already lays out as a flex row
+     with no wrap) instead of continuing to compress a PDF page or a matrix
+     row into unreadability. */
+  min-width: var(--center-pane-min-width);
+  overflow-x: auto;
 }
 
 .tab-bar-row {

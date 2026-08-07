@@ -85,6 +85,10 @@
 
 .companion__bubble {
   font: 12px/1.5 var(--font-ui);
+  /* A long unbroken token (a URL, a DOI, a file path) would otherwise
+     overflow the bubble's fixed-width column instead of wrapping
+     (Phase 6.2, UI_DESIGN.md §7). */
+  overflow-wrap: anywhere;
 }
 
 .companion__bubble--user {
@@ -111,6 +115,24 @@
   font: italic 13px var(--font-reading);
   padding: 6px 10px;
   margin: 6px 0;
+}
+
+/* An anchor-backed citation only (Phase 6.1) — a <button> under the hood,
+   reset back to `.companion__cite`'s own look, plus a hover/focus
+   affordance so "this opens the paper" reads as an invitation, not a
+   coincidence of markup. */
+.companion__cite--clickable {
+  width: 100%;
+  border: none;
+  border-left: 2px solid var(--accent);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.companion__cite--clickable:hover,
+.companion__cite--clickable:focus-visible {
+  background: var(--accent-tint-14);
 }
 
 .companion__cite-index {

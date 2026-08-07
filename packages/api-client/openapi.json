@@ -2289,6 +2289,62 @@
         }
       }
     },
+    "/api/anchors/{anchor_id}": {
+      "get": {
+        "summary": "Get Anchor",
+        "operationId": "get_anchor_api_anchors__anchor_id__get",
+        "parameters": [
+          {
+            "name": "anchor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Anchor Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteAnchor"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/search": {
       "post": {
         "summary": "Post Search",
@@ -3669,6 +3725,32 @@
   },
   "components": {
     "schemas": {
+      "AnchorCitation": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "anchor",
+            "title": "Kind",
+            "default": "anchor"
+          },
+          "anchor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anchor Id"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anchor_id",
+          "quote"
+        ],
+        "title": "AnchorCitation",
+        "description": "A `<cite>` span the substring validator resolved against a paper's\nparsed text (D24) \u2014 `anchor_id` is a `quote_anchors` row, fetched via\n`GET /api/anchors/:id` to drive `scroll_to` + `highlight_span` in the\nreader (Phase 6.1)."
+      },
       "AnchorHint": {
         "properties": {
           "page": {
@@ -5303,6 +5385,37 @@
         ],
         "title": "MatrixView"
       },
+      "MemoryCitation": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "memory",
+            "title": "Kind",
+            "default": "memory"
+          },
+          "row_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Row Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_id",
+          "source_type",
+          "quote"
+        ],
+        "title": "MemoryCitation",
+        "description": "A `<cite>` span resolved against a `query_memory` row instead of a\nlive paper anchor \u2014 no reader position to scroll to, so this kind is\nrendered but not clickable."
+      },
       "MemoryQueryRequest": {
         "properties": {
           "query": {
@@ -5362,7 +5475,16 @@
             "title": "Content"
           },
           "citations": {
-            "items": {},
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AnchorCitation"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryCitation"
+                }
+              ]
+            },
             "type": "array",
             "title": "Citations"
           },
@@ -6440,6 +6562,80 @@
         "type": "object",
         "title": "ProviderInfo",
         "description": "What is ever read back \u2014 never ciphertext, nonce, or plaintext key."
+      },
+      "QuoteAnchor": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "prefix": {
+            "type": "string",
+            "title": "Prefix"
+          },
+          "suffix": {
+            "type": "string",
+            "title": "Suffix"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          },
+          "section_heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Heading"
+          },
+          "page_hint": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Hint"
+          },
+          "validated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Validated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "paper_id",
+          "quote",
+          "prefix",
+          "suffix",
+          "char_start",
+          "char_end",
+          "validated_at"
+        ],
+        "title": "QuoteAnchor",
+        "description": "The shared quote-anchor object (D33) \u2014 one shape for a card field, a\nhighlight, a matrix cell and a Companion citation."
       },
       "QuoteAnchorInput": {
         "properties": {

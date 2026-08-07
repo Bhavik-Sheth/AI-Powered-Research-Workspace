@@ -118,10 +118,22 @@ export function ReaderTab({
   paperId,
   projectId,
   onAskCompanion,
+  onTitleResolved,
+  pendingAnchor,
 }: {
   paperId: string;
   projectId: string;
   onAskCompanion: (selection: SelectionState, question: string) => void;
+  /** Fires once the paper's real title loads — lets the tab strip fill in
+   * a proper label for a tab that was opened without one (Phase 6.4: a
+   * deep link or browser-back reopening a reader tab that isn't already in
+   * the stack has no title to hand `openTab` up front, only a paper id). */
+  onTitleResolved?: (title: string) => void;
+  /** A Companion citation resolved to a span in *this* paper (Phase 6.1) —
+   * `null` when the pending anchor, if any, belongs to a different open
+   * tab. One-shot, consumed by `nonce` the same way `CompanionPane`'s own
+   * `pendingAsk` is. */
+  pendingAnchor?: { quote: string; charStart: number; charEnd: number; nonce: number } | null;
 }) {
   const [detail, setDetail] = useState<PaperDetail | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
@@ -162,6 +174,7 @@ export function ReaderTab({
         });
         if (cancelled) return;
         setDetail(data);
+        onTitleResolved?.(data.paper.title);
 
         if (data.paper.pdf_origin) {
           const bytes = await fetchBinary(`/api/papers/${paperId}/pdf`);
@@ -228,6 +241,21 @@ export function ReaderTab({
     focusAnchor({ quote: field.value, charStart: field.char_start, charEnd: field.char_end });
     void scrollToQuote(field.value);
   }
+
+  // A Companion citation for this paper landed (Phase 6.1) — the exact
+  // `focusAnchor` + `scrollToQuote` pair a card-field click already
+  // triggers, just driven by a prop instead of a click. `handledNonceRef`
+  // consumes each nonce once, mirroring `CompanionPane`'s own `pendingAsk`;
+  // gated on `pages.length` since `scrollToQuote` has nothing to search
+  // before the PDF has finished loading.
+  const handledAnchorNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!pendingAnchor || pendingAnchor.nonce === handledAnchorNonceRef.current || pages.length === 0) return;
+    handledAnchorNonceRef.current = pendingAnchor.nonce;
+    focusAnchor({ quote: pendingAnchor.quote, charStart: pendingAnchor.charStart, charEnd: pendingAnchor.charEnd });
+    void scrollToQuote(pendingAnchor.quote);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAnchor, pages.length]);
 
   function handleTextSelection() {
     const sel = window.getSelection();

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 import conversations
 import db
+from harness.models import Citation
 
 router = APIRouter()
 
@@ -18,7 +19,7 @@ class MessageOut(BaseModel):
     id: uuid.UUID
     role: str
     content: str
-    citations: list
+    citations: list[Citation]
     interrupted: bool
     input_modality: str
     created_at: datetime

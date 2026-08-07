@@ -5,7 +5,7 @@ import type { ProjectSocket } from "../state/useProjectSocket";
 import { useVoice } from "../voice/useVoice";
 import "./CompanionPane.css";
 import { renderAssistantContent } from "./parseCitations";
-import type { DownstreamEvent, SelectionState } from "./wsTypes";
+import type { Citation, DownstreamEvent, SelectionState } from "./wsTypes";
 
 /**
  * Validates every field a given `event` discriminator requires, not just
@@ -34,7 +34,12 @@ function isDownstreamEvent(message: unknown): message is DownstreamEvent {
     case "ui_action":
       return typeof m.action === "string" && typeof m.payload === "object" && m.payload !== null;
     case "turn_complete":
-      return typeof m.turn_id === "string" && typeof m.interrupted === "boolean" && typeof m.iterations === "number";
+      return (
+        typeof m.turn_id === "string" &&
+        typeof m.interrupted === "boolean" &&
+        typeof m.iterations === "number" &&
+        Array.isArray(m.citations)
+      );
     case "error":
       return (
         typeof m.code === "string" &&
@@ -51,6 +56,9 @@ interface TranscriptEntry {
   id: number;
   role: "user" | "assistant" | "error" | "tool";
   content: string;
+  /** Only ever set on an `assistant` entry — the `<cite>` spans `content`
+   * contains, in the same order (Phase 6.1). */
+  citations?: Citation[];
 }
 
 interface QueuedMessage {
@@ -90,6 +98,7 @@ export function CompanionPane({
   socket,
   openPaperIds,
   onUIAction,
+  onCiteClick,
 }: {
   projectId: string;
   selection: SelectionState | null;
@@ -101,6 +110,9 @@ export function CompanionPane({
   /** A tool result's `ui_action` — the same route transition the user's
    * own click would produce (Bug Fix Plan Phase 2.3). */
   onUIAction: (action: string, payload: Record<string, unknown>) => void;
+  /** An anchor-backed citation was clicked — drives `scroll_to` +
+   * `highlight_span` in whichever reader tab it belongs to (Phase 6.1). */
+  onCiteClick: (citation: Citation) => void;
 }) {
   const [statusText, setStatusText] = useState<string | null>(null);
   const [turnInFlight, setTurnInFlight] = useState(false);
@@ -139,7 +151,7 @@ export function CompanionPane({
       setTurnInFlight(false);
       setStatusText(null);
       if (content) {
-        setTranscript((prev) => [...prev, { id: nextId(), role: "assistant", content }]);
+        setTranscript((prev) => [...prev, { id: nextId(), role: "assistant", content, citations: evt.citations }]);
       }
     } else if (evt.event === "tool_call") {
       setStatusText(`${evt.tool_name}…`);
@@ -180,7 +192,12 @@ export function CompanionPane({
         if (cancelled) return;
         const seeded = data.messages
           .filter((message) => message.role === "user" || message.role === "assistant")
-          .map((message) => ({ id: nextId(), role: message.role as "user" | "assistant", content: message.content }));
+          .map((message) => ({
+            id: nextId(),
+            role: message.role as "user" | "assistant",
+            content: message.content,
+            citations: message.role === "assistant" ? message.citations : undefined,
+          }));
         setTranscript(seeded);
       } catch {
         // A history-load failure shouldn't block the live connection —
@@ -230,6 +247,33 @@ export function CompanionPane({
     setTurnInFlight(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket.connected]);
+
+  // A mid-turn socket drop otherwise leaves `turnInFlight` stuck forever —
+  // the closed socket can never deliver that turn's `turn_complete`/`error`,
+  // so `✕ Stop` would stay live and the transcript would look permanently
+  // "in progress" even once `useProjectSocket` reconnects (Phase 6.1).
+  // Reconnect-with-backoff itself is already handled there; this only
+  // clears the now-orphaned turn state and says so, flushing whatever
+  // partial answer had already streamed in rather than discarding it
+  // (Rules.md: "partial results are never rolled back").
+  const wasConnectedRef = useRef(socket.connected);
+  useEffect(() => {
+    const wasConnected = wasConnectedRef.current;
+    wasConnectedRef.current = socket.connected;
+    if (!wasConnected || socket.connected || !turnInFlight) return;
+    const partial = assistantBufferRef.current;
+    assistantBufferRef.current = "";
+    setTurnInFlight(false);
+    setStatusText(null);
+    setTranscript((prev) => {
+      const withPartial = partial ? [...prev, { id: nextId(), role: "assistant" as const, content: partial }] : prev;
+      return [
+        ...withPartial,
+        { id: nextId(), role: "error" as const, content: "Connection lost mid-turn — the response may be incomplete. Try asking again." },
+      ];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket.connected, turnInFlight]);
 
   function sendMessage(text: string, withSelection: SelectionState | null, inputModality: "text" | "voice" = "text"): void {
     // Empty input has nothing to say anything about, so it stays a silent
@@ -322,7 +366,7 @@ export function CompanionPane({
           }
           return (
             <div key={entry.id} className="companion__bubble companion__bubble--assistant">
-              {renderAssistantContent(entry.content)}
+              {renderAssistantContent(entry.content, entry.citations, onCiteClick)}
             </div>
           );
         })}

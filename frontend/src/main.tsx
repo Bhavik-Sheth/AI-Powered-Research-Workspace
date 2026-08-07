@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { HashRouter } from "react-router-dom";
 
 import { App } from "./app/App";
 import { AppBootScreen, ErrorBoundary } from "./app/ErrorBoundary";
@@ -20,7 +21,16 @@ try {
     <StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <App />
+          {/* Hash-based routing (Phase 6.4, D32): the production build is
+              loaded via `loadFile` (file://), which has no server to resolve
+              arbitrary paths — a plain path-based router would 404 on
+              refresh or on a restored deep link. The hash segment never
+              round-trips through the filesystem, so it works identically in
+              dev (Vite's http server) and the packaged file:// load with no
+              server-side config either way. */}
+          <HashRouter>
+            <App />
+          </HashRouter>
         </QueryClientProvider>
       </ErrorBoundary>
     </StrictMode>,
