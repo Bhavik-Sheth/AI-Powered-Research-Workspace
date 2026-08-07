@@ -24,15 +24,24 @@ const SOURCE_LABEL: Record<string, string> = { arxiv: "arXiv", openalex: "OpenAl
  * of requiring a fresh query — the Companion's `search_papers` tool opens
  * this same view onto the result it already produced (Bug Fix Plan
  * Phase 2.3), rather than making the user re-type the search.
+ *
+ * `initialQuery`, when set, runs a fresh query as soon as it arrives — the
+ * top bar's global search field (UI_DESIGN.md §2, Phase 5.4) opens this
+ * same tab rather than a second, parallel search mechanism. It carries a
+ * `nonce` (mirroring `CompanionPane`'s own `PendingAsk`) so a second search
+ * for the same text still re-fires even though this tab stays mounted
+ * between activations.
  */
 export function SearchResults({
   projectId,
   onAdded,
   initialResultId,
+  initialQuery,
 }: {
   projectId: string;
   onAdded?: (paperId: string) => void;
   initialResultId?: string;
+  initialQuery?: { text: string; nonce: number } | null;
 }) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ResultSet | null>(null);
@@ -66,6 +75,15 @@ export function SearchResults({
     };
   }, [initialResultId]);
 
+  useEffect(() => {
+    if (!initialQuery) return;
+    setQuery(initialQuery.text);
+    void handleSearch(initialQuery.text);
+    // `nonce` is the trigger, not the text — a repeat search for the same
+    // text still needs to re-fire (see the doc comment above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery?.nonce]);
+
   async function handleAdd(paper: PaperSummary) {
     setAddingId(paper.canonical_id);
     try {
@@ -89,8 +107,12 @@ export function SearchResults({
     }
   }
 
-  async function handleSearch() {
-    if (!query.trim()) return;
+  async function handleSearch(queryOverride?: string) {
+    // `queryOverride` lets a caller that just set `query` via `setQuery`
+    // (state updates aren't synchronous) search the text it actually meant
+    // instead of racing the still-stale `query` closure value.
+    const effectiveQuery = queryOverride ?? query;
+    if (!effectiveQuery.trim()) return;
     // A previous search still in flight is superseded, not raced against:
     // abort it so its response — if it ever arrives — can't land after
     // this one and clobber it.
@@ -100,7 +122,11 @@ export function SearchResults({
     setLoading(true);
     setError(null);
     try {
-      const { data } = await postSearchApiSearchPost({ body: { query }, signal: controller.signal, throwOnError: true });
+      const { data } = await postSearchApiSearchPost({
+        body: { query: effectiveQuery },
+        signal: controller.signal,
+        throwOnError: true,
+      });
       if (controller.signal.aborted) return;
       setResult(data);
     } catch (err) {
@@ -121,7 +147,7 @@ export function SearchResults({
           onKeyDown={(event) => event.key === "Enter" && handleSearch()}
           placeholder="Search everything…"
         />
-        <button type="button" className="search__submit" onClick={handleSearch} disabled={loading}>
+        <button type="button" className="search__submit" onClick={() => handleSearch()} disabled={loading}>
           Search
         </button>
       </div>
@@ -133,7 +159,7 @@ export function SearchResults({
         </div>
       )}
 
-      {error && <ErrorCard title="Search failed" message={error} onRetry={handleSearch} />}
+      {error && <ErrorCard title="Search failed" message={error} onRetry={() => handleSearch()} />}
 
       {result && (result.sources_failed ?? []).length > 0 && (
         <ErrorCard
@@ -143,7 +169,7 @@ export function SearchResults({
               ? "Other sources returned normally — these results are incomplete."
               : "No sources responded."
           }
-          onRetry={handleSearch}
+          onRetry={() => handleSearch()}
         />
       )}
 

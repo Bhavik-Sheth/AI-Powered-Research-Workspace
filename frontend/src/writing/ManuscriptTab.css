@@ -136,13 +136,15 @@
   padding: 0 3px;
 }
 
-.citation-missing {
-  background: var(--accent-tint-25);
-  border-left: 2px solid var(--danger-rule);
-  border-radius: 3px;
-  padding: 0 3px;
-}
-
+/* §3.4/§4.8: a broken or unsupported citation is drawn as the same
+   "not stated" absence pattern as every other missing-source state in this
+   app — never the active-quote tint (that token means something unrelated:
+   "this is the one verbatim span the reader is currently looking at") and
+   never the danger family (the danger family is errors only, never a
+   status/finding value — §3.4). `.citation-missing` and `.citation-unsupported`
+   are intentionally identical: both are "no linked source yet", just found
+   two different ways (a dangling `\cite` target vs. an uncited claim). */
+.citation-missing,
 .citation-unsupported {
   border-bottom: 1.5px dashed var(--border-dashed);
   font-style: italic;
@@ -202,11 +204,7 @@
   font: 12px var(--font-ui);
 }
 
-.writing__citation-finding--missing {
-  background: var(--accent-tint-15);
-  border-left: 2px solid var(--danger-rule);
-}
-
+.writing__citation-finding--missing,
 .writing__citation-finding--unsupported {
   border: 1px dashed var(--border-dashed);
   color: var(--text-muted);

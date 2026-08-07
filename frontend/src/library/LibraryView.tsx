@@ -1,23 +1,15 @@
-import { useEffect, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import {
   listProjectPapersApiProjectsProjectIdPapersGet,
-  patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch,
   reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost,
   type LibraryEntry,
   type Paper,
 } from "@research-os/api-client";
 
+import "../design/buttons.css";
 import { ErrorCard } from "../design/ErrorCard";
+import { relevanceLabel, RELEVANCE_VALUES, type Relevance } from "../design/labels";
 import "./LibraryView.css";
-
-type Relevance = "relevant" | "somewhat" | "not" | "unset";
-const RELEVANCE_LABEL: Record<Relevance, string> = {
-  relevant: "Relevant",
-  somewhat: "Somewhat",
-  not: "Not relevant",
-  unset: "Unmarked",
-};
-const RELEVANCE_VALUES: Relevance[] = ["relevant", "somewhat", "not", "unset"];
 
 const STATE_LABEL: Record<string, string> = { queued: "Queued", running: "Processing…", done: "Ready", degraded: "No PDF", failed: "Failed" };
 const STAGES: Array<{ key: keyof Paper; label: string }> = [
@@ -38,17 +30,26 @@ function needsRetry(paper: Paper): boolean {
   );
 }
 
-/** Library View (MODULES.md) — the project's papers, relevance control, processing badges. */
+/** Library View (MODULES.md) — the project's papers as a card grid (§4.3):
+ * relevance badges + a filter-chip row + an add-paper affordance, plus
+ * processing badges. `onAddPaper` opens the Search tab, where the existing
+ * search-and-add flow (SearchResults.tsx) already lives — this view never
+ * duplicates that mutation. */
 export function LibraryView({
   projectId,
   onOpenPaper,
+  onAddPaper,
 }: {
   projectId: string;
   onOpenPaper: (paperId: string, title: string) => void;
+  onAddPaper: () => void;
 }) {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Filter-chip selection (§3.2 "Filter chip"): null means every relevance
+  // is shown, mirroring Graph's own null-means-all filter convention.
+  const [activeRelevances, setActiveRelevances] = useState<Set<Relevance> | null>(null);
 
   async function refresh() {
     try {
@@ -70,19 +71,6 @@ export function LibraryView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  async function setRelevance(paperId: string, relevance: Relevance) {
-    try {
-      await patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch({
-        path: { project_id: projectId, paper_id: paperId },
-        body: { relevance },
-        throwOnError: true,
-      });
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update relevance for this paper");
-    }
-  }
-
   async function retry(paperId: string) {
     try {
       await reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost({
@@ -95,6 +83,28 @@ export function LibraryView({
     }
   }
 
+  const counts = useMemo(() => {
+    const c: Record<Relevance, number> = { relevant: 0, somewhat: 0, not: 0, unset: 0 };
+    for (const entry of entries) {
+      const value = entry.relevance as Relevance;
+      if (value in c) c[value] += 1;
+    }
+    return c;
+  }, [entries]);
+
+  function toggleFilter(value: Relevance) {
+    setActiveRelevances((prev) => {
+      const base = prev ?? new Set(RELEVANCE_VALUES);
+      const next = new Set(base);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
+  const visibleEntries =
+    activeRelevances === null ? entries : entries.filter((entry) => activeRelevances.has(entry.relevance as Relevance));
+
   if (loading) return <p>Loading…</p>;
   if (error && entries.length === 0) {
     return <ErrorCard title="Could not load the library" message={error} onRetry={refresh} />;
@@ -102,41 +112,69 @@ export function LibraryView({
 
   return (
     <div className="library">
-      {error && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
-      {entries.map(({ paper, relevance }) => (
-        <div className="library__row" key={paper.id}>
-          <button type="button" className="library__title" onClick={() => onOpenPaper(paper.id, paper.title)}>
-            {paper.title}
-          </button>
-          <div className="library__stages">
-            {STAGES.map(({ key, label }) => {
-              const state = paper[key] as string;
+      <div className="library__header">
+        <h1 className="library__title">Papers</h1>
+        <div className="library__header-right">
+          <div className="library__filters">
+            {RELEVANCE_VALUES.map((value) => {
+              const on = activeRelevances === null || activeRelevances.has(value);
               return (
-                <span key={key} className={`library__badge ${state === "done" ? "library__badge--done" : ""} ${state === "failed" ? "library__badge--failed" : ""}`}>
-                  {label}: {STATE_LABEL[state] ?? state}
-                </span>
+                <button
+                  key={value}
+                  type="button"
+                  className={`library__badge library__badge--${value} library__filter-chip ${on ? "" : "library__filter-chip--off"}`}
+                  onClick={() => toggleFilter(value)}
+                >
+                  {relevanceLabel[value]} {counts[value]}
+                </button>
               );
             })}
           </div>
-          {needsRetry(paper) && (
-            <button type="button" className="library__retry" onClick={() => void retry(paper.id)}>
-              Retry
-            </button>
-          )}
-          <div className="library__relevance">
-            {RELEVANCE_VALUES.map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={relevance === value ? "library__relevance--active" : ""}
-                onClick={() => void setRelevance(paper.id, value)}
-              >
-                {RELEVANCE_LABEL[value]}
-              </button>
-            ))}
-          </div>
+          <button type="button" className="btn btn--primary" onClick={onAddPaper}>
+            + Add paper
+          </button>
         </div>
-      ))}
+      </div>
+
+      {error && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
+
+      <div className="library__grid">
+        {visibleEntries.map(({ paper, relevance }) => (
+          <div className="library__card" key={paper.id}>
+            <button type="button" className="library__card-title" onClick={() => onOpenPaper(paper.id, paper.title)}>
+              {paper.title}
+            </button>
+            <div className="library__stages">
+              {STAGES.map(({ key, label }) => {
+                const state = paper[key] as string;
+                return (
+                  <span
+                    key={key}
+                    className={`library__stage-badge ${state === "done" ? "library__stage-badge--done" : ""} ${state === "failed" ? "library__stage-badge--failed" : ""}`}
+                  >
+                    {label}: {STATE_LABEL[state] ?? state}
+                  </span>
+                );
+              })}
+            </div>
+            {needsRetry(paper) && (
+              <button type="button" className="library__retry" onClick={() => void retry(paper.id)}>
+                Retry
+              </button>
+            )}
+            {/* Read-only badge (§3.2 "Badge" presentation) — the segmented
+                control that edits this value lives only in the Reader
+                header now (§4.2 / Phase 5.3), per §3.2's own presentation
+                table: Library's card never edits relevance directly. */}
+            <span className={`library__badge library__badge--${relevance}`}>
+              {relevanceLabel[relevance as Relevance] ?? relevance}
+            </span>
+          </div>
+        ))}
+        <button type="button" className="library__import-placeholder" onClick={onAddPaper}>
+          + Import from arXiv
+        </button>
+      </div>
     </div>
   );
 }

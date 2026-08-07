@@ -5,7 +5,7 @@ import { getProjectGraphApiProjectsProjectIdGraphGet, type GraphEdge } from "@re
 
 import { ErrorCard } from "../design/ErrorCard";
 import "./GraphView.css";
-import { categoryOf, colorFor, fillOpacityFor, LEGEND, nodesFromEdges, shapeFor } from "./nodeStyle";
+import { categoryOf, colorFor, fillOpacityFor, LEGEND, type LegendCategory, nodesFromEdges, shapeFor } from "./nodeStyle";
 
 // `padding` reserves space around the *node* bounding box, not the label
 // text drawn under each node — a node the cose layout places near the
@@ -81,7 +81,12 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
   const [edges, setEdges] = useState<GraphEdge[] | null>(null);
   const [paperIds, setPaperIds] = useState<Record<string, string>>({});
   const [paperTitles, setPaperTitles] = useState<Record<string, string>>({});
-  const [activeTypes, setActiveTypes] = useState<Set<string> | null>(null);
+  // Filter chips key off the 6 canonical categories `nodeStyle.ts` already
+  // defines (§4.7/§1), not the raw `nodeType` strings the graph endpoint
+  // returns — Schema.md's wider vocabulary (`topic`, `experiment`,
+  // `highlight`, …) folds into those 6 via `categoryOf`, so the filter row
+  // never grows past what the legend documents.
+  const [activeCategories, setActiveCategories] = useState<Set<LegendCategory> | null>(null);
   const [selected, setSelected] = useState<{ id: string; rawId: string; nodeType: string; label: string; edges: GraphEdge[] } | null>(
     null,
   );
@@ -105,19 +110,28 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  const nodeTypesPresent = useMemo(() => (edges ? [...new Set(nodesFromEdges(edges).map((n) => n.nodeType))] : []), [edges]);
+  // Legend order, filtered to the categories actually present — the
+  // `nodeStyle.ts` legend entries are the sanctioned 6, so this is never a
+  // raw enumeration of whatever `nodeType` strings happen to be in the data.
+  const categoriesPresent = useMemo(() => {
+    if (!edges) return [];
+    const present = new Set(nodesFromEdges(edges).map((n) => categoryOf(n.nodeType)));
+    return LEGEND.filter((entry) => present.has(entry.category));
+  }, [edges]);
   const visibleEdges = useMemo(() => {
     if (!edges) return [];
-    if (!activeTypes) return edges;
-    return edges.filter((edge) => activeTypes.has(edge.src_type) && activeTypes.has(edge.dst_type));
-  }, [edges, activeTypes]);
+    if (!activeCategories) return edges;
+    return edges.filter(
+      (edge) => activeCategories.has(categoryOf(edge.src_type)) && activeCategories.has(categoryOf(edge.dst_type)),
+    );
+  }, [edges, activeCategories]);
 
-  function toggleType(nodeType: string) {
-    setActiveTypes((prev) => {
-      const base = prev ?? new Set(nodeTypesPresent);
+  function toggleCategory(category: LegendCategory) {
+    setActiveCategories((prev) => {
+      const base = prev ?? new Set(categoriesPresent.map((entry) => entry.category));
       const next = new Set(base);
-      if (next.has(nodeType)) next.delete(nodeType);
-      else next.add(nodeType);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
       return next;
     });
   }
@@ -148,18 +162,18 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
       <div className="graph__header">
         <h2>Knowledge Graph</h2>
         <div className="graph__filters">
-          {nodeTypesPresent.map((nodeType) => {
-            const on = activeTypes === null || activeTypes.has(nodeType);
+          {categoriesPresent.map((entry) => {
+            const on = activeCategories === null || activeCategories.has(entry.category);
             return (
               <button
-                key={nodeType}
+                key={entry.category}
                 type="button"
                 className={`graph__chip ${on ? "graph__chip--on" : ""}`}
-                style={{ borderColor: on ? colorFor(nodeType) : undefined }}
-                onClick={() => toggleType(nodeType)}
+                style={{ borderColor: on ? entry.color : undefined }}
+                onClick={() => toggleCategory(entry.category)}
               >
-                <span className="graph__chip-dot" style={{ background: colorFor(nodeType) }} />
-                {nodeType}
+                <span className="graph__chip-dot" style={{ background: entry.color }} />
+                {entry.label}
               </button>
             );
           })}

@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { createHighlightApiProjectsProjectIdHighlightsPost, getPaperApiPapersPaperIdGet, type PaperCardField, type PaperDetail } from "@research-os/api-client";
+import {
+  createHighlightApiProjectsProjectIdHighlightsPost,
+  getPaperApiPapersPaperIdGet,
+  listProjectPapersApiProjectsProjectIdPapersGet,
+  patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch,
+  type PaperCardField,
+  type PaperDetail,
+} from "@research-os/api-client";
 
 import type { SelectionState } from "../companion/wsTypes";
+import { relevanceLabel, RELEVANCE_VALUES, type Relevance } from "../design/labels";
 import { fetchBinary } from "../state/bridge";
 import { loadDocument, TextLayer, type PDFDocumentProxy } from "./pdf";
 import "./ReaderTab.css";
@@ -119,6 +127,12 @@ export function ReaderTab({
   const [error, setError] = useState<string | null>(null);
   const [popover, setPopover] = useState<SelectionPopover | null>(null);
   const [highlightState, setHighlightState] = useState<"idle" | "saving" | "saved">("idle");
+  // Not in `PaperDetail` (that's a paper's own content, not its per-project
+  // relevance) — read once from the same list Library reads, then kept in
+  // sync locally from each patch response so setting it here never needs a
+  // second round-trip (Phase 5.3).
+  const [relevance, setRelevance] = useState<Relevance | null>(null);
+  const [relevanceSaving, setRelevanceSaving] = useState(false);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const { activeAnchor, focusAnchor } = useAnchorSync();
 
@@ -153,6 +167,48 @@ export function ReaderTab({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await listProjectPapersApiProjectsProjectIdPapersGet({
+          path: { project_id: projectId },
+          throwOnError: true,
+        });
+        if (cancelled) return;
+        const entry = data.find((e) => e.paper.id === paperId);
+        setRelevance((entry?.relevance as Relevance | undefined) ?? "unset");
+      } catch {
+        // Relevance is secondary chrome for this screen (the segmented
+        // control just stays unset) — it never blocks the reader itself,
+        // mirroring how a highlight-save failure below doesn't either.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId, projectId]);
+
+  // Same generated-client mutation `LibraryView.setRelevance` uses — the
+  // patch response already carries the saved value, so this never needs a
+  // second list fetch the way the initial read above does.
+  async function handleSetRelevance(value: Relevance) {
+    setRelevanceSaving(true);
+    try {
+      const { data } = await patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch({
+        path: { project_id: projectId, paper_id: paperId },
+        body: { relevance: value },
+        throwOnError: true,
+      });
+      setRelevance(data.relevance as Relevance);
+    } catch {
+      // Swallowed the same way handleHighlight below resets on failure —
+      // the control just stays on its last known value.
+    } finally {
+      setRelevanceSaving(false);
+    }
+  }
 
   async function scrollToQuote(quote: string) {
     const target = normalise(quote);
@@ -251,116 +307,140 @@ export function ReaderTab({
 
   return (
     <div className="reader">
-      <nav className="reader__sidebar">
-        <h4>Sections</h4>
-        {sections.map((section) => (
-          <button
-            key={section.section_id}
-            type="button"
-            className="reader__section-link"
-            onClick={() => void scrollToQuote(section.heading)}
-          >
-            {section.heading}
-          </button>
-        ))}
-        <h4>References ({references.length})</h4>
-        {references.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
-        {references.map((reference) => (
-          <button
-            key={reference.ref_id}
-            type="button"
-            className="reader__section-link"
-            title={reference.raw}
-            onClick={() => void scrollToQuote(reference.raw)}
-          >
-            {reference.raw}
-          </button>
-        ))}
-
-        <h4>Datasets ({datasets.length})</h4>
-        {datasets.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
-        {datasets.map((dataset, index) => (
-          <button
-            key={index}
-            type="button"
-            className="reader__section-link"
-            onClick={() => void scrollToQuote(datasetLabel(dataset))}
-          >
-            {datasetLabel(dataset)}
-          </button>
-        ))}
-
-        <h4>Code ({codeLinks.length})</h4>
-        {codeLinks.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
-        {codeLinks.map((codeLink, index) => {
-          const url = codeLinkUrl(codeLink);
-          return url ? (
-            <a key={index} className="reader__section-link" href={url} target="_blank" rel="noreferrer">
-              {url}
-            </a>
-          ) : (
-            <p key={index} className="reader__section-link">
-              {JSON.stringify(codeLink)}
-            </p>
-          );
-        })}
-      </nav>
-
-      <div className="reader__pages" onMouseUp={handleTextSelection}>
-        {pages.map((page) => (
-          <Page
-            key={page.pageNumber}
-            page={page}
-            pageNumber={page.pageNumber}
-            containerRef={(el) => {
-              if (el) pageRefs.current.set(page.pageNumber, el);
-            }}
-          />
-        ))}
-        {pdfDoc && pages.length === 0 && <p>Rendering…</p>}
-      </div>
-
-      <aside className="reader__card">
-        <h4>Extractive card</h4>
-        {FIELD_ORDER.map((fieldKey) => {
-          const field = cardByField.get(fieldKey);
-          return (
-            <div key={fieldKey} className="reader__card-field">
-              <h5>{FIELD_LABEL[fieldKey]}</h5>
-              {field ? (
-                <p
-                  className={`reader__card-quote ${activeAnchor?.quote === field.value ? "reader__card-quote--active" : ""}`}
-                  onClick={() => handleFieldClick(field)}
-                >
-                  {field.value}
-                </p>
-              ) : (
-                <p className="reader__not-stated">not stated in this paper</p>
-              )}
-              {field && (
-                <p className="reader__card-offset">
-                  {field.section_heading ? `§${field.section_heading} · ` : ""}
-                  {field.char_start}–{field.char_end}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </aside>
-
-      {popover && (
-        <div className="reader__popover" style={{ left: popover.x, top: popover.y }}>
-          <button type="button" onClick={handleHighlight} disabled={highlightState === "saving"}>
-            {highlightState === "saved" ? "Highlighted ✓" : highlightState === "saving" ? "Saving…" : "Highlight"}
-          </button>
-          <button type="button" onClick={() => handleAsk(`What does this mean: "${popover.quote}"?`)}>
-            Ask about this
-          </button>
-          <button type="button" onClick={() => handleAsk(`Explain this in simple terms: "${popover.quote}"`)}>
-            Explain
-          </button>
+      <header className="reader__header">
+        <h1 className="reader__header-title" title={detail.paper.title}>
+          {detail.paper.title}
+        </h1>
+        <div className="reader__relevance" role="group" aria-label="Relevance">
+          <span className="reader__relevance-label">RELEVANCE</span>
+          <div className="reader__relevance-control">
+            {RELEVANCE_VALUES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`reader__relevance-segment ${relevance === value ? "reader__relevance-segment--active" : ""}`}
+                disabled={relevanceSaving}
+                onClick={() => void handleSetRelevance(value)}
+              >
+                {relevanceLabel[value]}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      </header>
+
+      <div className="reader__body">
+        <nav className="reader__sidebar">
+          <h4>Sections</h4>
+          {sections.map((section) => (
+            <button
+              key={section.section_id}
+              type="button"
+              className="reader__section-link"
+              onClick={() => void scrollToQuote(section.heading)}
+            >
+              {section.heading}
+            </button>
+          ))}
+          <h4>References ({references.length})</h4>
+          {references.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
+          {references.map((reference) => (
+            <button
+              key={reference.ref_id}
+              type="button"
+              className="reader__section-link"
+              title={reference.raw}
+              onClick={() => void scrollToQuote(reference.raw)}
+            >
+              {reference.raw}
+            </button>
+          ))}
+
+          <h4>Datasets ({datasets.length})</h4>
+          {datasets.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
+          {datasets.map((dataset, index) => (
+            <button
+              key={index}
+              type="button"
+              className="reader__section-link"
+              onClick={() => void scrollToQuote(datasetLabel(dataset))}
+            >
+              {datasetLabel(dataset)}
+            </button>
+          ))}
+
+          <h4>Code ({codeLinks.length})</h4>
+          {codeLinks.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
+          {codeLinks.map((codeLink, index) => {
+            const url = codeLinkUrl(codeLink);
+            return url ? (
+              <a key={index} className="reader__section-link" href={url} target="_blank" rel="noreferrer">
+                {url}
+              </a>
+            ) : (
+              <p key={index} className="reader__section-link">
+                {JSON.stringify(codeLink)}
+              </p>
+            );
+          })}
+        </nav>
+
+        <div className="reader__pages" onMouseUp={handleTextSelection}>
+          {pages.map((page) => (
+            <Page
+              key={page.pageNumber}
+              page={page}
+              pageNumber={page.pageNumber}
+              containerRef={(el) => {
+                if (el) pageRefs.current.set(page.pageNumber, el);
+              }}
+            />
+          ))}
+          {pdfDoc && pages.length === 0 && <p>Rendering…</p>}
+        </div>
+
+        <aside className="reader__card">
+          <h4>Extractive card</h4>
+          {FIELD_ORDER.map((fieldKey) => {
+            const field = cardByField.get(fieldKey);
+            return (
+              <div key={fieldKey} className="reader__card-field">
+                <h5>{FIELD_LABEL[fieldKey]}</h5>
+                {field ? (
+                  <p
+                    className={`reader__card-quote ${activeAnchor?.quote === field.value ? "reader__card-quote--active" : ""}`}
+                    onClick={() => handleFieldClick(field)}
+                  >
+                    {field.value}
+                  </p>
+                ) : (
+                  <p className="reader__not-stated">not stated in this paper</p>
+                )}
+                {field && (
+                  <p className="reader__card-offset">
+                    {field.section_heading ? `§${field.section_heading} · ` : ""}
+                    {field.char_start}–{field.char_end}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </aside>
+
+        {popover && (
+          <div className="reader__popover" style={{ left: popover.x, top: popover.y }}>
+            <button type="button" onClick={() => handleAsk(`What does this mean: "${popover.quote}"?`)}>
+              Ask about this
+            </button>
+            <button type="button" onClick={handleHighlight} disabled={highlightState === "saving"}>
+              {highlightState === "saved" ? "Highlighted ✓" : highlightState === "saving" ? "Saving…" : "Highlight"}
+            </button>
+            <button type="button" onClick={() => handleAsk(`Explain this in simple terms: "${popover.quote}"`)}>
+              Explain
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

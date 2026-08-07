@@ -2,17 +2,97 @@
   font-family: var(--font-ui);
 }
 
-.library__row {
+.library__header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-faint);
+  margin-bottom: 14px;
 }
 
 .library__title {
-  flex: 1;
-  font: 700 13px var(--font-reading);
+  font: 800 20px var(--font-reading);
+  color: var(--text-strong);
+  margin: 0;
+}
+
+.library__header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.library__filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Relevance — the four-value enum's "Badge" presentation (§3.2), reused
+   as-is for the "Filter chip" presentation (same styles + a trailing
+   count + click-to-toggle) — both read `relevanceLabel` (design/labels.ts),
+   never a second copy of this mapping. */
+.library__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  font: 700 10px var(--font-ui);
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px solid transparent;
+  background: none;
+  white-space: nowrap;
+}
+
+.library__badge--relevant {
+  background: var(--accent-tint-15);
+  color: var(--accent-text);
+}
+
+.library__badge--somewhat {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent-text-outline);
+}
+
+.library__badge--not {
+  border-color: oklch(85% 0.03 210);
+  color: var(--text-muted);
+}
+
+.library__badge--unset {
+  border-style: dashed;
+  border-color: var(--border-dashed);
+  color: var(--text-muted);
+}
+
+.library__filter-chip {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.library__filter-chip--off {
+  opacity: 0.45;
+}
+
+.library__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.library__card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library__card-title {
+  font: 700 14px var(--font-reading);
   color: var(--text-strong);
   background: none;
   border: none;
@@ -21,7 +101,13 @@
   cursor: pointer;
 }
 
-.library__badge {
+.library__stages {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.library__stage-badge {
   font: 700 10px var(--font-ui);
   padding: 2px 8px;
   border-radius: var(--radius-badge);
@@ -29,25 +115,20 @@
   color: var(--text-muted);
 }
 
-.library__badge--done {
+.library__stage-badge--done {
   background: var(--accent-tint-12);
   color: var(--accent-text);
   border-color: transparent;
 }
 
-.library__badge--failed {
+.library__stage-badge--failed {
   background: color-mix(in srgb, var(--danger-fill) 12%, transparent);
   color: var(--danger-text);
   border-color: var(--danger-badge-border);
 }
 
-.library__stages {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 .library__retry {
+  align-self: flex-start;
   font: 700 10px var(--font-ui);
   padding: 4px 10px;
   border-radius: var(--radius-button);
@@ -57,23 +138,18 @@
   cursor: pointer;
 }
 
-.library__relevance {
+/* The last grid cell — the §3.4 dashed absence/add-affordance pattern,
+   same convention as NotesView's empty state / MatrixView's not-stated
+   cells, reused rather than invented fresh here. */
+.library__import-placeholder {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-button);
-  overflow: hidden;
-}
-
-.library__relevance button {
-  border: none;
-  background: var(--surface-raised);
-  font: 700 10px var(--font-ui);
-  padding: 4px 8px;
-  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  border: 1px dashed var(--border-dashed);
+  border-radius: var(--radius-card);
+  background: none;
+  font: italic 12px var(--font-ui);
   color: var(--text-muted);
-}
-
-.library__relevance button.library__relevance--active {
-  background: var(--accent-tint-15);
-  color: var(--accent-text);
+  cursor: pointer;
 }

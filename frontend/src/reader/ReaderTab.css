@@ -1,16 +1,96 @@
 .reader {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
   height: 100%;
   font-family: var(--font-ui);
 }
 
+/* Header (§4.2) — deliberately compact: the PDF is the hero, not the
+   chrome. Title/authors/venue live here so the sidebar and card below can
+   stay purely structural. */
+.reader__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.reader__header-title {
+  font: 800 17px var(--font-reading);
+  color: var(--text-strong);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Relevance segmented control (§3.2) — the one place besides Library's
+   badges/filter-chips that reads `relevanceLabel` (design/labels.ts). */
+.reader__relevance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.reader__relevance-label {
+  font: 700 9px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.reader__relevance-control {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.reader__relevance-segment {
+  font: 600 10px var(--font-ui);
+  padding: 5px 9px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.reader__relevance-segment:first-child {
+  border-left: none;
+}
+
+.reader__relevance-segment--active {
+  background: var(--accent-tint-15);
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+.reader__relevance-segment:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.reader__body {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
 .reader__sidebar {
-  width: 220px;
+  width: 170px;
+  min-width: 150px;
   flex: none;
   overflow-y: auto;
   background: var(--surface);
-  border-radius: var(--radius-panel);
+  border-right: 1px solid var(--border);
   padding: 14px;
 }
 
@@ -116,8 +196,15 @@
   margin: 0;
 }
 
+/* Active (D24, UI_DESIGN.md §3.3) — the quote is rendered as a block `<p>`
+   (ReaderTab.tsx), so the left rule + asymmetric radius use the block
+   values, not the inline ones; this is what makes the reader highlight and
+   the extractive card's field visibly "light up together" with exactly one
+   active span at a time. */
 .reader__card-quote--active {
   background: var(--accent-tint-25);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 6px 6px 0;
 }
 
 .reader__card-offset {

@@ -39,13 +39,72 @@ body {
   color: var(--text-strong);
 }
 
+/* Project switcher chip (UI_DESIGN.md §2 "Top bar") — a plain native
+   `<select>` restyled with `appearance: none` plus a decorative trailing
+   `▾` drawn by the wrapper below, not a hand-rolled dropdown (see the
+   comment on `ProjectSwitcher` in AppShell.tsx for why). */
+.top-bar__switcher-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .top-bar__switcher {
-  font: 600 12px var(--font-ui);
-  color: var(--text);
+  appearance: none;
+  -webkit-appearance: none;
+  font: 700 13px var(--font-ui);
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius-button);
+  padding: 4px 22px 4px 10px;
+  cursor: pointer;
+}
+
+.top-bar__switcher-wrap::after {
+  content: "▾";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-strong);
+  pointer-events: none;
+}
+
+.top-bar__spacer {
+  flex: 1;
+}
+
+/* Global search (UI_DESIGN.md §2) — opens/focuses the same Search tab the
+   left-nav "Search" row opens (AppShell.tsx `submitTopSearch`); active
+   state mirrors `SearchResults.css`'s own `.search__input:focus`, the one
+   existing convention for this exact treatment. */
+.top-bar__search {
+  height: 32px;
+  width: 220px;
+  border-radius: var(--radius-button);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius-button);
-  padding: 3px 8px;
+  padding: 0 10px;
+  font: 400 12px var(--font-ui);
+  color: var(--text);
+}
+
+.top-bar__search:focus {
+  outline: none;
+  border: 2px solid var(--accent);
+}
+
+.top-bar__settings {
+  flex: none;
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
 }
 
 .shell-body {

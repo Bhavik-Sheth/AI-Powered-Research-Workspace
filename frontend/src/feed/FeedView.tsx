@@ -93,7 +93,7 @@ export function FeedView({ projectId }: { projectId: string }) {
             <p className="feed__why">{whyRelevantText(item)}</p>
             <div className="feed__actions">
               <button type="button" className="feed__save" disabled={pendingId === item.id} onClick={() => void act(item.id, "save")}>
-                Save to library
+                Add to library
               </button>
               <button type="button" className="feed__dismiss" disabled={pendingId === item.id} onClick={() => void act(item.id, "dismiss")}>
                 Dismiss

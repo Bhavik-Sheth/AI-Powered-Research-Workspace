@@ -231,6 +231,14 @@ function ProjectGate({ children }: { children: (projectId: string) => React.Reac
   );
 }
 
+/** The project switcher chip (UI_DESIGN.md §2 "Top bar"). Styled as a chip
+ * via `.top-bar__switcher` on the native `<select>` itself (`buttons.css`'s
+ * own comment already names this "the one existing convention for a styled
+ * <select> in this codebase") rather than replacing the element with a
+ * hand-rolled dropdown — that would mean reproducing the native control's
+ * keyboard nav and screen-reader semantics from scratch for what the spec
+ * only asks to be a restyle (Rules.md AI Agent Behaviour: stop and ask
+ * before that kind of scope growth; this stays inside "restyle a control"). */
 function ProjectSwitcher({ projectId, onSwitch }: { projectId: string; onSwitch: (id: string) => void }) {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
 
@@ -242,13 +250,15 @@ function ProjectSwitcher({ projectId, onSwitch }: { projectId: string; onSwitch:
   }, [projectId]);
 
   return (
-    <select className="top-bar__switcher" value={projectId} onChange={(event) => onSwitch(event.target.value)}>
-      {projects.map((project) => (
-        <option key={project.id} value={project.id}>
-          {project.name}
-        </option>
-      ))}
-    </select>
+    <div className="top-bar__switcher-wrap">
+      <select className="top-bar__switcher" value={projectId} onChange={(event) => onSwitch(event.target.value)}>
+        {projects.map((project) => (
+          <option key={project.id} value={project.id}>
+            {project.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -285,6 +295,12 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   const [projectName, setProjectName] = useState("");
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null);
+  // Top-bar global search (UI_DESIGN.md §2, Phase 5.4) — opens/focuses the
+  // same canonical Search tab the left-nav "Search" row opens, feeding it
+  // the typed query via `SearchResults`' `initialQuery` prop rather than
+  // building a second, parallel search mechanism.
+  const [topSearchValue, setTopSearchValue] = useState("");
+  const [pendingSearch, setPendingSearch] = useState<{ text: string; nonce: number } | null>(null);
   const [navCollapsed, toggleNav] = useCollapsible("leftNavCollapsed");
   const [companionCollapsed, toggleCompanion] = useCollapsible("companionCollapsed");
   const [navWidth, setNavWidth] = usePaneWidth("leftNavWidth", NAV_DEFAULT_WIDTH, NAV_MIN_WIDTH, NAV_MAX_WIDTH);
@@ -325,6 +341,12 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     openTab({ id: `reader:${paperId}`, kind: "reader", params: { paperId, projectId }, label: title });
   }
 
+  function submitTopSearch() {
+    if (!topSearchValue.trim()) return;
+    openTab(SEARCH_TAB);
+    setPendingSearch({ text: topSearchValue, nonce: Date.now() });
+  }
+
   // A tool result's `ui_action` produces the same route transition the
   // user's own click would (Bug Fix Plan Phase 2.3) — one dispatch point,
   // not a callback per tool.
@@ -359,7 +381,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
           />
         );
       case "library":
-        return <LibraryView projectId={projectId} onOpenPaper={openReaderTab} />;
+        return <LibraryView projectId={projectId} onOpenPaper={openReaderTab} onAddPaper={() => openTab(SEARCH_TAB)} />;
       case "notes":
         return <NotesView projectId={projectId} />;
       case "experiments":
@@ -375,7 +397,13 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       case "reader":
         return <ReaderTab paperId={tab.params?.paperId ?? ""} projectId={projectId} onAskCompanion={askCompanion} />;
       case "search":
-        return <SearchResults projectId={projectId} initialResultId={tab.params?.resultId} />;
+        return (
+          <SearchResults
+            projectId={projectId}
+            initialResultId={tab.params?.resultId}
+            initialQuery={tab.id === SEARCH_TAB.id ? pendingSearch : undefined}
+          />
+        );
       case "settings":
         return (
           <>
@@ -407,6 +435,24 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       <header className="top-bar">
         Research Companion OS
         <ProjectSwitcher projectId={projectId} onSwitch={onSwitchProject} />
+        <div className="top-bar__spacer" />
+        <input
+          type="text"
+          className="top-bar__search"
+          value={topSearchValue}
+          onChange={(event) => setTopSearchValue(event.target.value)}
+          onKeyDown={(event) => event.key === "Enter" && submitTopSearch()}
+          placeholder="Search everything…"
+          aria-label="Search everything"
+        />
+        <button
+          type="button"
+          className="top-bar__settings"
+          aria-label="Settings"
+          onClick={() => openTab(SETTINGS_TAB)}
+        >
+          ⚙
+        </button>
       </header>
       <div className="shell-body">
         <div

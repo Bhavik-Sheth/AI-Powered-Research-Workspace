@@ -14,7 +14,7 @@
 }
 
 .experiments__title {
-  font: 700 20px var(--font-ui);
+  font: 800 20px var(--font-reading);
   color: var(--text-strong);
   margin: 0;
 }
