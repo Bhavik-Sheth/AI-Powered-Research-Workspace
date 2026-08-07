@@ -20,6 +20,7 @@ import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
 import { ManuscriptTab } from "../writing/ManuscriptTab";
 import "./AppShell.css";
+import { AppBootScreen } from "./ErrorBoundary";
 import { ReadinessStrip } from "./ReadinessStrip";
 
 // Icon-rail minimum keeps the nav usable as a landmark even at its narrowest;
@@ -154,24 +155,42 @@ const SETTINGS_TAB: TabRef = { id: "settings", kind: "settings", params: {}, lab
  * opened project, or the first project if none has been opened yet. */
 function ProjectGate({ children }: { children: (projectId: string) => React.ReactNode }) {
   const [projects, setProjects] = useState<ProjectResponse[] | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setError(null);
     void (async () => {
-      const { data } = await listProjectsApiProjectsGet({ throwOnError: true });
-      setProjects(data);
-      const mostRecent = [...data].sort((a, b) => (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? ""))[0];
-      setProjectId(mostRecent?.id ?? null);
+      try {
+        const { data } = await listProjectsApiProjectsGet({ throwOnError: true });
+        if (cancelled) return;
+        setProjects(data);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not load projects");
+      }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadNonce]);
 
-  if (projects === null) return null;
-  if (projectId === null || projects.length === 0) {
+  if (error) {
+    return (
+      <AppBootScreen title="Could not load projects" message={error} onRetry={() => setReloadNonce((n) => n + 1)} />
+    );
+  }
+  if (projects === null) {
+    return <AppBootScreen title="Loading…" />;
+  }
+  const mostRecent = [...projects].sort((a, b) => (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? ""))[0];
+  if (!mostRecent) {
     return <div className="center-pane__title">No project yet — create one to get started.</div>;
   }
   return (
     <>
-      {children(projectId)}
+      {children(mostRecent.id)}
     </>
   );
 }
@@ -207,7 +226,17 @@ function ProjectSwitcher({ projectId, onSwitch }: { projectId: string; onSwitch:
  * scrolled tab."
  */
 function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwitchProject: (id: string) => void }) {
-  const { tabs, activeTab, loaded, openTab, closeTab, activateTab, reorderTab } = useTabStack(projectId);
+  const {
+    tabs,
+    activeTab,
+    loaded,
+    error: tabStackError,
+    reload: reloadTabStack,
+    openTab,
+    closeTab,
+    activateTab,
+    reorderTab,
+  } = useTabStack(projectId);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
@@ -326,6 +355,13 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       default:
         return null;
     }
+  }
+
+  // A tab-stack load failure with nothing ever successfully loaded would
+  // otherwise leave `loaded` stuck false forever and the center pane
+  // permanently empty with no explanation — surface it instead of hanging.
+  if (tabStackError && tabs.length === 0) {
+    return <AppBootScreen title="Could not load this project" message={tabStackError} onRetry={reloadTabStack} />;
   }
 
   return (

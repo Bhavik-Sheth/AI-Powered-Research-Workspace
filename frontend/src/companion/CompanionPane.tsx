@@ -7,15 +7,44 @@ import "./CompanionPane.css";
 import { renderAssistantContent } from "./parseCitations";
 import type { DownstreamEvent, SelectionState } from "./wsTypes";
 
-const DOWNSTREAM_EVENT_KINDS = new Set(["status", "text_delta", "tool_call", "tool_result", "ui_action", "turn_complete", "error"]);
-
+/**
+ * Validates every field a given `event` discriminator requires, not just
+ * the discriminator itself — a backend shape drift on e.g. `tool_result`
+ * would otherwise pass the old event-only check and throw "Objects are not
+ * valid as a React child" once `model_view` reached the transcript
+ * (Frontend Improvement Plan Phase 1.3). Mirrors `DownstreamEvent` in
+ * wsTypes.ts field for field.
+ */
 function isDownstreamEvent(message: unknown): message is DownstreamEvent {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "event" in message &&
-    DOWNSTREAM_EVENT_KINDS.has((message as { event: unknown }).event as string)
-  );
+  if (typeof message !== "object" || message === null || !("event" in message)) return false;
+  const m = message as Record<string, unknown>;
+  switch (m.event) {
+    case "status":
+      return typeof m.text === "string";
+    case "text_delta":
+      return typeof m.delta === "string";
+    case "tool_call":
+      return typeof m.tool_name === "string" && typeof m.args === "object" && m.args !== null;
+    case "tool_result":
+      return (
+        typeof m.tool_name === "string" &&
+        typeof m.model_view === "string" &&
+        (m.result_id === null || typeof m.result_id === "string")
+      );
+    case "ui_action":
+      return typeof m.action === "string" && typeof m.payload === "object" && m.payload !== null;
+    case "turn_complete":
+      return typeof m.turn_id === "string" && typeof m.interrupted === "boolean" && typeof m.iterations === "number";
+    case "error":
+      return (
+        typeof m.code === "string" &&
+        typeof m.message === "string" &&
+        typeof m.recoverable === "boolean" &&
+        (m.what_still_worked === null || typeof m.what_still_worked === "string")
+      );
+    default:
+      return false;
+  }
 }
 
 interface TranscriptEntry {

@@ -95,7 +95,7 @@ export function NotesView({ projectId }: { projectId: string }) {
   const saveLabel = saving ? "Saving…" : !titleMissing && !isDirty ? "Saved" : "Save";
 
   if (notesQuery.isPending) {
-    return null;
+    return <p>Loading…</p>;
   }
 
   if (notesQuery.isError) {

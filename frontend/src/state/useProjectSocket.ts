@@ -70,7 +70,13 @@ export function useProjectSocket(projectId: string): ProjectSocket {
         reconnectTimerRef.current = setTimeout(connect, delay);
       };
       ws.onmessage = (event) => {
-        const parsed: unknown = JSON.parse(event.data);
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(event.data);
+        } catch {
+          console.error("Dropped malformed WebSocket frame", event.data);
+          return;
+        }
         for (const listener of listenersRef.current) listener(parsed);
       };
     }

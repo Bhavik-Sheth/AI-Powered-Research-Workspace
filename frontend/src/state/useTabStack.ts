@@ -14,21 +14,33 @@ export function useTabStack(projectId: string) {
   const [tabs, setTabs] = useState<TabRef[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoaded(false);
+    setError(null);
     (async () => {
-      const { data } = await getProjectApiProjectsProjectIdGet({ path: { project_id: projectId }, throwOnError: true });
-      if (cancelled) return;
-      setTabs(data.tab_stack);
-      setActiveTab(data.active_tab);
-      setLoaded(true);
+      try {
+        const { data } = await getProjectApiProjectsProjectIdGet({ path: { project_id: projectId }, throwOnError: true });
+        if (cancelled) return;
+        setTabs(data.tab_stack);
+        setActiveTab(data.active_tab);
+        setLoaded(true);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not load the tab stack");
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, reloadNonce]);
+
+  function reload() {
+    setReloadNonce((n) => n + 1);
+  }
 
   function persist(nextTabs: TabRef[], nextActive: string | null) {
     void saveTabStackApiProjectsProjectIdTabStackPut({
@@ -77,5 +89,5 @@ export function useTabStack(projectId: string) {
     });
   }
 
-  return { tabs, activeTab, loaded, openTab, closeTab, activateTab, reorderTab };
+  return { tabs, activeTab, loaded, error, reload, openTab, closeTab, activateTab, reorderTab };
 }

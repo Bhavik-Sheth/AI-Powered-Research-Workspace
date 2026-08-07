@@ -1,0 +1,37 @@
+.app-boot {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: var(--page-bg);
+}
+
+.app-boot__title {
+  font: 800 20px var(--font-reading);
+  color: var(--text-strong);
+  margin: 0;
+}
+
+.app-boot__message {
+  font: 11px/1.6 var(--font-ui);
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 420px;
+  white-space: pre-wrap;
+}
+
+.app-boot__retry {
+  height: 32px;
+  border-radius: var(--radius-button);
+  padding: 0 14px;
+  font: 700 12px var(--font-ui);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  margin-top: 4px;
+}
