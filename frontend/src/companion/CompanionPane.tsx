@@ -345,6 +345,32 @@ export function CompanionPane({
           onMouseDown={() => void startRecording()}
           onMouseUp={() => void handleMicRelease()}
           onMouseLeave={() => recording && void handleMicRelease()}
+          onKeyDown={(event) => {
+            // A held key auto-repeats `keydown` — without the `repeat`
+            // guard (and the `recording` check) every repeat would call
+            // `startRecording()` again on top of an already-open recording.
+            if ((event.key === "Enter" || event.key === " ") && !event.repeat && !recording) {
+              event.preventDefault();
+              void startRecording();
+            }
+          }}
+          onKeyUp={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              void handleMicRelease();
+            }
+          }}
+          onTouchStart={(event) => {
+            // Without this, the browser's compatibility mousedown/mouseup
+            // pair that normally follows a touch would call startRecording
+            // a second time on top of this one.
+            event.preventDefault();
+            if (!recording) void startRecording();
+          }}
+          onTouchEnd={(event) => {
+            event.preventDefault();
+            void handleMicRelease();
+          }}
         />
         <button type="button" className="companion__send" aria-label="Send" onClick={handleSubmit}>
           ↑

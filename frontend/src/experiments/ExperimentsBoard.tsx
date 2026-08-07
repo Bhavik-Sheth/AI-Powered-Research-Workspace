@@ -286,16 +286,17 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
                 ) : (
                   columnExperiments.map((experiment) => (
                     <div className="experiments__card" key={experiment.id}>
-                      <div
+                      <button
+                        type="button"
                         className="experiments__card-head"
-                        style={{ cursor: "pointer" }}
+                        aria-expanded={expandedId === experiment.id}
                         onClick={() => void toggleExpand(experiment.id)}
                       >
                         <span className="experiments__card-title">{experiment.title}</span>
                         <span className={statusBadgeClass(experiment.status)}>
                           {STATUS_LABEL[experiment.status]}
                         </span>
-                      </div>
+                      </button>
                       {experiment.hypothesis && (
                         <p className="experiments__card-hypothesis">{experiment.hypothesis}</p>
                       )}

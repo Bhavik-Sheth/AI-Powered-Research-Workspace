@@ -105,9 +105,9 @@ export function LibraryView({
       {error && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
       {entries.map(({ paper, relevance }) => (
         <div className="library__row" key={paper.id}>
-          <span className="library__title" onClick={() => onOpenPaper(paper.id, paper.title)} style={{ cursor: "pointer" }}>
+          <button type="button" className="library__title" onClick={() => onOpenPaper(paper.id, paper.title)}>
             {paper.title}
-          </span>
+          </button>
           <div className="library__stages">
             {STAGES.map(({ key, label }) => {
               const state = paper[key] as string;

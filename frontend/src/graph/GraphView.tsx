@@ -202,7 +202,7 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
 
         {selected && (
           <aside className="graph__detail">
-            <button type="button" className="graph__detail-close" onClick={() => setSelected(null)}>
+            <button type="button" className="graph__detail-close" aria-label="Close details" onClick={() => setSelected(null)}>
               ×
             </button>
             <span className="graph__chip-dot" style={{ background: colorFor(selected.nodeType) }} />

@@ -1,27 +1,28 @@
-.approval-prompt__overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 24px;
-}
-
+/* Rendered as a native <dialog> (Phase 4.2) — showModal() puts it in the
+   top layer and centers it via the UA stylesheet's `dialog:modal` rule, so
+   this only needs to override the UA's default border/padding/margin, not
+   provide its own positioning or overlay div. */
 .approval-prompt {
+  margin: auto;
   font-family: var(--font-ui);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  width: min(640px, 100%);
+  /* No overlay div to supply an edge gutter anymore — the 48px is the same
+     24px-per-side inset the old `.approval-prompt__overlay` padding gave
+     on narrow viewports. */
+  width: min(640px, calc(100vw - 48px));
   max-height: min(88vh, 820px);
   overflow-y: auto;
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.approval-prompt::backdrop {
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .approval-prompt__header {

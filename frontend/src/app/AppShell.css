@@ -142,6 +142,19 @@ body {
   list-style: none;
 }
 
+/* The Search/Settings/Readiness rows are real <button>s (Phase 4.1) so a
+   keyboard user can reach them — reset the button chrome the base
+   `.left-nav__item` rule above doesn't cover. The nav-group rows stay
+   plain `<li>`s (list semantics) and don't need this. */
+button.left-nav__item {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
 .left-nav__item::before {
   content: "";
   width: 9px;
@@ -262,6 +275,11 @@ body {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .tab-bar__close:hover {

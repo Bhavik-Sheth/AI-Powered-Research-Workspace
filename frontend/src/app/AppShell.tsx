@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  DragEvent as ReactDragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { listProjectsApiProjectsGet, type ProjectResponse } from "@research-os/api-client";
 
 import { CompanionPane, type PendingAsk } from "../companion/CompanionPane";
@@ -130,6 +134,20 @@ function useOverflow<T extends HTMLElement>(ref: React.RefObject<T | null>, deps
   }, deps);
 
   return { overflowing, hiddenTabIds };
+}
+
+/** Fires `onActivate` on Enter/Space, mirroring the native `<button>`
+ * Enter/Space-to-click behavior — for the handful of controls below that
+ * must stay non-`<button>` elements (an `<li>` that needs to keep its list
+ * semantics, a draggable tab strip) but still need to be keyboard-reachable
+ * (Phase 4.1). */
+function activateOnKey(onActivate: () => void) {
+  return (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onActivate();
+    }
+  };
 }
 
 const NAV_GROUPS: { label: string | null; items: string[] }[] = [
@@ -400,40 +418,46 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
               <div key={group.label ?? "root"}>
                 {group.label && <div className="left-nav__group-label">{group.label}</div>}
                 <ul style={{ margin: 0, padding: 0 }}>
-                  {group.items.map((item) => (
-                    <li
-                      key={item}
-                      className={`left-nav__item ${NAV_ITEM_TABS[item].kind === activeTabKind ? "left-nav__item--active" : ""}`}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => openTab(NAV_ITEM_TABS[item])}
-                    >
-                      {item}
-                    </li>
-                  ))}
+                  {group.items.map((item) => {
+                    const openThisTab = () => openTab(NAV_ITEM_TABS[item]);
+                    return (
+                      <li
+                        key={item}
+                        className={`left-nav__item ${NAV_ITEM_TABS[item].kind === activeTabKind ? "left-nav__item--active" : ""}`}
+                        style={{ cursor: "pointer" }}
+                        tabIndex={0}
+                        role="button"
+                        onClick={openThisTab}
+                        onKeyDown={activateOnKey(openThisTab)}
+                      >
+                        {item}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}
-            <div
+            <button
+              type="button"
               className={`left-nav__item ${activeTabKind === SEARCH_TAB.kind ? "left-nav__item--active" : ""}`}
-              style={{ cursor: "pointer" }}
               onClick={() => openTab(SEARCH_TAB)}
             >
               Search
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               className={`left-nav__item ${activeTabKind === SETTINGS_TAB.kind ? "left-nav__item--active" : ""}`}
-              style={{ cursor: "pointer" }}
               onClick={() => openTab(SETTINGS_TAB)}
             >
               Settings
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               className={`left-nav__item ${activeTabKind === READINESS_TAB.kind ? "left-nav__item--active" : ""}`}
-              style={{ cursor: "pointer" }}
               onClick={() => openTab(READINESS_TAB)}
             >
               Readiness
-            </div>
+            </button>
           </nav>
         </div>
         {!navCollapsed && (
@@ -457,46 +481,63 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
           {tabs.length > 1 && (
             <div className="tab-bar-row">
               <div className="tab-bar" ref={tabBarRef}>
-                {tabs.map((tab, index) => (
-                  <div
-                    key={tab.id}
-                    data-tab-id={tab.id}
-                    draggable
-                    className={`tab-bar__tab ${tab.id === activeTab ? "tab-bar__tab--active" : ""} ${tab.id === draggingTabId ? "tab-bar__tab--dragging" : ""}`}
-                    onClick={() => activateTab(tab.id)}
-                    onDragStart={(event: ReactDragEvent<HTMLDivElement>) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      setDraggingTabId(tab.id);
-                    }}
-                    onDragEnd={() => setDraggingTabId(null)}
-                    onDragOver={(event: ReactDragEvent<HTMLDivElement>) => {
-                      if (!draggingTabId || draggingTabId === tab.id) return;
-                      event.preventDefault();
-                    }}
-                    onDrop={(event: ReactDragEvent<HTMLDivElement>) => {
-                      if (!draggingTabId || draggingTabId === tab.id) return;
-                      event.preventDefault();
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      const dropBeforeThisTab = event.clientX < rect.left + rect.width / 2;
-                      const beforeId = dropBeforeThisTab ? tab.id : (tabs[index + 1]?.id ?? null);
-                      reorderTab(draggingTabId, beforeId);
-                      setDraggingTabId(null);
-                    }}
-                  >
-                    <span className="tab-bar__label">{tab.label}</span>
-                    {tab.kind !== "dashboard" && (
-                      <span
-                        className="tab-bar__close"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          closeTab(tab.id);
-                        }}
-                      >
-                        ×
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {tabs.map((tab, index) => {
+                  const activateThisTab = () => activateTab(tab.id);
+                  return (
+                    <div
+                      key={tab.id}
+                      data-tab-id={tab.id}
+                      draggable
+                      className={`tab-bar__tab ${tab.id === activeTab ? "tab-bar__tab--active" : ""} ${tab.id === draggingTabId ? "tab-bar__tab--dragging" : ""}`}
+                      tabIndex={0}
+                      role="button"
+                      onClick={activateThisTab}
+                      onKeyDown={(event) => {
+                        // The close button below is a real, independently
+                        // focusable <button> nested inside this element —
+                        // its own Enter/Space keydown bubbles here too, so
+                        // only react to a keydown that targeted this tab
+                        // itself (mirrors the close button's onClick
+                        // stopPropagation, which guards the mouse case).
+                        if (event.target !== event.currentTarget) return;
+                        activateOnKey(activateThisTab)(event);
+                      }}
+                      onDragStart={(event: ReactDragEvent<HTMLDivElement>) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        setDraggingTabId(tab.id);
+                      }}
+                      onDragEnd={() => setDraggingTabId(null)}
+                      onDragOver={(event: ReactDragEvent<HTMLDivElement>) => {
+                        if (!draggingTabId || draggingTabId === tab.id) return;
+                        event.preventDefault();
+                      }}
+                      onDrop={(event: ReactDragEvent<HTMLDivElement>) => {
+                        if (!draggingTabId || draggingTabId === tab.id) return;
+                        event.preventDefault();
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const dropBeforeThisTab = event.clientX < rect.left + rect.width / 2;
+                        const beforeId = dropBeforeThisTab ? tab.id : (tabs[index + 1]?.id ?? null);
+                        reorderTab(draggingTabId, beforeId);
+                        setDraggingTabId(null);
+                      }}
+                    >
+                      <span className="tab-bar__label">{tab.label}</span>
+                      {tab.kind !== "dashboard" && (
+                        <button
+                          type="button"
+                          className="tab-bar__close"
+                          aria-label={`Close ${tab.label}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            closeTab(tab.id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               {tabBarOverflowing && (
                 <div className="tab-bar__overflow">
@@ -510,19 +551,25 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                   </button>
                   {overflowOpen && (
                     <ul className="tab-bar__overflow-menu">
-                      {tabs.filter((tab) => hiddenTabIds.has(tab.id)).map((tab) => (
-                        <li
-                          key={tab.id}
-                          className={tab.id === activeTab ? "tab-bar__overflow-item--active" : ""}
-                          onClick={() => {
-                            activateTab(tab.id);
-                            setOverflowOpen(false);
-                            document.querySelector(`[data-tab-id="${tab.id}"]`)?.scrollIntoView({ inline: "nearest" });
-                          }}
-                        >
-                          {tab.label}
-                        </li>
-                      ))}
+                      {tabs.filter((tab) => hiddenTabIds.has(tab.id)).map((tab) => {
+                        const selectFromOverflow = () => {
+                          activateTab(tab.id);
+                          setOverflowOpen(false);
+                          document.querySelector(`[data-tab-id="${tab.id}"]`)?.scrollIntoView({ inline: "nearest" });
+                        };
+                        return (
+                          <li
+                            key={tab.id}
+                            className={tab.id === activeTab ? "tab-bar__overflow-item--active" : ""}
+                            tabIndex={0}
+                            role="button"
+                            onClick={selectFromOverflow}
+                            onKeyDown={activateOnKey(selectFromOverflow)}
+                          >
+                            {tab.label}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
