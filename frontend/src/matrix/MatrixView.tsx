@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createMatrixApiProjectsProjectIdMatrixPost,
   getMatrixViewApiProjectsProjectIdMatrixMatrixIdGet,
@@ -16,6 +16,7 @@ import {
 } from "@research-os/api-client";
 
 import "../design/buttons.css";
+import { ErrorCard } from "../design/ErrorCard";
 import "./MatrixView.css";
 
 const STANDARD_COLUMNS: { column_key: string; label: string }[] = [
@@ -43,121 +44,194 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
   const [showPicker, setShowPicker] = useState(false);
   const [newColumnLabel, setNewColumnLabel] = useState("");
   const [newColumnQuery, setNewColumnQuery] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Mirrors `view`, updated synchronously (not via an effect) everywhere
+  // `view` is set. `putMatrix` reads this instead of closing over the `view`
+  // render variable, so a second rapid edit composes onto the first edit's
+  // already-applied result instead of a stale pre-edit snapshot — the
+  // stale-closure lost-update race this file used to have (Bug Fix Plan
+  // Phase 3.3).
+  const viewRef = useRef<MatrixViewData | null>(null);
+
+  function applyView(data: MatrixViewData | null) {
+    viewRef.current = data;
+    setView(data);
+  }
 
   async function refreshMatrices(selectId?: string) {
-    const { data } = await listMatricesApiProjectsProjectIdMatrixGet({ path: { project_id: projectId }, throwOnError: true });
-    setMatrices(data);
-    const next = selectId ?? data[0]?.id ?? null;
-    setActiveMatrixId(next);
+    try {
+      const { data } = await listMatricesApiProjectsProjectIdMatrixGet({ path: { project_id: projectId }, throwOnError: true });
+      setMatrices(data);
+      const next = selectId ?? data[0]?.id ?? null;
+      setActiveMatrixId(next);
+      setLoaded(true);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load matrices");
+    }
   }
 
   useEffect(() => {
     void refreshMatrices();
     void (async () => {
-      const [papersRes, experimentsRes] = await Promise.all([
-        listProjectPapersApiProjectsProjectIdPapersGet({ path: { project_id: projectId }, throwOnError: true }),
-        listExperimentsApiProjectsProjectIdExperimentsGet({ path: { project_id: projectId }, throwOnError: true }),
-      ]);
-      setPapers(papersRes.data);
-      setExperiments(experimentsRes.data);
+      try {
+        const [papersRes, experimentsRes] = await Promise.all([
+          listProjectPapersApiProjectsProjectIdPapersGet({ path: { project_id: projectId }, throwOnError: true }),
+          listExperimentsApiProjectsProjectIdExperimentsGet({ path: { project_id: projectId }, throwOnError: true }),
+        ]);
+        setPapers(papersRes.data);
+        setExperiments(experimentsRes.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load papers and experiments");
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function refreshView(matrixId: string) {
-    const { data } = await getMatrixViewApiProjectsProjectIdMatrixMatrixIdGet({
-      path: { project_id: projectId, matrix_id: matrixId },
-      throwOnError: true,
-    });
-    setView(data);
+    try {
+      const { data } = await getMatrixViewApiProjectsProjectIdMatrixMatrixIdGet({
+        path: { project_id: projectId, matrix_id: matrixId },
+        throwOnError: true,
+      });
+      applyView(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load this matrix");
+    }
   }
 
   useEffect(() => {
     if (activeMatrixId) void refreshView(activeMatrixId);
-    else setView(null);
+    else applyView(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMatrixId]);
 
   async function createNewMatrix() {
-    const { data } = await createMatrixApiProjectsProjectIdMatrixPost({
-      path: { project_id: projectId },
-      body: { name: `Matrix ${matrices.length + 1}`, column_defs: STANDARD_COLUMNS.map((c) => ({ ...c, kind: "standard" as const })) },
-      throwOnError: true,
-    });
-    await refreshMatrices(data.id);
+    try {
+      const { data } = await createMatrixApiProjectsProjectIdMatrixPost({
+        path: { project_id: projectId },
+        body: { name: `Matrix ${matrices.length + 1}`, column_defs: STANDARD_COLUMNS.map((c) => ({ ...c, kind: "standard" as const })) },
+        throwOnError: true,
+      });
+      await refreshMatrices(data.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create a new matrix");
+    }
   }
 
+  /** Reads and optimistically updates `viewRef.current`, not the `view`
+   * render-scope variable — a second call fired before the first's PATCH
+   * response lands still composes onto the first's already-applied change,
+   * since the ref was updated synchronously (not after a round trip). On
+   * failure, rolls back to the pre-optimistic snapshot and surfaces the
+   * error rather than leaving the UI showing a change that didn't persist. */
   async function putMatrix(patch: Partial<Pick<Matrix, "selected_paper_ids" | "selected_experiment_ids" | "column_defs">>) {
-    if (!view) return;
-    await putMatrixApiProjectsProjectIdMatrixMatrixIdPut({
-      path: { project_id: projectId, matrix_id: view.matrix.id },
-      body: {
-        selected_paper_ids: patch.selected_paper_ids ?? view.matrix.selected_paper_ids,
-        selected_experiment_ids: patch.selected_experiment_ids ?? view.matrix.selected_experiment_ids,
-        column_defs: patch.column_defs ?? view.matrix.column_defs,
-      },
-      throwOnError: true,
-    });
-    await refreshView(view.matrix.id);
+    const current = viewRef.current;
+    if (!current) return;
+    const body = {
+      selected_paper_ids: patch.selected_paper_ids ?? current.matrix.selected_paper_ids,
+      selected_experiment_ids: patch.selected_experiment_ids ?? current.matrix.selected_experiment_ids,
+      column_defs: patch.column_defs ?? current.matrix.column_defs,
+    };
+    applyView({ ...current, matrix: { ...current.matrix, ...body } });
+    try {
+      await putMatrixApiProjectsProjectIdMatrixMatrixIdPut({
+        path: { project_id: projectId, matrix_id: current.matrix.id },
+        body,
+        throwOnError: true,
+      });
+      await refreshView(current.matrix.id);
+    } catch (err) {
+      applyView(current);
+      setError(err instanceof Error ? err.message : "Could not save this change");
+    }
   }
 
+  // Each of these reads `viewRef.current`, not the `view` render variable,
+  // for the same reason `putMatrix` does: the ref reflects the latest
+  // optimistic state synchronously, so a rapid second click composes onto
+  // the first click's already-applied change instead of a stale snapshot.
   function toggleRow(kind: "paper" | "experiment", id: string) {
-    if (!view) return;
+    const current = viewRef.current;
+    if (!current) return;
     if (kind === "paper") {
-      const selected = view.matrix.selected_paper_ids.includes(id)
-        ? view.matrix.selected_paper_ids.filter((p) => p !== id)
-        : [...view.matrix.selected_paper_ids, id];
+      const selected = current.matrix.selected_paper_ids.includes(id)
+        ? current.matrix.selected_paper_ids.filter((p) => p !== id)
+        : [...current.matrix.selected_paper_ids, id];
       void putMatrix({ selected_paper_ids: selected });
     } else {
-      const selected = view.matrix.selected_experiment_ids.includes(id)
-        ? view.matrix.selected_experiment_ids.filter((e) => e !== id)
-        : [...view.matrix.selected_experiment_ids, id];
+      const selected = current.matrix.selected_experiment_ids.includes(id)
+        ? current.matrix.selected_experiment_ids.filter((e) => e !== id)
+        : [...current.matrix.selected_experiment_ids, id];
       void putMatrix({ selected_experiment_ids: selected });
     }
   }
 
   function addStandardColumn(column: (typeof STANDARD_COLUMNS)[number]) {
-    if (!view) return;
-    void putMatrix({ column_defs: [...view.matrix.column_defs, { ...column, kind: "standard" }] });
+    const current = viewRef.current;
+    if (!current) return;
+    void putMatrix({ column_defs: [...current.matrix.column_defs, { ...column, kind: "standard" }] });
   }
 
   function addCustomColumn() {
-    if (!view || !newColumnLabel.trim() || !newColumnQuery.trim()) return;
+    const current = viewRef.current;
+    if (!current || !newColumnLabel.trim() || !newColumnQuery.trim()) return;
     const columnKey = `custom_${Date.now()}`;
     const column: ColumnDef = { column_key: columnKey, label: newColumnLabel.trim(), kind: "custom", query: newColumnQuery.trim() };
-    void putMatrix({ column_defs: [...view.matrix.column_defs, column] });
+    void putMatrix({ column_defs: [...current.matrix.column_defs, column] });
     setNewColumnLabel("");
     setNewColumnQuery("");
   }
 
   function addUserColumn(label: string) {
-    if (!view || !label.trim()) return;
+    const current = viewRef.current;
+    if (!current || !label.trim()) return;
     const column: ColumnDef = { column_key: `user_${Date.now()}`, label: label.trim(), kind: "user" };
-    void putMatrix({ column_defs: [...view.matrix.column_defs, column] });
+    void putMatrix({ column_defs: [...current.matrix.column_defs, column] });
   }
 
   async function editCell(rowId: string, columnKey: string, value: string) {
-    if (!view) return;
-    await updateCellApiProjectsProjectIdMatrixMatrixIdCellsPatch({
-      path: { project_id: projectId, matrix_id: view.matrix.id },
-      body: { row_id: rowId, column_key: columnKey, value },
-      throwOnError: true,
-    });
-    await refreshView(view.matrix.id);
+    const current = viewRef.current;
+    if (!current) return;
+    try {
+      await updateCellApiProjectsProjectIdMatrixMatrixIdCellsPatch({
+        path: { project_id: projectId, matrix_id: current.matrix.id },
+        body: { row_id: rowId, column_key: columnKey, value },
+        throwOnError: true,
+      });
+      await refreshView(current.matrix.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this cell");
+    }
   }
 
   if (matrices.length === 0) {
+    if (error && !loaded) return <ErrorCard title="Could not load matrices" message={error} onRetry={() => void refreshMatrices()} />;
     return (
       <div className="matrix matrix--empty">
         <p className="matrix__empty-title">No matrix yet in this project.</p>
         <button type="button" className="btn btn--primary" onClick={() => void createNewMatrix()}>
           + New matrix
         </button>
+        {error && <ErrorCard title="Could not create a new matrix" message={error} onRetry={() => void createNewMatrix()} />}
       </div>
     );
   }
 
-  if (!view) return <p>Loading…</p>;
+  if (!view) {
+    if (error) {
+      return (
+        <ErrorCard
+          title="Could not load this matrix"
+          message={error}
+          onRetry={() => activeMatrixId && void refreshView(activeMatrixId)}
+        />
+      );
+    }
+    return <p>Loading…</p>;
+  }
 
   const cellByKey = new Map<string, MatrixCell>(view.cells.map((cell) => [cellKey(cell.row_id, cell.column_key), cell]));
   const availableStandardColumns = STANDARD_COLUMNS.filter(
@@ -166,6 +240,13 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
 
   return (
     <div className="matrix">
+      {error && (
+        <ErrorCard
+          title="Something went wrong"
+          message={error}
+          onRetry={() => activeMatrixId && void refreshView(activeMatrixId)}
+        />
+      )}
       <div className="matrix__toolbar">
         <select className="select" value={activeMatrixId ?? ""} onChange={(event) => setActiveMatrixId(event.target.value)}>
           {matrices.map((m) => (

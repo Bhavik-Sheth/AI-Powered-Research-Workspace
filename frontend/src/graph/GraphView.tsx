@@ -3,6 +3,7 @@ import type cytoscape from "cytoscape";
 import CytoscapeComponent from "react-cytoscapejs";
 import { getProjectGraphApiProjectsProjectIdGraphGet, type GraphEdge } from "@research-os/api-client";
 
+import { ErrorCard } from "../design/ErrorCard";
 import "./GraphView.css";
 import { categoryOf, colorFor, fillOpacityFor, LEGEND, nodesFromEdges, shapeFor } from "./nodeStyle";
 
@@ -84,15 +85,24 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
   const [selected, setSelected] = useState<{ id: string; rawId: string; nodeType: string; label: string; edges: GraphEdge[] } | null>(
     null,
   );
+  const [error, setError] = useState<string | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
 
-  useEffect(() => {
-    void (async () => {
+  async function load() {
+    setError(null);
+    try {
       const { data } = await getProjectGraphApiProjectsProjectIdGraphGet({ path: { project_id: projectId }, throwOnError: true });
       setEdges(data.edges);
       setPaperIds(data.paper_ids ?? {});
       setPaperTitles(data.paper_titles ?? {});
-    })();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load the graph");
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const nodeTypesPresent = useMemo(() => (edges ? [...new Set(nodesFromEdges(edges).map((n) => n.nodeType))] : []), [edges]);
@@ -120,7 +130,10 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
     setSelected({ id, rawId, nodeType, label, edges: nodeEdges });
   }
 
-  if (edges === null) return <p>Loading…</p>;
+  if (edges === null) {
+    if (error) return <ErrorCard title="Could not load the graph" message={error} onRetry={load} />;
+    return <p>Loading…</p>;
+  }
 
   if (edges.length === 0) {
     return (

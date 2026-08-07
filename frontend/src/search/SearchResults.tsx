@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addPaperApiProjectsProjectIdPapersPost,
   getResultApiResultsResultIdGet,
@@ -40,6 +40,12 @@ export function SearchResults({
   const [error, setError] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [addingId, setAddingId] = useState<string | null>(null);
+  // Aborts a still-in-flight search when a newer one starts, so a slower
+  // earlier response can never land after (and overwrite) a faster later
+  // one — the generated client's request `Options` extend `RequestInit`,
+  // so `signal` is a real, typed option here (Rules.md Code Generation:
+  // an AbortController is only preferred once this is verified).
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!initialResultId) return;
@@ -85,15 +91,23 @@ export function SearchResults({
 
   async function handleSearch() {
     if (!query.trim()) return;
+    // A previous search still in flight is superseded, not raced against:
+    // abort it so its response — if it ever arrives — can't land after
+    // this one and clobber it.
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await postSearchApiSearchPost({ body: { query }, throwOnError: true });
+      const { data } = await postSearchApiSearchPost({ body: { query }, signal: controller.signal, throwOnError: true });
+      if (controller.signal.aborted) return;
       setResult(data);
     } catch (err) {
+      if (controller.signal.aborted) return; // superseded by a newer search, not a real failure
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {
-      setLoading(false);
+      if (searchAbortRef.current === controller) setLoading(false);
     }
   }
 

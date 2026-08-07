@@ -43,6 +43,7 @@ export function NotesView({ projectId }: { projectId: string }) {
 
   const notesList = notesQuery.data ?? [];
   const selected = notesList.find((note) => note.id === selectedId) ?? null;
+  const isDirty = title !== savedTitle || body !== savedBody;
 
   const didAutoSelect = useRef(false);
   useEffect(() => {
@@ -52,7 +53,14 @@ export function NotesView({ projectId }: { projectId: string }) {
     }
   }, [notesList]);
 
+  /** Switches the selected note (or starts a new one). Discarding an
+   * in-progress edit needs the user's say-so first — a plain
+   * `window.confirm` rather than a new modal component, since this is the
+   * one call site that needs it (Rules.md rule of three). */
   function selectNote(note: Note | null) {
+    if (isDirty && !window.confirm("This note has unsaved changes. Switch and discard them?")) {
+      return;
+    }
     setSelectedId(note?.id ?? null);
     setTitle(note?.title ?? "");
     setBody(note?.body ?? "");
@@ -90,7 +98,6 @@ export function NotesView({ projectId }: { projectId: string }) {
   }
 
   const titleMissing = title.trim().length === 0;
-  const isDirty = title !== savedTitle || body !== savedBody;
   const saveDisabled = saving || titleMissing || !isDirty;
   const saveLabel = saving ? "Saving…" : !titleMissing && !isDirty ? "Saved" : "Save";
 

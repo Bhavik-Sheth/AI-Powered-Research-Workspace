@@ -47,18 +47,31 @@ export function useManuscriptPreview(tex: string, projectId: string, documentId:
   const [log, setLog] = useState("");
   const pdfUrlRef = useRef<string | null>(null);
   const generationRef = useRef(0);
+  // Set by the debounce-scheduling effect below whenever a compile+save is
+  // pending; cleared once it actually runs (naturally, via the timer, or
+  // via a flush). The `documentId`-only effect further down calls this on
+  // switch/unmount so an edit inside the debounce window is still sent to
+  // the server (flush) rather than silently dropped — it just isn't applied
+  // to this hook's own display state afterward (cancel), since the UI has
+  // already moved on to a different document (Bug Fix Plan Phase 3.2).
+  const flushRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (documentId === null) return;
+    if (documentId === null) {
+      flushRef.current = null;
+      return;
+    }
     if (isManuscriptBodyEmpty(tex)) {
       setStatus("empty");
+      flushRef.current = null;
       return;
     }
     let cancelled = false;
-    const timer = window.setTimeout(() => {
+
+    const runCompile = () => {
       void (async () => {
         const generation = ++generationRef.current;
-        setStatus("compiling");
+        if (!cancelled) setStatus("compiling");
         try {
           const { data } = await updateDocumentApiProjectsProjectIdDocumentsDocumentIdPut({
             path: { project_id: projectId, document_id: documentId },
@@ -87,13 +100,37 @@ export function useManuscriptPreview(tex: string, projectId: string, documentId:
           }
         }
       })();
+    };
+
+    const timer = window.setTimeout(() => {
+      flushRef.current = null;
+      runCompile();
     }, DEBOUNCE_MS);
+
+    flushRef.current = () => {
+      window.clearTimeout(timer);
+      flushRef.current = null;
+      runCompile();
+    };
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
   }, [tex, projectId, documentId, title]);
+
+  // Flush (not merely cancel) a pending compile+save when the open document
+  // changes or this hook's owner unmounts. Deliberately keyed on
+  // `documentId` alone, not the effect above's full dependency list — a
+  // keystroke (which changes `tex`) must still debounce normally; only an
+  // actual document switch (or unmount) should force the pending save out
+  // early (Bug Fix Plan Phase 3.2: flush-then-cancel, not cancel-only).
+  useEffect(() => {
+    return () => {
+      flushRef.current?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId]);
 
   useEffect(
     () => () => {

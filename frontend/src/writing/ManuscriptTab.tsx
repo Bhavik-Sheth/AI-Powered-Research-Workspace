@@ -15,9 +15,20 @@ import {
 import { setCitationFindings } from "./citationDecorations";
 import { insertAtCursor, LatexSourceEditor } from "./LatexSourceEditor";
 import "../design/buttons.css";
+import { ErrorCard } from "../design/ErrorCard";
 import "./ManuscriptTab.css";
 import { renderMermaidToSvg } from "./renderMermaid";
 import { useManuscriptPreview } from "./useManuscriptPreview";
+
+/** One error surface for the whole tab — editor content is never discarded
+ * on failure (MODULES.md Manuscript Editor), so `retry` always redoes the
+ * exact failed action rather than reloading (which could otherwise clobber
+ * an in-progress edit with stale server state). */
+interface ManuscriptError {
+  title: string;
+  message: string;
+  retry: () => void;
+}
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const STARTER_TEX = "\\documentclass{article}\n\\begin{document}\n\n\\end{document}\n";
@@ -54,21 +65,39 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   // clean draft doesn't read as a dead button (Phase 4.2).
   const [findings, setFindings] = useState<CitationFinding[] | null>(null);
   const [checkingCitations, setCheckingCitations] = useState(false);
+  const [error, setError] = useState<ManuscriptError | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const dirtyRef = useRef(false);
+  // Mirror the latest `tex` / active document so `flushAutosave` — called
+  // from `openDraft` (before switching) and from the unmount cleanup below
+  // — always sees the pre-switch values even though it can't rely on this
+  // render's `tex`/`active` after `setActiveId`/`setTex` have been called.
+  const texRef = useRef(tex);
+  texRef.current = tex;
 
   const active = documents?.find((d) => d.id === activeId) ?? null;
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const preview = useManuscriptPreview(tex, projectId, activeId, active?.title ?? "");
 
   async function refresh(selectId?: string) {
-    const { data } = await listDocumentsApiProjectsProjectIdDocumentsGet({ path: { project_id: projectId }, throwOnError: true });
-    setDocuments(data);
-    const next = selectId ?? activeId ?? data[0]?.id ?? null;
-    setActiveId(next);
-    const doc = data.find((d) => d.id === next);
-    setTex(doc?.body ?? "");
+    try {
+      const { data } = await listDocumentsApiProjectsProjectIdDocumentsGet({ path: { project_id: projectId }, throwOnError: true });
+      setDocuments(data);
+      const next = selectId ?? activeId ?? data[0]?.id ?? null;
+      setActiveId(next);
+      const doc = data.find((d) => d.id === next);
+      setTex(doc?.body ?? "");
+      setError(null);
+    } catch (err) {
+      setError({
+        title: "Could not load drafts",
+        message: err instanceof Error ? err.message : "Could not load drafts",
+        retry: () => void refresh(selectId),
+      });
+    }
   }
 
   useEffect(() => {
@@ -76,7 +105,59 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  /** Saves `doc`'s pending `nextTex` right now, bypassing the debounce timer
+   * — used both by the timer itself and by a flush. Only clears `dirtyRef`
+   * on success, so a failed save is retried by the next flush/switch rather
+   * than being silently treated as clean (Bug Fix Plan Phase 3.1/3.2). */
+  async function autosave(doc: Document, nextTex: string) {
+    try {
+      await updateDocumentApiProjectsProjectIdDocumentsDocumentIdPut({
+        path: { project_id: projectId, document_id: doc.id },
+        body: { title: doc.title, tex: nextTex },
+        throwOnError: true,
+      });
+      dirtyRef.current = false;
+      setDocuments((prev) => prev?.map((d) => (d.id === doc.id ? { ...d, body: nextTex } : d)) ?? prev);
+      setError(null);
+    } catch (err) {
+      setError({
+        title: "Could not save this draft",
+        message: err instanceof Error ? err.message : "Could not save this draft",
+        retry: () => void autosave(doc, nextTex),
+      });
+    }
+  }
+
+  function scheduleAutosave(doc: Document, nextTex: string) {
+    dirtyRef.current = true;
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void autosave(doc, nextTex);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  /** Runs a still-pending autosave immediately instead of letting it be
+   * dropped — called before switching the open draft and on unmount, so an
+   * edit made inside the ~1.2s debounce window is never silently lost
+   * (Bug Fix Plan Phase 3.2). */
+  function flushAutosave() {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (dirtyRef.current && activeRef.current) {
+      void autosave(activeRef.current, texRef.current);
+    }
+  }
+
+  useEffect(() => {
+    return () => flushAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function openDraft(doc: Document) {
+    flushAutosave();
     setActiveId(doc.id);
     setTex(doc.body);
     setFindings(null);
@@ -84,31 +165,27 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
   }
 
   async function createDraft() {
-    const { data } = await createDocumentApiProjectsProjectIdDocumentsPost({
-      path: { project_id: projectId },
-      body: { title: `Untitled draft ${(documents?.length ?? 0) + 1}`, tex: STARTER_TEX },
-      throwOnError: true,
-    });
-    const doc = isCompileResult(data) ? data.document : data;
-    await refresh(doc.id);
+    try {
+      const { data } = await createDocumentApiProjectsProjectIdDocumentsPost({
+        path: { project_id: projectId },
+        body: { title: `Untitled draft ${(documents?.length ?? 0) + 1}`, tex: STARTER_TEX },
+        throwOnError: true,
+      });
+      const doc = isCompileResult(data) ? data.document : data;
+      await refresh(doc.id);
+    } catch (err) {
+      setError({
+        title: "Could not create a new draft",
+        message: err instanceof Error ? err.message : "Could not create a new draft",
+        retry: () => void createDraft(),
+      });
+    }
   }
 
   function onSourceChange(nextTex: string) {
     setTex(nextTex);
-    dirtyRef.current = true;
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => void autosave(nextTex), AUTOSAVE_DEBOUNCE_MS);
-  }
-
-  async function autosave(nextTex: string) {
     if (!active) return;
-    dirtyRef.current = false;
-    await updateDocumentApiProjectsProjectIdDocumentsDocumentIdPut({
-      path: { project_id: projectId, document_id: active.id },
-      body: { title: active.title, tex: nextTex },
-      throwOnError: true,
-    });
-    setDocuments((prev) => prev?.map((d) => (d.id === active.id ? { ...d, body: nextTex } : d)) ?? prev);
+    scheduleAutosave(active, nextTex);
   }
 
   async function uploadAsset(filename: string, blob: Blob) {
@@ -122,22 +199,45 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
     insertAtCursor(viewRef.current, `\\includegraphics{${relativeToAssets}}\n`);
   }
 
+  async function attemptImageUpload(file: File) {
+    setError(null);
+    try {
+      await uploadAsset(file.name, file);
+    } catch (err) {
+      setError({
+        title: "Could not upload this image",
+        message: err instanceof Error ? err.message : "Could not upload this image",
+        retry: () => void attemptImageUpload(file),
+      });
+    }
+  }
+
   async function onPickImage(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    await uploadAsset(file.name, file);
+    await attemptImageUpload(file);
   }
 
   async function insertMermaidDiagram() {
-    const svg = await renderMermaidToSvg(mermaidSource);
-    await uploadAsset(`diagram-${Date.now()}.svg`, new Blob([svg], { type: "image/svg+xml" }));
-    setShowMermaidPanel(false);
+    setError(null);
+    try {
+      const svg = await renderMermaidToSvg(mermaidSource);
+      await uploadAsset(`diagram-${Date.now()}.svg`, new Blob([svg], { type: "image/svg+xml" }));
+      setShowMermaidPanel(false);
+    } catch (err) {
+      setError({
+        title: "Could not insert this diagram",
+        message: err instanceof Error ? err.message : "Could not insert this diagram",
+        retry: () => void insertMermaidDiagram(),
+      });
+    }
   }
 
   async function checkCitations() {
     if (!active) return;
     setCheckingCitations(true);
+    setError(null);
     try {
       const { data } = await checkCitationsApiProjectsProjectIdDocumentsDocumentIdCheckCitationsPost({
         path: { project_id: projectId, document_id: active.id },
@@ -145,22 +245,40 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
       });
       setFindings(data.findings);
       setCitationFindings(viewRef.current, data.findings);
+    } catch (err) {
+      setError({
+        title: "Could not check citations",
+        message: err instanceof Error ? err.message : "Could not check citations",
+        retry: () => void checkCitations(),
+      });
     } finally {
       setCheckingCitations(false);
     }
   }
 
   async function downloadBibtex() {
-    const { data } = await exportBibtexApiProjectsProjectIdBibtexGet({ path: { project_id: projectId }, throwOnError: true });
-    const url = URL.createObjectURL(new Blob([data as string], { type: "text/plain" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "references.bib";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    setError(null);
+    try {
+      const { data } = await exportBibtexApiProjectsProjectIdBibtexGet({ path: { project_id: projectId }, throwOnError: true });
+      const url = URL.createObjectURL(new Blob([data as string], { type: "text/plain" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "references.bib";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError({
+        title: "Could not export references",
+        message: err instanceof Error ? err.message : "Could not export references",
+        retry: () => void downloadBibtex(),
+      });
+    }
   }
 
-  if (documents === null) return <p>Loading…</p>;
+  if (documents === null) {
+    if (error) return <ErrorCard title={error.title} message={error.message} onRetry={error.retry} />;
+    return <p>Loading…</p>;
+  }
 
   return (
     <div className="writing">
@@ -190,6 +308,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
           <button type="button" className="btn btn--primary" onClick={() => void createDraft()}>
             + New draft
           </button>
+          {error && <ErrorCard title={error.title} message={error.message} onRetry={error.retry} />}
         </div>
       ) : (
         <div className="writing__editor">
@@ -211,6 +330,8 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
               </button>
             </div>
           </header>
+
+          {error && <ErrorCard title={error.title} message={error.message} onRetry={error.retry} />}
 
           {showMermaidPanel && (
             <div className="writing__mermaid-panel">

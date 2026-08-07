@@ -5,6 +5,7 @@ import {
   type NotebookServerStatus,
 } from "@research-os/api-client";
 
+import { ErrorCard } from "../design/ErrorCard";
 import type { ProjectSocket } from "../state/useProjectSocket";
 import "./LiveNotebookPanel.css";
 
@@ -42,6 +43,10 @@ export function LiveNotebookPanel({
   const [status, setStatus] = useState<NotebookServerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [closedReason, setClosedReason] = useState<"manual" | "ceiling" | null>(null);
+  // Bumped by the error card's Retry — included in the start effect's deps
+  // below so Retry re-runs the exact same start-on-mount lifecycle rather
+  // than needing a second, parallel way to (re)start the server.
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +75,7 @@ export function LiveNotebookPanel({
         throwOnError: true,
       });
     };
-  }, [experimentId]);
+  }, [experimentId, retryKey]);
 
   useEffect(() => {
     return socket.subscribe((message) => {
@@ -82,35 +87,43 @@ export function LiveNotebookPanel({
   }, [socket, experimentId]);
 
   async function handleStopClick() {
-    await notebookServerActionApiExperimentsExperimentIdNotebookServerPost({
-      path: { experiment_id: experimentId },
-      body: { action: "stop" },
-      throwOnError: true,
-    });
-    setStatus(null);
-    setClosedReason("manual");
+    try {
+      await notebookServerActionApiExperimentsExperimentIdNotebookServerPost({
+        path: { experiment_id: experimentId },
+        body: { action: "stop" },
+        throwOnError: true,
+      });
+      setStatus(null);
+      setClosedReason("manual");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not stop the live notebook. Try again.");
+    }
   }
 
   async function handleReopen() {
     setClosedReason(null);
-    const { data } = await getNotebookServerApiExperimentsExperimentIdNotebookServerGet({
-      path: { experiment_id: experimentId },
-      throwOnError: true,
-    });
-    if (data.state === "stopped") {
-      const { data: started } = await notebookServerActionApiExperimentsExperimentIdNotebookServerPost({
+    try {
+      const { data } = await getNotebookServerApiExperimentsExperimentIdNotebookServerGet({
         path: { experiment_id: experimentId },
-        body: { action: "start" },
         throwOnError: true,
       });
-      setStatus(started);
-    } else {
-      setStatus(data);
+      if (data.state === "stopped") {
+        const { data: started } = await notebookServerActionApiExperimentsExperimentIdNotebookServerPost({
+          path: { experiment_id: experimentId },
+          body: { action: "start" },
+          throwOnError: true,
+        });
+        setStatus(started);
+      } else {
+        setStatus(data);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reopen the live notebook. Try again.");
     }
   }
 
   if (error) {
-    return <p className="live-notebook__error">{error}</p>;
+    return <ErrorCard title="Live notebook error" message={error} onRetry={() => setRetryKey((key) => key + 1)} />;
   }
 
   if (closedReason === "ceiling") {

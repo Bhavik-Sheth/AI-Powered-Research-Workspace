@@ -7,6 +7,7 @@ import {
   type Experiment,
 } from "@research-os/api-client";
 
+import { ErrorCard } from "../design/ErrorCard";
 import type { ProjectSocket } from "../state/useProjectSocket";
 import { ApprovalPrompt, type RunSpec } from "./ApprovalPrompt";
 import "./ExperimentsBoard.css";
@@ -136,7 +137,9 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
   // time: opening a second live notebook server per card isn't useful (each
   // is its own long-lived container) and keeps the lifecycle legible.
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [measuredRunError, setMeasuredRunError] = useState<string | null>(null);
+  const [measuredRunError, setMeasuredRunError] = useState<{ message: string; retry: () => void } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function toggleExpand(experimentId: string) {
     setExpandedId((prev) => (prev === experimentId ? null : experimentId));
@@ -153,24 +156,34 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
    * failure text (that component stays unchanged). */
   async function handleRecordMeasuredRun(experimentId: string) {
     setMeasuredRunError(null);
-    const { data: serverStatus } = await getNotebookServerApiExperimentsExperimentIdNotebookServerGet({
-      path: { experiment_id: experimentId },
-      throwOnError: true,
-    });
-    if (serverStatus.state !== "stopped") {
-      setMeasuredRunError("Stop the live notebook before running a measured pass.");
-      return;
+    try {
+      const { data: serverStatus } = await getNotebookServerApiExperimentsExperimentIdNotebookServerGet({
+        path: { experiment_id: experimentId },
+        throwOnError: true,
+      });
+      if (serverStatus.state !== "stopped") {
+        setMeasuredRunError({
+          message: "Stop the live notebook before running a measured pass.",
+          retry: () => void handleRecordMeasuredRun(experimentId),
+        });
+        return;
+      }
+      const { data } = await getRunSpecApiExperimentsExperimentIdRunSpecGet({
+        path: { experiment_id: experimentId },
+        throwOnError: true,
+      });
+      const code =
+        data.notebook.cells
+          .filter((cell) => cell.cell_type === "code")
+          .map((cell) => cell.source)
+          .join("\n\n# ---\n\n") || "(empty notebook)";
+      setPendingApproval({ experimentId, code, spec: data.run_spec });
+    } catch (err) {
+      setMeasuredRunError({
+        message: err instanceof Error ? err.message : "Could not prepare this run",
+        retry: () => void handleRecordMeasuredRun(experimentId),
+      });
     }
-    const { data } = await getRunSpecApiExperimentsExperimentIdRunSpecGet({
-      path: { experiment_id: experimentId },
-      throwOnError: true,
-    });
-    const code =
-      data.notebook.cells
-        .filter((cell) => cell.cell_type === "code")
-        .map((cell) => cell.source)
-        .join("\n\n# ---\n\n") || "(empty notebook)";
-    setPendingApproval({ experimentId, code, spec: data.run_spec });
   }
 
   useEffect(() => {
@@ -189,12 +202,19 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
   }, [socket]);
 
   async function refresh() {
-    const { data } = await listExperimentsApiProjectsProjectIdExperimentsGet({
-      path: { project_id: projectId },
-      throwOnError: true,
-    });
-    setExperiments(data);
-    setLoading(false);
+    try {
+      const { data } = await listExperimentsApiProjectsProjectIdExperimentsGet({
+        path: { project_id: projectId },
+        throwOnError: true,
+      });
+      setExperiments(data);
+      setLoaded(true);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load experiments");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -205,6 +225,7 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
   async function handleCreate() {
     if (!newTitle.trim()) return;
     setCreating(true);
+    setError(null);
     try {
       await createExperimentApiProjectsProjectIdExperimentsPost({
         path: { project_id: projectId },
@@ -213,15 +234,19 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
       });
       setNewTitle("");
       await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create this experiment");
     } finally {
       setCreating(false);
     }
   }
 
   if (loading) return <p>Loading…</p>;
+  if (error && !loaded) return <ErrorCard title="Could not load experiments" message={error} onRetry={refresh} />;
 
   return (
     <div className="experiments">
+      {error && loaded && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
       <div className="experiments__header">
         <div>
           <h1 className="experiments__title">Experiments</h1>
@@ -290,7 +315,13 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
                               runs the whole notebook fresh, in an isolated container, for a citable result
                             </span>
                           </div>
-                          {measuredRunError && <p className="experiments__measured-error">{measuredRunError}</p>}
+                          {measuredRunError && (
+                            <ErrorCard
+                              title="Could not start the measured run"
+                              message={measuredRunError.message}
+                              onRetry={measuredRunError.retry}
+                            />
+                          )}
                         </div>
                       )}
                     </div>

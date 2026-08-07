@@ -39,42 +39,47 @@ export function Dashboard({
   onResume: (tabId: string) => void;
 }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    const { data } = await getDashboardApiProjectsProjectIdDashboardGet({
-      path: { project_id: projectId },
-      throwOnError: true,
-    });
-    setSummary(data);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    setError(null);
+    try {
       const { data } = await getDashboardApiProjectsProjectIdDashboardGet({
         path: { project_id: projectId },
         throwOnError: true,
       });
-      if (!cancelled) setSummary(data);
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setSummary(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load the dashboard");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function retry(paperId: string) {
-    await reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost({
-      path: { project_id: projectId, paper_id: paperId },
-      throwOnError: true,
-    });
-    await refresh();
+    try {
+      await reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost({
+        path: { project_id: projectId, paper_id: paperId },
+        throwOnError: true,
+      });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not retry processing this paper");
+    }
   }
 
   const resumable = tabs.filter((t) => t.kind !== "dashboard");
 
+  if (error && !summary) return <ErrorCard title="Could not load the dashboard" message={error} onRetry={refresh} />;
+
   return (
     <div className="dashboard">
       <h1 className="dashboard__title">{projectName}</h1>
+
+      {error && summary && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
 
       <div className="dashboard__stats">
         <div className="dashboard__stat">

@@ -7,6 +7,7 @@ import {
   type Paper,
 } from "@research-os/api-client";
 
+import { ErrorCard } from "../design/ErrorCard";
 import "./LibraryView.css";
 
 type Relevance = "relevant" | "somewhat" | "not" | "unset";
@@ -47,14 +48,21 @@ export function LibraryView({
 }) {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    const { data } = await listProjectPapersApiProjectsProjectIdPapersGet({
-      path: { project_id: projectId },
-      throwOnError: true,
-    });
-    setEntries(data);
-    setLoading(false);
+    try {
+      const { data } = await listProjectPapersApiProjectsProjectIdPapersGet({
+        path: { project_id: projectId },
+        throwOnError: true,
+      });
+      setEntries(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load the library");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -63,26 +71,38 @@ export function LibraryView({
   }, [projectId]);
 
   async function setRelevance(paperId: string, relevance: Relevance) {
-    await patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch({
-      path: { project_id: projectId, paper_id: paperId },
-      body: { relevance },
-      throwOnError: true,
-    });
-    await refresh();
+    try {
+      await patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch({
+        path: { project_id: projectId, paper_id: paperId },
+        body: { relevance },
+        throwOnError: true,
+      });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update relevance for this paper");
+    }
   }
 
   async function retry(paperId: string) {
-    await reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost({
-      path: { project_id: projectId, paper_id: paperId },
-      throwOnError: true,
-    });
-    await refresh();
+    try {
+      await reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost({
+        path: { project_id: projectId, paper_id: paperId },
+        throwOnError: true,
+      });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not retry processing this paper");
+    }
   }
 
   if (loading) return <p>Loading…</p>;
+  if (error && entries.length === 0) {
+    return <ErrorCard title="Could not load the library" message={error} onRetry={refresh} />;
+  }
 
   return (
     <div className="library">
+      {error && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
       {entries.map(({ paper, relevance }) => (
         <div className="library__row" key={paper.id}>
           <span className="library__title" onClick={() => onOpenPaper(paper.id, paper.title)} style={{ cursor: "pointer" }}>

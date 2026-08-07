@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getInterestProfileApiProjectsProjectIdInterestProfileGet,
   putInterestProfileApiProjectsProjectIdInterestProfilePut,
@@ -67,6 +67,10 @@ export function InterestProfileForm({ projectId }: { projectId: string }) {
   const [profile, setProfile] = useState<InterestProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The exact change a failed save attempted — `profile` itself is rolled
+  // back to `previous` on failure (below), so Retry needs this to redo the
+  // same edit rather than harmlessly re-saving the already-rolled-back value.
+  const failedSaveRef = useRef<InterestProfile | null>(null);
 
   async function load() {
     setError(null);
@@ -87,6 +91,10 @@ export function InterestProfileForm({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   async function save(next: InterestProfile) {
+    // Optimistic update — kept only if the PUT below actually succeeds; a
+    // failure rolls the form back to `previous` so the UI never shows a
+    // change that didn't persist.
+    const previous = profile;
     setProfile(next);
     setSaving(true);
     setError(null);
@@ -96,7 +104,10 @@ export function InterestProfileForm({ projectId }: { projectId: string }) {
         body: next,
         throwOnError: true,
       });
+      failedSaveRef.current = null;
     } catch (err) {
+      setProfile(previous);
+      failedSaveRef.current = next;
       setError(err instanceof Error ? err.message : "Could not save the interest profile");
     } finally {
       setSaving(false);
@@ -125,7 +136,13 @@ export function InterestProfileForm({ projectId }: { projectId: string }) {
         onChange={(keywords) => void save({ ...profile, keywords })}
       />
       {saving && <p className="interest-profile__status">Saving…</p>}
-      {error && <ErrorCard title="Could not save the interest profile" message={error} onRetry={() => void save(profile)} />}
+      {error && (
+        <ErrorCard
+          title="Could not save the interest profile"
+          message={error}
+          onRetry={() => void save(failedSaveRef.current ?? profile)}
+        />
+      )}
     </div>
   );
 }
