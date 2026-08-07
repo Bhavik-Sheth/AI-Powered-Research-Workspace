@@ -80,3 +80,11 @@
   --shell-column-gap: 12px;
   --panel-shadow: 0 1px 4px oklch(26% 0.079 210 / 0.16);
 }
+
+/* Global focus ring (UI_DESIGN.md §6 "the mock already sets a global
+   :focus-visible ... keep it") — every interactive element, everywhere. */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

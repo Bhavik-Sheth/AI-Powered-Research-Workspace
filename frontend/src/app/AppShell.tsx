@@ -151,6 +151,24 @@ const WRITING_TAB: TabRef = { id: "writing", kind: "writing", params: {}, label:
 const READINESS_TAB: TabRef = { id: "readiness", kind: "readiness", params: {}, label: "Readiness" };
 const SETTINGS_TAB: TabRef = { id: "settings", kind: "settings", params: {}, label: "Settings" };
 
+// The one place a nav row's label maps to the tab it opens — both the click
+// handler and the active-row highlight (UI_DESIGN.md §2 "Row states") read
+// from this instead of each keeping its own copy of the mapping.
+const NAV_ITEM_TABS: Record<string, TabRef> = {
+  Dashboard: DASHBOARD_TAB,
+  Papers: LIBRARY_TAB,
+  Notes: NOTES_TAB,
+  Experiments: EXPERIMENTS_TAB,
+  Matrix: MATRIX_TAB,
+  Graph: GRAPH_TAB,
+  Feed: FEED_TAB,
+  Writing: WRITING_TAB,
+};
+
+// Reading-heavy screens dim the frame's blueprint grid behind them
+// (UI_DESIGN.md §7 / §9.2 item H).
+const QUIET_GRID_KINDS = new Set<TabRef["kind"]>(["reader", "writing", "notes"]);
+
 /** Picks up where the user left off (Phase 1.8 sign-off): most-recently-
  * opened project, or the first project if none has been opened yet. */
 function ProjectGate({ children }: { children: (projectId: string) => React.ReactNode }) {
@@ -308,6 +326,8 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     .map((tab) => (tab.kind === "reader" ? tab.params?.paperId : undefined))
     .filter((paperId): paperId is string => Boolean(paperId));
 
+  const activeTabKind = tabs.find((tab) => tab.id === activeTab)?.kind;
+
   function renderTabContent(tab: TabRef) {
     switch (tab.kind) {
       case "dashboard":
@@ -365,7 +385,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   }
 
   return (
-    <div className="app-frame">
+    <div className={`app-frame ${activeTabKind && QUIET_GRID_KINDS.has(activeTabKind) ? "app-frame--quiet-grid" : ""}`}>
       <header className="top-bar">
         Research Companion OS
         <ProjectSwitcher projectId={projectId} onSwitch={onSwitchProject} />
@@ -383,18 +403,9 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                   {group.items.map((item) => (
                     <li
                       key={item}
-                      className="left-nav__item"
+                      className={`left-nav__item ${NAV_ITEM_TABS[item].kind === activeTabKind ? "left-nav__item--active" : ""}`}
                       style={{ cursor: "pointer" }}
-                      onClick={() => {
-                        if (item === "Dashboard") openTab(DASHBOARD_TAB);
-                        if (item === "Papers") openTab(LIBRARY_TAB);
-                        if (item === "Notes") openTab(NOTES_TAB);
-                        if (item === "Experiments") openTab(EXPERIMENTS_TAB);
-                        if (item === "Matrix") openTab(MATRIX_TAB);
-                        if (item === "Graph") openTab(GRAPH_TAB);
-                        if (item === "Feed") openTab(FEED_TAB);
-                        if (item === "Writing") openTab(WRITING_TAB);
-                      }}
+                      onClick={() => openTab(NAV_ITEM_TABS[item])}
                     >
                       {item}
                     </li>
@@ -402,13 +413,25 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                 </ul>
               </div>
             ))}
-            <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(SEARCH_TAB)}>
+            <div
+              className={`left-nav__item ${activeTabKind === SEARCH_TAB.kind ? "left-nav__item--active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => openTab(SEARCH_TAB)}
+            >
               Search
             </div>
-            <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(SETTINGS_TAB)}>
+            <div
+              className={`left-nav__item ${activeTabKind === SETTINGS_TAB.kind ? "left-nav__item--active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => openTab(SETTINGS_TAB)}
+            >
               Settings
             </div>
-            <div className="left-nav__item" style={{ cursor: "pointer" }} onClick={() => openTab(READINESS_TAB)}>
+            <div
+              className={`left-nav__item ${activeTabKind === READINESS_TAB.kind ? "left-nav__item--active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => openTab(READINESS_TAB)}
+            >
               Readiness
             </div>
           </nav>

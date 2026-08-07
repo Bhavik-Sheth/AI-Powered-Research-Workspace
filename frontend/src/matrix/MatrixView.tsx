@@ -15,6 +15,7 @@ import {
   type MatrixView as MatrixViewData,
 } from "@research-os/api-client";
 
+import "../design/buttons.css";
 import "./MatrixView.css";
 
 const STANDARD_COLUMNS: { column_key: string; label: string }[] = [
@@ -149,7 +150,7 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
     return (
       <div className="matrix matrix--empty">
         <p className="matrix__empty-title">No matrix yet in this project.</p>
-        <button type="button" onClick={() => void createNewMatrix()}>
+        <button type="button" className="btn btn--primary" onClick={() => void createNewMatrix()}>
           + New matrix
         </button>
       </div>
@@ -166,17 +167,17 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
   return (
     <div className="matrix">
       <div className="matrix__toolbar">
-        <select value={activeMatrixId ?? ""} onChange={(event) => setActiveMatrixId(event.target.value)}>
+        <select className="select" value={activeMatrixId ?? ""} onChange={(event) => setActiveMatrixId(event.target.value)}>
           {matrices.map((m) => (
             <option key={m.id} value={m.id}>
               {m.name}
             </option>
           ))}
         </select>
-        <button type="button" onClick={() => void createNewMatrix()}>
+        <button type="button" className="btn btn--primary" onClick={() => void createNewMatrix()}>
           + New matrix
         </button>
-        <button type="button" onClick={() => setShowPicker((prev) => !prev)}>
+        <button type="button" className="btn btn--outline" onClick={() => setShowPicker((prev) => !prev)}>
           {showPicker ? "Hide row/column editor" : "Edit rows & columns"}
         </button>
       </div>
@@ -212,7 +213,7 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
           <div className="matrix__picker-section">
             <h4>Columns</h4>
             {availableStandardColumns.map((column) => (
-              <button key={column.column_key} type="button" onClick={() => addStandardColumn(column)}>
+              <button key={column.column_key} type="button" className="btn btn--outline btn--inline" onClick={() => addStandardColumn(column)}>
                 + {column.label}
               </button>
             ))}
@@ -223,7 +224,7 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
                 value={newColumnQuery}
                 onChange={(event) => setNewColumnQuery(event.target.value)}
               />
-              <button type="button" onClick={addCustomColumn}>
+              <button type="button" className="btn btn--outline btn--inline" onClick={addCustomColumn}>
                 + Custom column
               </button>
             </div>
@@ -286,6 +287,7 @@ function UserColumnAdder({ onAdd }: { onAdd: (label: string) => void }) {
       <input placeholder="User column label" value={label} onChange={(event) => setLabel(event.target.value)} />
       <button
         type="button"
+        className="btn btn--outline btn--inline"
         onClick={() => {
           onAdd(label);
           setLabel("");
@@ -320,6 +322,7 @@ function MatrixCellView({
         <div className="matrix__cell-edit-actions">
           <button
             type="button"
+            className="btn btn--primary btn--inline"
             onClick={() => {
               onEdit(draft);
               setEditing(false);
@@ -327,7 +330,7 @@ function MatrixCellView({
           >
             Save
           </button>
-          <button type="button" onClick={() => setEditing(false)}>
+          <button type="button" className="btn btn--outline btn--inline" onClick={() => setEditing(false)}>
             Cancel
           </button>
         </div>

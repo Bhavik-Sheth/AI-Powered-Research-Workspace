@@ -1,0 +1,52 @@
+/* Shared button/select chrome (UI_DESIGN.md §1 Shape, elevation, spacing).
+   `.btn` carries the shared height/radius/padding/font every button shares;
+   `.btn--primary`/`.btn--outline` are the two color treatments; `.btn--inline`
+   is the smaller in-context variant (e.g. "Find related", cell Save/Cancel).
+   `.select` mirrors `frontend/src/app/AppShell.css`'s `.top-bar__switcher` —
+   the one existing convention for a styled `<select>` in this codebase. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-button);
+  font: 700 12px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn--outline {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.btn--inline {
+  height: auto;
+  padding: 6px 12px;
+  font: 700 11px var(--font-ui);
+}
+
+.select {
+  font: 600 12px var(--font-ui);
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  padding: 3px 8px;
+  cursor: pointer;
+}

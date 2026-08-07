@@ -14,6 +14,7 @@ import {
 
 import { setCitationFindings } from "./citationDecorations";
 import { insertAtCursor, LatexSourceEditor } from "./LatexSourceEditor";
+import "../design/buttons.css";
 import "./ManuscriptTab.css";
 import { renderMermaidToSvg } from "./renderMermaid";
 import { useManuscriptPreview } from "./useManuscriptPreview";
@@ -178,7 +179,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
             </span>
           </button>
         ))}
-        <button type="button" className="writing__new-draft" onClick={() => void createDraft()}>
+        <button type="button" className="writing__new-draft btn btn--primary" onClick={() => void createDraft()}>
           + New draft
         </button>
       </aside>
@@ -186,7 +187,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
       {!active ? (
         <div className="writing__empty">
           <p className="writing__empty-title">No drafts yet in this project.</p>
-          <button type="button" onClick={() => void createDraft()}>
+          <button type="button" className="btn btn--primary" onClick={() => void createDraft()}>
             + New draft
           </button>
         </div>
@@ -196,16 +197,16 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
             <h2 className="writing__editor-title">{active.title}</h2>
             <div className="writing__toolbar">
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => void onPickImage(e)} />
-              <button type="button" onClick={() => fileInputRef.current?.click()}>
+              <button type="button" className="btn btn--outline" onClick={() => fileInputRef.current?.click()}>
                 + Image
               </button>
-              <button type="button" onClick={() => setShowMermaidPanel((prev) => !prev)}>
+              <button type="button" className="btn btn--outline" onClick={() => setShowMermaidPanel((prev) => !prev)}>
                 + Mermaid
               </button>
-              <button type="button" disabled={checkingCitations} onClick={() => void checkCitations()}>
+              <button type="button" className="btn btn--outline" disabled={checkingCitations} onClick={() => void checkCitations()}>
                 {checkingCitations ? "Checking…" : "Check citations"}
               </button>
-              <button type="button" onClick={() => void downloadBibtex()}>
+              <button type="button" className="btn btn--outline" onClick={() => void downloadBibtex()}>
                 Export BibTeX
               </button>
             </div>
@@ -214,7 +215,7 @@ export function ManuscriptTab({ projectId }: { projectId: string }) {
           {showMermaidPanel && (
             <div className="writing__mermaid-panel">
               <textarea value={mermaidSource} onChange={(e) => setMermaidSource(e.target.value)} rows={4} />
-              <button type="button" onClick={() => void insertMermaidDiagram()}>
+              <button type="button" className="btn btn--primary" onClick={() => void insertMermaidDiagram()}>
                 Insert diagram
               </button>
             </div>

@@ -9,9 +9,22 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--frame-bg);
+  background-color: var(--frame-bg);
   border-radius: var(--radius-frame);
+  box-shadow: 0 20px 60px oklch(20% 0.08 225 / 0.35);
   overflow: hidden;
+  /* Blueprint grid: two 1px-line gradients at the 24px frame unit. The color
+     is the one thing `.app-frame--quiet-grid` changes (UI_DESIGN.md §7 / §9.2
+     item H — the grid recedes behind sustained reading). */
+  --frame-grid-color: var(--frame-grid);
+  background-image:
+    linear-gradient(to right, var(--frame-grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--frame-grid-color) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.app-frame--quiet-grid {
+  --frame-grid-color: var(--frame-grid-quiet);
 }
 
 .top-bar {
@@ -117,13 +130,39 @@ body {
 }
 
 .left-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px 8px 11px;
   margin: 0 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: oklch(35% 0.055 210);
   border-left: 3px solid transparent;
   list-style: none;
+}
+
+.left-nav__item::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: oklch(50% 0.055 210 / 0.35);
+  flex: none;
+}
+
+/* Active row (UI_DESIGN.md §2 "Row states") — the one nav row matching the
+   currently open tab's kind. */
+.left-nav__item--active {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-tint-12);
+  border-radius: 0 6px 6px 0;
+  font-weight: 700;
+  color: oklch(20% 0.055 210);
+}
+
+.left-nav__item--active::before {
+  background: var(--accent);
 }
 
 .center-pane-column {
