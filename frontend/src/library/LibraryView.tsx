@@ -1,8 +1,8 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listProjectPapersApiProjectsProjectIdPapersGet,
   reprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPost,
-  type LibraryEntry,
   type Paper,
 } from "@research-os/api-client";
 
@@ -44,32 +44,29 @@ export function LibraryView({
   onOpenPaper: (paperId: string, title: string) => void;
   onAddPaper: () => void;
 }) {
-  const [entries, setEntries] = useState<LibraryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // Filter-chip selection (§3.2 "Filter chip"): null means every relevance
-  // is shown, mirroring Graph's own null-means-all filter convention.
-  const [activeRelevances, setActiveRelevances] = useState<Set<Relevance> | null>(null);
-
-  async function refresh() {
-    try {
+  const queryClient = useQueryClient();
+  // Shared cache key with ReaderTab's own relevance read (Frontend
+  // Improvement Plan Phase 5 live-verify fix): the Reader header is the
+  // only place relevance is set now (§3.2 / Phase 5.3), and tabs never
+  // unmount (App Shell), so without a shared query key an already-open
+  // Library tab kept showing the pre-change badge/count until a full
+  // reload — invalidating this key from ReaderTab's mutation is what
+  // makes the change visible without one.
+  const papersQuery = useQuery({
+    queryKey: ["projectPapers", projectId],
+    queryFn: async () => {
       const { data } = await listProjectPapersApiProjectsProjectIdPapersGet({
         path: { project_id: projectId },
         throwOnError: true,
       });
-      setEntries(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the library");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+      return data;
+    },
+  });
+  const entries = papersQuery.data ?? [];
+  const [retryError, setRetryError] = useState<string | null>(null);
+  // Filter-chip selection (§3.2 "Filter chip"): null means every relevance
+  // is shown, mirroring Graph's own null-means-all filter convention.
+  const [activeRelevances, setActiveRelevances] = useState<Set<Relevance> | null>(null);
 
   async function retry(paperId: string) {
     try {
@@ -77,9 +74,9 @@ export function LibraryView({
         path: { project_id: projectId, paper_id: paperId },
         throwOnError: true,
       });
-      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["projectPapers", projectId] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not retry processing this paper");
+      setRetryError(err instanceof Error ? err.message : "Could not retry processing this paper");
     }
   }
 
@@ -105,9 +102,15 @@ export function LibraryView({
   const visibleEntries =
     activeRelevances === null ? entries : entries.filter((entry) => activeRelevances.has(entry.relevance as Relevance));
 
-  if (loading) return <p>Loading…</p>;
-  if (error && entries.length === 0) {
-    return <ErrorCard title="Could not load the library" message={error} onRetry={refresh} />;
+  if (papersQuery.isPending) return <p>Loading…</p>;
+  if (papersQuery.isError) {
+    return (
+      <ErrorCard
+        title="Could not load the library"
+        message={papersQuery.error instanceof Error ? papersQuery.error.message : "Unknown error"}
+        onRetry={() => papersQuery.refetch()}
+      />
+    );
   }
 
   return (
@@ -136,7 +139,16 @@ export function LibraryView({
         </div>
       </div>
 
-      {error && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
+      {retryError && (
+        <ErrorCard
+          title="Something went wrong"
+          message={retryError}
+          onRetry={() => {
+            setRetryError(null);
+            void papersQuery.refetch();
+          }}
+        />
+      )}
 
       <div className="library__grid">
         {visibleEntries.map(({ paper, relevance }) => (

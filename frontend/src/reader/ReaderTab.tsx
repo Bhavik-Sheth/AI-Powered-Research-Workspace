@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createHighlightApiProjectsProjectIdHighlightsPost,
   getPaperApiPapersPaperIdGet,
   listProjectPapersApiProjectsProjectIdPapersGet,
   patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch,
+  type LibraryEntry,
   type PaperCardField,
   type PaperDetail,
 } from "@research-os/api-client";
@@ -127,12 +129,25 @@ export function ReaderTab({
   const [error, setError] = useState<string | null>(null);
   const [popover, setPopover] = useState<SelectionPopover | null>(null);
   const [highlightState, setHighlightState] = useState<"idle" | "saving" | "saved">("idle");
-  // Not in `PaperDetail` (that's a paper's own content, not its per-project
-  // relevance) — read once from the same list Library reads, then kept in
-  // sync locally from each patch response so setting it here never needs a
-  // second round-trip (Phase 5.3).
-  const [relevance, setRelevance] = useState<Relevance | null>(null);
   const [relevanceSaving, setRelevanceSaving] = useState(false);
+  const queryClient = useQueryClient();
+  // Not in `PaperDetail` (that's a paper's own content, not its per-project
+  // relevance). Shares its cache key with LibraryView's own list query
+  // (Phase 5.3 / Phase 5 live-verify fix) — the Reader header is now the
+  // only place relevance is set, and tabs never unmount (App Shell), so
+  // without a shared key an already-open Library tab kept showing the
+  // pre-change badge/count until a full reload.
+  const papersQuery = useQuery({
+    queryKey: ["projectPapers", projectId],
+    queryFn: async () => {
+      const { data } = await listProjectPapersApiProjectsProjectIdPapersGet({
+        path: { project_id: projectId },
+        throwOnError: true,
+      });
+      return data;
+    },
+  });
+  const relevance = (papersQuery.data?.find((e) => e.paper.id === paperId)?.relevance as Relevance | undefined) ?? "unset";
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const { activeAnchor, focusAnchor } = useAnchorSync();
 
@@ -168,31 +183,10 @@ export function ReaderTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await listProjectPapersApiProjectsProjectIdPapersGet({
-          path: { project_id: projectId },
-          throwOnError: true,
-        });
-        if (cancelled) return;
-        const entry = data.find((e) => e.paper.id === paperId);
-        setRelevance((entry?.relevance as Relevance | undefined) ?? "unset");
-      } catch {
-        // Relevance is secondary chrome for this screen (the segmented
-        // control just stays unset) — it never blocks the reader itself,
-        // mirroring how a highlight-save failure below doesn't either.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [paperId, projectId]);
-
-  // Same generated-client mutation `LibraryView.setRelevance` uses — the
-  // patch response already carries the saved value, so this never needs a
-  // second list fetch the way the initial read above does.
+  // Writes the patch response straight into the shared `projectPapers`
+  // cache entry — both this control and LibraryView's badges/filter-chip
+  // counts update immediately, with no second round-trip and no dependency
+  // on which one of them happens to refetch next.
   async function handleSetRelevance(value: Relevance) {
     setRelevanceSaving(true);
     try {
@@ -201,7 +195,9 @@ export function ReaderTab({
         body: { relevance: value },
         throwOnError: true,
       });
-      setRelevance(data.relevance as Relevance);
+      queryClient.setQueryData<LibraryEntry[]>(["projectPapers", projectId], (prev) =>
+        prev?.map((entry) => (entry.paper.id === paperId ? { ...entry, relevance: data.relevance } : entry)),
+      );
     } catch {
       // Swallowed the same way handleHighlight below resets on failure —
       // the control just stays on its last known value.
