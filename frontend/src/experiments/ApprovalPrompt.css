@@ -8,7 +8,7 @@
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 12px 40px oklch(26% 0.079 210 / 0.25);
   /* No overlay div to supply an edge gutter anymore — the 48px is the same
      24px-per-side inset the old `.approval-prompt__overlay` padding gave
      on narrow viewports. */
@@ -22,7 +22,7 @@
 }
 
 .approval-prompt::backdrop {
-  background: rgba(0, 0, 0, 0.45);
+  background: oklch(20% 0.08 225 / 0.45);
 }
 
 .approval-prompt__header {
@@ -51,7 +51,7 @@
 .approval-prompt__section-title {
   font: 700 10px var(--font-ui);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
   margin: 0;
 }
@@ -85,7 +85,7 @@
 .approval-prompt__grid dt {
   font: 700 10px var(--font-ui);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
   align-self: center;
 }
@@ -120,7 +120,7 @@
 .approval-prompt__mounts-title {
   font: 700 10px var(--font-ui);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
   margin: 4px 0 0;
 }

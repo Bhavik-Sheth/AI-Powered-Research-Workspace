@@ -60,6 +60,17 @@ function ResizeHandle({
   onDragStateChange: (dragging: boolean) => void;
   label: string;
 }) {
+  // Only `onUp` (below) ever removes the two window listeners a drag
+  // starts — an unmount mid-drag (the nav collapsing while its own handle
+  // is being dragged, e.g.) fires no pointerup, so nothing else was ever
+  // undoing them (Phase 7.1). The effect below calls whatever this ref
+  // holds on unmount; `handlePointerDown` fills it in only while a drag is
+  // actually in progress.
+  const cleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => cleanupRef.current?.();
+  }, []);
+
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault();
     const target = event.currentTarget;
@@ -71,14 +82,26 @@ function ResizeHandle({
     function onMove(moveEvent: PointerEvent) {
       onChange(startWidth + direction * (moveEvent.clientX - startX));
     }
+    function detach() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      cleanupRef.current = null;
+    }
     function onUp() {
       target.releasePointerCapture(event.pointerId);
       onDragStateChange(false);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      detach();
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    // No `target.releasePointerCapture` here — pointer capture is released
+    // automatically once the element leaves the DOM, and calling a method
+    // on an already-detached element from an unmount cleanup risks
+    // throwing in some browsers.
+    cleanupRef.current = () => {
+      onDragStateChange(false);
+      detach();
+    };
   }
 
   return (
@@ -654,22 +677,17 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
               <div key={group.label ?? "root"}>
                 {group.label && <div className="left-nav__group-label">{group.label}</div>}
                 <ul style={{ margin: 0, padding: 0 }}>
-                  {group.items.map((item) => {
-                    const openThisTab = () => openTab(NAV_ITEM_TABS[item]);
-                    return (
-                      <li
-                        key={item}
+                  {group.items.map((item) => (
+                    <li key={item} style={{ listStyle: "none" }}>
+                      <button
+                        type="button"
                         className={`left-nav__item ${NAV_ITEM_TABS[item].kind === activeTabKind ? "left-nav__item--active" : ""}`}
-                        style={{ cursor: "pointer" }}
-                        tabIndex={0}
-                        role="button"
-                        onClick={openThisTab}
-                        onKeyDown={activateOnKey(openThisTab)}
+                        onClick={() => openTab(NAV_ITEM_TABS[item])}
                       >
                         {item}
-                      </li>
-                    );
-                  })}
+                      </button>
+                    </li>
+                  ))}
                 </ul>
               </div>
             ))}
@@ -794,15 +812,14 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                           document.querySelector(`[data-tab-id="${tab.id}"]`)?.scrollIntoView({ inline: "nearest" });
                         };
                         return (
-                          <li
-                            key={tab.id}
-                            className={tab.id === activeTab ? "tab-bar__overflow-item--active" : ""}
-                            tabIndex={0}
-                            role="button"
-                            onClick={selectFromOverflow}
-                            onKeyDown={activateOnKey(selectFromOverflow)}
-                          >
-                            {tab.label}
+                          <li key={tab.id} style={{ listStyle: "none" }}>
+                            <button
+                              type="button"
+                              className={tab.id === activeTab ? "tab-bar__overflow-item--active" : ""}
+                              onClick={selectFromOverflow}
+                            >
+                              {tab.label}
+                            </button>
                           </li>
                         );
                       })}

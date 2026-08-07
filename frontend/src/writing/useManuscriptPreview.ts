@@ -129,7 +129,6 @@ export function useManuscriptPreview(tex: string, projectId: string, documentId:
     return () => {
       flushRef.current?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId]);
 
   useEffect(

@@ -298,7 +298,12 @@ button.left-nav__item {
   min-width: 160px;
 }
 
-.tab-bar__overflow-menu li {
+.tab-bar__overflow-menu button {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
   padding: 6px 10px;
   border-radius: var(--radius-button);
   cursor: pointer;
@@ -307,7 +312,7 @@ button.left-nav__item {
   white-space: nowrap;
 }
 
-.tab-bar__overflow-menu li:hover {
+.tab-bar__overflow-menu button:hover {
   background: var(--surface-muted);
 }
 

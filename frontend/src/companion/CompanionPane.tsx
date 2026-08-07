@@ -272,7 +272,6 @@ export function CompanionPane({
         { id: nextId(), role: "error" as const, content: "Connection lost mid-turn — the response may be incomplete. Try asking again." },
       ];
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket.connected, turnInFlight]);
 
   function sendMessage(text: string, withSelection: SelectionState | null, inputModality: "text" | "voice" = "text"): void {

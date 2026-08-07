@@ -45,7 +45,7 @@
 
 .dashboard__section-label {
   font: 700 10px var(--font-ui);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin: 0 0 8px;

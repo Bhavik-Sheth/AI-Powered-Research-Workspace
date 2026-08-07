@@ -96,7 +96,7 @@
 
 .reader__sidebar h4 {
   font: 700 10px var(--font-ui);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin: 14px 0 6px;
@@ -181,13 +181,18 @@
 
 .reader__card-field h5 {
   font: 700 10px var(--font-ui);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin: 0 0 4px;
 }
 
 .reader__card-quote {
+  display: block;
+  width: 100%;
+  border: none;
+  text-align: left;
+  cursor: pointer;
   font: italic 12px/1.5 var(--font-reading);
   color: var(--text-strong);
   background: var(--accent-tint-14);
@@ -235,7 +240,7 @@
   gap: 4px;
   background: var(--surface-raised);
   border-radius: var(--radius-button);
-  box-shadow: 0 4px 16px oklch(26% 0.079 210 / 0.24);
+  box-shadow: 0 4px 16px oklch(26% 0.079 210 / 0.22);
   padding: 6px;
   z-index: 20;
 }

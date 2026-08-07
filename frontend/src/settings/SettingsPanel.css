@@ -7,7 +7,7 @@
 
 .settings-panel__section h2 {
   font: 700 13px var(--font-ui);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin: 0 0 12px;

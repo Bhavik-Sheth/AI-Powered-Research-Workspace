@@ -399,6 +399,11 @@ function MatrixCellView({
   if (editing) {
     return (
       <div className="matrix__cell-edit">
+        {/* An inline edit-in-place field appearing in response to the user's
+            own click is the one case autoFocus is the expected behavior,
+            not a disorienting surprise — nothing else on the page could
+            plausibly want focus at this instant. */}
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
         <textarea value={draft} onChange={(event) => setDraft(event.target.value)} autoFocus />
         <div className="matrix__cell-edit-actions">
           <button

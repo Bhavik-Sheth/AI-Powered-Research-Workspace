@@ -409,6 +409,11 @@ export function ReaderTab({
           })}
         </nav>
 
+        {/* Detects the end of a mouse-driven text selection to show the
+            popover — not a click/activation handler, so it has no keyboard
+            equivalent to add: selecting text via keyboard already works
+            natively (Shift+arrows) without ever touching this listener. */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
         <div className="reader__pages" onMouseUp={handleTextSelection}>
           {pages.map((page) => (
             <Page
@@ -431,12 +436,13 @@ export function ReaderTab({
               <div key={fieldKey} className="reader__card-field">
                 <h5>{FIELD_LABEL[fieldKey]}</h5>
                 {field ? (
-                  <p
+                  <button
+                    type="button"
                     className={`reader__card-quote ${activeAnchor?.quote === field.value ? "reader__card-quote--active" : ""}`}
                     onClick={() => handleFieldClick(field)}
                   >
                     {field.value}
-                  </p>
+                  </button>
                 ) : (
                   <p className="reader__not-stated">not stated in this paper</p>
                 )}

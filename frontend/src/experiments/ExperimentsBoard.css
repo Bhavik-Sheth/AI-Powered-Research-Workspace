@@ -77,7 +77,7 @@
   justify-content: space-between;
   font: 700 10px var(--font-ui);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
   padding: 0 2px;
 }
