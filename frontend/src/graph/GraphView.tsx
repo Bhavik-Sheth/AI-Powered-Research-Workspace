@@ -9,17 +9,124 @@ import { categoryOf, colorFor, fillOpacityFor, LEGEND, type LegendCategory, node
 
 // `padding` reserves space around the *node* bounding box, not the label
 // text drawn under each node — a node the cose layout places near the
-// canvas edge had its centered, up-to-90px-wide label (`text-max-width`
-// below) clipped by the container before the label's own ellipsis ever
-// kicked in, rendering as an unreadable mid-word fragment (e.g. "ion Is
-// All Y…" for "Attention Is All You Need"). 80px covers half that label
-// width plus the node's own radius on either side.
-const LAYOUT = { name: "cose", animate: false, padding: 80 } as const;
+// canvas edge had its centered, up-to-160px-wide label (`text-max-width`
+// below) clipped by the container, rendering as an unreadable mid-word
+// fragment (e.g. "ion Is All Y…" for "Attention Is All You Need"). 80px
+// covers half that label width plus the node's own radius on either side.
+//
+// `nodeDimensionsIncludeLabels: true` is the other half of the fix: cose's
+// own default (`false`, per node_modules/cytoscape/src/extensions/layout/
+// cose.mjs) only spaces nodes apart using their 22x22 bounding box and is
+// blind to label size entirely, which is why wrapped 3-line labels used to
+// overlap their neighbours regardless of repulsion strength. With it on,
+// cose treats each node's rendered label as part of its footprint, so
+// `nodeRepulsion`/`idealEdgeLength` below only need a modest bump — verified
+// against the same source file (`nodeRepulsion`/`idealEdgeLength` accept a
+// plain number at runtime via `is.fn(...)`, the TS types just require the
+// function form).
+const LAYOUT = {
+  name: "cose",
+  animate: false,
+  padding: 80,
+  nodeDimensionsIncludeLabels: true,
+  componentSpacing: 60,
+  nodeRepulsion: () => 6000,
+  idealEdgeLength: () => 90,
+} as const;
+
+const LABEL_FONT = '10px "Space Grotesk", sans-serif';
+const LABEL_MAX_WIDTH = 160;
+const LABEL_MAX_LINES = 3;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+function getMeasureCtx(): CanvasRenderingContext2D | null {
+  if (measureCtx !== undefined) return measureCtx;
+  measureCtx = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  if (measureCtx) measureCtx.font = LABEL_FONT;
+  return measureCtx;
+}
+
+/** A single token still wider than `maxWidth` on its own line (a slugified
+ * concept id like `we-propose-a-new-…` has no whitespace at all, so the
+ * word-wrap pass below hands this exactly one "word" covering the whole
+ * label) gets hard-broken character by character — the only way to bound
+ * its width when there is no natural break point to wrap on. */
+function hardBreak(word: string, maxWidth: number, ctx: CanvasRenderingContext2D): string[] {
+  const lines: string[] = [];
+  let current = "";
+  for (const char of word) {
+    const candidate = current + char;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current);
+      current = char;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function wrapLines(text: string, maxWidth: number, ctx: CanvasRenderingContext2D): string[] {
+  // Break on whitespace *and* after a hyphen (keeping the hyphen with the
+  // preceding chunk, the usual hyphenation convention) — a slugified label
+  // has hyphens as its only natural break points, no whitespace at all.
+  const words = text.split(/(?<=-)|\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current}${current.endsWith("-") ? "" : " "}${word}` : word;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+    if (!current.endsWith("-") && ctx.measureText(current).width > maxWidth) {
+      // Even a single chunk (or the word that just started a fresh line)
+      // overflows on its own — hard-break it rather than leaving one
+      // unbounded line.
+      const broken = hardBreak(current, maxWidth, ctx);
+      lines.push(...broken.slice(0, -1));
+      current = broken[broken.length - 1];
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/**
+ * Cytoscape's `text-wrap: 'wrap'` (verified against
+ * node_modules/cytoscape/src/style/properties.mjs, v3.34.0) wraps a label to
+ * fit `text-max-width` but has no `text-max-lines` counterpart — confirmed
+ * absent from that same properties list — so an unbounded label just kept
+ * growing taller, which is what made wrapped labels collide with neighbours.
+ * This wraps the label ourselves with the same width budget the stylesheet
+ * uses, then caps it at 3 lines with an ellipsis, so the layout can reserve
+ * a bounded amount of vertical space per node.
+ */
+function wrapAndCapLabel(text: string, maxWidth: number = LABEL_MAX_WIDTH, maxLines: number = LABEL_MAX_LINES): string {
+  const ctx = getMeasureCtx();
+  if (!ctx) return text;
+  const allLines = wrapLines(text, maxWidth, ctx);
+  if (allLines.length <= maxLines) return allLines.join("\n");
+
+  const visible = allLines.slice(0, maxLines);
+  let lastLine = visible[maxLines - 1];
+  while (lastLine.length > 0 && ctx.measureText(`${lastLine}…`).width > maxWidth) {
+    lastLine = lastLine.slice(0, -1).trimEnd();
+  }
+  visible[maxLines - 1] = `${lastLine}…`;
+  return visible.join("\n");
+}
 
 function elementsFor(edges: GraphEdge[], paperTitles: Record<string, string>) {
-  const nodes = nodesFromEdges(edges).map((node) => ({
-    data: { id: node.id, rawId: node.label, label: paperTitles[node.label] ?? node.label, nodeType: node.nodeType },
-  }));
+  const nodes = nodesFromEdges(edges).map((node) => {
+    const fullLabel = paperTitles[node.label] ?? node.label;
+    return {
+      data: { id: node.id, rawId: node.label, label: wrapAndCapLabel(fullLabel), fullLabel, nodeType: node.nodeType },
+    };
+  });
   const cyEdges = edges.map((edge) => ({
     data: {
       id: edge.id,
@@ -51,8 +158,12 @@ const STYLESHEET = [
       color: "#001018",
       "text-valign": "bottom",
       "text-margin-y": 4,
-      "text-wrap": "ellipsis",
-      "text-max-width": "90px",
+      // The label text itself is already wrapped-and-capped to 3 lines by
+      // `wrapAndCapLabel` above; `text-wrap`/`text-max-width` here are a
+      // safety net in case the browser's actual glyph metrics differ
+      // slightly from the offscreen canvas measurement.
+      "text-wrap": "wrap",
+      "text-max-width": "160px",
       width: 22,
       height: 22,
     },
@@ -91,6 +202,7 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
 
   async function load() {
@@ -194,8 +306,34 @@ export function GraphView({ projectId, onOpenPaper }: { projectId: string; onOpe
               const node = event.target;
               handleNodeSelect(node.id(), node.data("nodeType"), node.data("rawId"));
             });
+            // Native Cytoscape pointer events (verified against
+            // node_modules/cytoscape/src/extensions/renderer/base/
+            // load-listeners.mjs, which emits `mouseover`/`mouseout` on
+            // elements) rather than hand-rolled DOM listeners — shows the
+            // complete, un-truncated title near the cursor since the
+            // on-canvas label is wrapped-and-capped at 3 lines.
+            cy.off("mouseover", "node");
+            cy.off("mouseout", "node");
+            cy.off("mousemove", "node");
+            cy.on("mouseover", "node", (event) => {
+              const node = event.target;
+              const pos = node.renderedPosition();
+              setTooltip({ x: pos.x, y: pos.y, text: node.data("fullLabel") ?? node.data("label") });
+            });
+            cy.on("mousemove", "node", (event) => {
+              const node = event.target;
+              const pos = node.renderedPosition();
+              setTooltip({ x: pos.x, y: pos.y, text: node.data("fullLabel") ?? node.data("label") });
+            });
+            cy.on("mouseout", "node", () => setTooltip(null));
           }}
         />
+
+        {tooltip && (
+          <div className="graph__tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+            {tooltip.text}
+          </div>
+        )}
 
         <div className="graph__legend">
           <h4>Legend</h4>

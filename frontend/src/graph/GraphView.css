@@ -66,6 +66,23 @@
   min-height: 0;
 }
 
+.graph__tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  max-width: 220px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--panel-shadow);
+  padding: 6px 10px;
+  font: 600 11px/1.4 var(--font-ui);
+  color: var(--text-strong);
+  pointer-events: none;
+  z-index: 5;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .graph__legend {
   position: absolute;
   bottom: 14px;
