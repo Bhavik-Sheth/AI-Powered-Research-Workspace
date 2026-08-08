@@ -15,6 +15,30 @@ plain files in a folder you own.
 
 **Prerequisites:** Docker, Python 3.12+ with [`uv`](https://docs.astral.sh/uv/), Node 20+.
 
+### One-time setup
+
+```bash
+cd backend && uv sync && cp .env.example .env && cd ..
+cd frontend && npm install && cp .env.development.example .env.development.local && cd ..
+npm install   # root workspaces (frontend, desktop, api-client)
+```
+
+Then paste a key into `backend/.env` (see "Give it a model to test with" below) and run
+`uv run --project backend python scripts/configure_provider.py`.
+
+### Run everything: one command
+
+```bash
+npm start
+```
+
+From the repo root. This builds the frontend, launches the Electron desktop app, which in turn
+spawns the Python backend as its sidecar — bringing up Postgres in Docker, running migrations,
+and starting the API — and loads the built frontend into the app window. Closing the window stops
+the backend (and the Docker container) with it.
+
+Prefer separate terminals with hot-reload instead? Use the steps below.
+
 ### 1. Backend
 
 ```bash
@@ -60,7 +84,9 @@ Open the printed URL.
 
 ### Or: the desktop app
 
-`npm run dev:desktop` from the repo root — launches Electron, which starts the backend itself.
+`npm run dev:desktop` from the repo root — launches Electron, which starts the backend itself and
+loads the frontend from `frontend/dist` (run `npm run build:frontend` first, or just use
+`npm start` above, which does both).
 
 ### Tests
 

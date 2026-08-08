@@ -12,6 +12,7 @@
     "dev:desktop": "npm run dev --workspace desktop",
     "build:frontend": "npm run build --workspace frontend",
     "build:desktop": "npm run build --workspace desktop",
-    "generate:api-client": "npm run generate --workspace @research-os/api-client"
+    "generate:api-client": "npm run generate --workspace @research-os/api-client",
+    "start": "npm run build:frontend && npm run dev:desktop"
   }
 }
