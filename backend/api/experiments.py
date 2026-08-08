@@ -142,7 +142,11 @@ async def get_notebook_server(experiment_id: uuid.UUID) -> NotebookServerStatus:
 async def notebook_server_action(experiment_id: uuid.UUID, body: NotebookServerAction) -> NotebookServerStatus:
     """Starts or stops the experiment's live, interactive Jupyter server
     container (Phase 2.4) — mutually exclusive with an in-flight measured
-    run, surfaced here as 409 rather than a generic 500."""
+    run, surfaced here as 409 rather than a generic 500. A `stop` whose
+    forced save couldn't be confirmed (Phase 6.7's `NotebookSaveError`) is
+    surfaced as 503 — an external dependency (the container's Jupyter
+    server) temporarily not cooperating, recoverable by retrying Stop, not a
+    client mistake — and the container is left running, never removed."""
     async with db.session() as session:
         try:
             if body.action == "start":
@@ -150,6 +154,8 @@ async def notebook_server_action(experiment_id: uuid.UUID, body: NotebookServerA
             return await sandbox.stop_notebook_server(session, experiment_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except sandbox.NotebookSaveError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 

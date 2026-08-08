@@ -144,6 +144,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("event=sidecar_shutdown_start")
+    # Best-effort, guarded stop for any live notebook server (Phase 6.7) —
+    # same save-then-verify path as the explicit Stop action and the 4h
+    # ceiling, so a clean shutdown never force-removes a container with
+    # unconfirmed unsaved work; see that function's own docstring for the
+    # fallback when a save can't be confirmed in time.
+    await sandbox.stop_all_notebook_servers_for_shutdown()
     await jobs.stop()
     await db.dispose()
     logger.info("event=sidecar_shutdown_complete")

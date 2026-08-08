@@ -59,6 +59,26 @@ experiment may have an in-flight measured run (`_running_containers`) or a
 live notebook server (`_live_servers`), never both — no auto-stop-and-switch
 magic, just a clear rejection either direction (see `run_all` and
 `start_notebook_server`).
+
+**Phase 6.7 — a notebook survives navigating away.** The live server used to
+be torn down whenever the frontend's panel unmounted (collapsing the card,
+switching tabs), discarding anything Jupyter had not yet autosaved to the
+bind-mounted `notebook.ipynb` (up to its own ~2 minute autosave window). The
+frontend no longer stops the server on unmount at all — only the explicit
+`Stop notebook` action and `_enforce_ceiling`'s 4h safety net do, and both
+now route through `_save_and_verify_notebook`: force a save through Jupyter's
+own `/api/contents/<path>` REST API (GET the server's current model, PUT it
+straight back — the one shape that's actually documented and already
+exercised by this module's own `_wait_for_http_ready` HTTP calls; there is no
+way for a server-side call to reach into the iframe's own unsaved JS editor
+buffer, so this closes the narrower, still-real race where Jupyter's *last
+accepted* save has not yet reached the bind mount, not the case where the
+browser tab itself is killed with edits never sent to the server at all),
+then polls the vault file's mtime — bounded retries, not an open-ended watch
+— to confirm the write actually landed before the container is removed. A
+save that cannot be confirmed raises `NotebookSaveError` and the container is
+left running rather than removed (Rules.md: never catch-log-rethrow into a
+silent proceed that would reintroduce this phase's own bug).
 """
 
 import asyncio
@@ -141,6 +161,13 @@ _NOTEBOOK_SERVER_LABEL_KEY = "research-os.kind"
 _NOTEBOOK_SERVER_LABEL_VALUE = "notebook-server"
 _NETWORK_SELFCHECK_TIMEOUT_S = 2.0
 
+# Phase 6.7 — bounded save-then-verify before any stop path removes a live
+# server's container. Not a watcher: a fixed number of short polls, then give
+# up and refuse to remove the container (Rules.md: no open-ended watch loop).
+_SAVE_HTTP_TIMEOUT_S = 5.0
+_SAVE_VERIFY_ATTEMPTS = 5
+_SAVE_VERIFY_INTERVAL_S = 0.5
+
 # A bare `new_notebook()` has no kernelspec, which makes Jupyter Notebook 7
 # prompt "Select Kernel" on first open instead of just starting one — real
 # friction confirmed live, not a guess. Every fresh notebook this module
@@ -168,6 +195,15 @@ class ConfirmationError(ValueError):
     used, minted for a different experiment, or minted against a spec that
     no longer matches the current one. `run_all` raises rather than
     silently refusing (MODULES.md: "impossible by construction")."""
+
+
+class NotebookSaveError(RuntimeError):
+    """A live notebook server's contents could not be confirmed saved to the
+    vault before a stop path would otherwise remove its container (Phase
+    6.7). Callers must leave the container running and the server registered
+    in `_live_servers` when this is raised — the caller can retry `Stop`, or
+    (for `_enforce_ceiling`) the failure is logged and the container simply
+    stays up past the ceiling rather than being destroyed with unsaved work."""
 
 
 @dataclass
@@ -741,32 +777,96 @@ async def start_notebook_server(session: AsyncSession, experiment_id: uuid.UUID)
         )
 
 
+async def _save_and_verify_notebook(handle: "_LiveServerHandle", experiment: Experiment) -> bytes:
+    """Forces Jupyter to (re)write `notebook.ipynb` through its own contents
+    REST API, then confirms — a bounded poll of the vault file's mtime, not
+    an open-ended watch — that the write actually reached the bind-mounted
+    host path. Returns the confirmed bytes for the caller to hand to Vault
+    Writer. Raises `NotebookSaveError` if the container is alive but the
+    save can't be confirmed within the bounded window.
+
+    If the container has already died (crashed, or killed out of band)
+    there is nothing left server-side to force a save from — skip the HTTP
+    round trip and fall back to whatever is already on disk, best effort,
+    rather than blocking a stop forever on a server that can never answer.
+    """
+    if experiment.notebook_path is None:
+        raise NotebookSaveError(f"experiment {experiment.id} has no notebook_path to save")
+    absolute_path = get_vault_path() / experiment.notebook_path
+
+    await asyncio.to_thread(handle.container.reload)
+    if handle.container.status != "running":
+        logger.warning(
+            "event=notebook_save_skipped_container_not_running experiment_id=%s status=%s",
+            experiment.id,
+            handle.container.status,
+        )
+        if not absolute_path.exists():
+            raise NotebookSaveError(
+                f"container for experiment {experiment.id} is not running and no vault notebook exists to save"
+            )
+        return absolute_path.read_bytes()
+
+    before_mtime = absolute_path.stat().st_mtime_ns if absolute_path.exists() else None
+    contents_url = f"http://127.0.0.1:{handle.port}/api/contents/{_JUPYTER_NOTEBOOK_FILENAME}"
+    try:
+        async with httpx.AsyncClient(timeout=_SAVE_HTTP_TIMEOUT_S) as client:
+            get_response = await client.get(contents_url, params={"content": 1, "type": "notebook"})
+            get_response.raise_for_status()
+            model = get_response.json()
+            put_response = await client.put(
+                contents_url,
+                json={"type": "notebook", "format": "json", "content": model["content"]},
+            )
+            put_response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise NotebookSaveError(f"could not force-save notebook for experiment {experiment.id}: {exc}") from exc
+
+    for _attempt in range(_SAVE_VERIFY_ATTEMPTS):
+        if absolute_path.exists():
+            after_mtime = absolute_path.stat().st_mtime_ns
+            if before_mtime is None or after_mtime > before_mtime:
+                return absolute_path.read_bytes()
+        await asyncio.sleep(_SAVE_VERIFY_INTERVAL_S)
+
+    raise NotebookSaveError(
+        f"vault notebook for experiment {experiment.id} did not update within the save-verification window"
+    )
+
+
 async def stop_notebook_server(
     session: AsyncSession, experiment_id: uuid.UUID, reason: Literal["manual", "ceiling"] = "manual"
 ) -> NotebookServerStatus:
-    """Idempotent teardown. Syncs the vault (D4's narrow, documented
-    exception for this one file while the container was up — see
-    `DECISIONS.md`'s addendum under D4) by re-reading `notebook.ipynb`'s
-    current bytes, already written by Jupyter's own autosave via the bind
-    mount, and passing them through the normal `write_experiment_files`
-    path so `updated_at`/index bookkeeping stays consistent.
+    """Idempotent teardown. Forces a save through Jupyter's own contents API
+    and confirms it landed on the vault file (`_save_and_verify_notebook`,
+    Phase 6.7) before the container is removed — never the other order. If
+    the save can't be confirmed, `NotebookSaveError` propagates, the
+    container stays registered and running, and nothing here removes it; the
+    caller can retry `Stop notebook`.
 
     Serialized per experiment against `start_notebook_server` — see that
     function's docstring and `_get_live_server_lock`'s comment for why.
     """
     async with _get_live_server_lock(experiment_id):
-        handle = _live_servers.pop(experiment_id, None)
+        handle = _live_servers.get(experiment_id)
         if handle is None:
             return NotebookServerStatus(experiment_id=experiment_id, state="stopped")
 
-        handle.ceiling_task.cancel()
-        await asyncio.to_thread(handle.container.remove, force=True)
-
         experiment = await experiments.get_experiment(session, experiment_id)
-        if experiment is not None and experiment.notebook_path is not None:
-            notebook_path = get_vault_path() / experiment.notebook_path
-            if notebook_path.exists():
-                await vault.write_experiment_files(session, experiment_id, notebook_path.read_bytes())
+        if experiment is not None:
+            notebook_bytes = await _save_and_verify_notebook(handle, experiment)
+            await vault.write_experiment_files(session, experiment_id, notebook_bytes)
+
+        _live_servers.pop(experiment_id, None)
+        # A ceiling breach calls this function from inside its own
+        # `ceiling_task` — self-cancelling would throw `CancelledError` into
+        # this very call at its next `await` (the `container.remove` below),
+        # aborting the teardown partway through. Cancel it from any other
+        # caller (an explicit Stop, or shutdown) same as before.
+        current_task = asyncio.current_task()
+        if handle.ceiling_task is not current_task:
+            handle.ceiling_task.cancel()
+        await asyncio.to_thread(handle.container.remove, force=True)
 
         ws_session = ws.get_session(handle.project_id)
         if ws_session is not None:
@@ -791,15 +891,47 @@ def notebook_server_status(experiment_id: uuid.UUID) -> NotebookServerStatus:
     )
 
 
+async def stop_all_notebook_servers_for_shutdown() -> None:
+    """Called once from Sidecar Bootstrap's shutdown (Phase 6.7) — gives
+    every still-live notebook server the same guarded, save-then-verify stop
+    the explicit `Stop notebook` action and the 4h ceiling use, best effort.
+    A server whose save can't be confirmed within that same bounded window is
+    left running rather than force-removed; `sweep_orphaned_notebook_servers`
+    force-removes it at next boot, same as an unclean process exit already
+    risked before this phase — no worse, and never removed here without a
+    confirmed save."""
+    for experiment_id in list(_live_servers.keys()):
+        try:
+            async with db.session() as session:
+                await stop_notebook_server(session, experiment_id, reason="manual")
+        except NotebookSaveError:
+            logger.error(
+                "event=notebook_server_shutdown_save_failed experiment_id=%s — left running for next boot's sweep",
+                experiment_id,
+            )
+
+
 async def _enforce_ceiling(experiment_id: uuid.UUID) -> None:
     """A hard safety-net timeout, not real activity tracking (explicitly out
-    of scope for v1) — covers a renderer/tab left open indefinitely."""
+    of scope for v1) — covers a renderer/tab left open indefinitely. Routes
+    through the same guarded `stop_notebook_server` as the explicit `Stop`
+    action (Phase 6.7): if the forced save can't be confirmed, this logs the
+    failure and leaves the container running rather than destroying unsaved
+    work just because the ceiling was reached (Rules.md: never catch-log-
+    rethrow into a silent proceed)."""
     await asyncio.sleep(_LIVE_SERVER_CEILING_SECONDS)
     if experiment_id not in _live_servers:
         return
     logger.info("event=notebook_server_ceiling_reached experiment_id=%s", experiment_id)
     async with db.session() as ceiling_session:
-        await stop_notebook_server(ceiling_session, experiment_id, reason="ceiling")
+        try:
+            await stop_notebook_server(ceiling_session, experiment_id, reason="ceiling")
+        except NotebookSaveError:
+            logger.error(
+                "event=notebook_server_ceiling_save_failed experiment_id=%s — container left running, "
+                "vault notebook could not be confirmed saved",
+                experiment_id,
+            )
 
 
 async def sweep_orphaned_notebook_servers() -> None:
