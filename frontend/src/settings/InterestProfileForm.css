@@ -51,6 +51,10 @@
   padding: 2px;
 }
 
+.interest-profile__tag button:hover {
+  color: var(--danger-text);
+}
+
 .interest-profile__tag-input {
   display: flex;
   gap: 6px;

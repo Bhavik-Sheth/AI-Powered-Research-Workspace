@@ -184,16 +184,26 @@ app = create_app()
 
 
 async def _serve() -> None:
-    """Binds 127.0.0.1:0 and prints the bound port on stdout for Electron main (D2).
+    """Binds 127.0.0.1:<port> and prints the bound port on stdout for Electron main (D2).
 
     The socket is bound here, up front, rather than left to uvicorn's own
     `port=0` handling, so the bound port is known and printed before serving
     starts — `Server.serve(sockets=...)` is the documented way to hand
     uvicorn an already-bound socket (used for socket-activation deployments).
+
+    Port 0 (OS-assigned, a new ephemeral port every launch) is D2's real
+    contract and what Electron always gets — this never changes for that
+    path. `SIDECAR_DEV_PORT`, if set, is a standalone-dev-only escape hatch
+    (same carve-out as `.env`'s fixed `BEARER_TOKEN`, which the real app
+    also never uses): it lets `frontend/.env.development.local`'s
+    `VITE_DEV_PORT` stay correct across backend restarts instead of going
+    stale every time this prints a new random port, without touching the
+    Electron path at all.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("127.0.0.1", 0))
+    requested_port = int(os.environ.get("SIDECAR_DEV_PORT", "0"))
+    sock.bind(("127.0.0.1", requested_port))
     bound_port = sock.getsockname()[1]
     print(bound_port, flush=True)
 

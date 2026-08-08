@@ -54,8 +54,23 @@ function isDownstreamEvent(message: unknown): message is DownstreamEvent {
 
 interface TranscriptEntry {
   id: number;
-  role: "user" | "assistant" | "error" | "tool";
+  /** `tool_call` and `tool_result` are two states of the same transcript
+   * slot, not two independent entries (UI_DESIGN.md §3.1: "Tool-result
+   * card: what the chip collapses into"). A `tool_call` entry is pushed
+   * when the call starts and rewritten in place — same `id`, role flips
+   * to `tool_result` — once its result arrives, so the chip visually
+   * becomes the card rather than the card appearing as a second line. */
+  role: "user" | "assistant" | "error" | "tool_call" | "tool_result";
   content: string;
+  /** Set on `tool_call` and `tool_result` — the raw snake_case tool name
+   * (`search_papers`, `add_paper`, …), styled uppercase in CSS. */
+  toolName?: string;
+  /** Set on `tool_result` only. Non-null when the backend stored a fuller
+   * result behind an id (`harness/models.py` `ToolResult.ui_view_result_id`)
+   * — the same id `AppShell.handleCompanionUIAction`'s `open_search_results`
+   * action already opens a Search tab from, reused here as a card link
+   * rather than requiring the backend to push a `ui_action` event too. */
+  resultId?: string | null;
   /** Only ever set on an `assistant` entry — the `<cite>` spans `content`
    * contains, in the same order (Phase 6.1). */
   citations?: Citation[];
@@ -120,6 +135,11 @@ export function CompanionPane({
   const [draft, setDraft] = useState("");
   const [queued, setQueued] = useState<QueuedMessage | null>(null);
   const assistantBufferRef = useRef("");
+  // The transcript id of the most recent `tool_call` chip still waiting on
+  // its `tool_result` — set on `tool_call`, consumed (and cleared) by the
+  // next `tool_result`, so that event can rewrite the chip in place instead
+  // of appending a second entry (see the `role` doc on `TranscriptEntry`).
+  const pendingToolCallIdRef = useRef<number | null>(null);
   const nextIdRef = useRef(0);
   const handledNonceRef = useRef<number | null>(null);
   const selectionRef = useRef(selection);
@@ -154,10 +174,30 @@ export function CompanionPane({
         setTranscript((prev) => [...prev, { id: nextId(), role: "assistant", content, citations: evt.citations }]);
       }
     } else if (evt.event === "tool_call") {
-      setStatusText(`${evt.tool_name}…`);
+      // The chip itself (rendered below) is the "running" indicator now —
+      // UI_DESIGN.md §3.1 puts it inline in the transcript, not the status
+      // line, so this no longer overwrites `statusText` the way it used to.
+      const id = nextId();
+      pendingToolCallIdRef.current = id;
+      setTranscript((prev) => [...prev, { id, role: "tool_call", toolName: evt.tool_name, content: "" }]);
     } else if (evt.event === "tool_result") {
       setStatusText(null);
-      setTranscript((prev) => [...prev, { id: nextId(), role: "tool", content: evt.model_view }]);
+      const pendingId = pendingToolCallIdRef.current;
+      pendingToolCallIdRef.current = null;
+      setTranscript((prev) => {
+        const pendingIndex = pendingId === null ? -1 : prev.findIndex((entry) => entry.id === pendingId && entry.role === "tool_call");
+        if (pendingIndex === -1) {
+          // No matching chip (e.g. it scrolled out of a trimmed history) —
+          // still show the result rather than dropping it.
+          return [
+            ...prev,
+            { id: nextId(), role: "tool_result", toolName: evt.tool_name, content: evt.model_view, resultId: evt.result_id },
+          ];
+        }
+        const next = prev.slice();
+        next[pendingIndex] = { ...next[pendingIndex], role: "tool_result", content: evt.model_view, resultId: evt.result_id };
+        return next;
+      });
     } else if (evt.event === "ui_action") {
       onUIAction(evt.action, evt.payload);
     } else if (evt.event === "error") {
@@ -356,10 +396,29 @@ export function CompanionPane({
               </div>
             );
           }
-          if (entry.role === "tool") {
+          if (entry.role === "tool_call") {
             return (
-              <div key={entry.id} className="companion__tool-result">
-                {entry.content}
+              <div key={entry.id} className="companion__tool-chip">
+                <span className="companion__tool-spinner" aria-hidden="true" />
+                <span className="companion__tool-name">{entry.toolName}</span>
+              </div>
+            );
+          }
+          if (entry.role === "tool_result") {
+            const resultId = entry.resultId;
+            return (
+              <div key={entry.id} className="companion__tool-card">
+                <p className="companion__tool-card-header">{entry.toolName}</p>
+                <p className="companion__tool-card-body">{entry.content}</p>
+                {resultId && (
+                  <button
+                    type="button"
+                    className="companion__tool-card-link"
+                    onClick={() => onUIAction("open_search_results", { result_id: resultId })}
+                  >
+                    Open results →
+                  </button>
+                )}
               </div>
             );
           }

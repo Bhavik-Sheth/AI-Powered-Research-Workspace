@@ -71,8 +71,16 @@
   font-family: inherit;
 }
 
+.library__filter-chip:hover {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
 .library__filter-chip--off {
   opacity: 0.45;
+}
+
+.library__filter-chip--off:hover {
+  opacity: 0.7;
 }
 
 .library__grid {
@@ -99,6 +107,10 @@
   padding: 0;
   text-align: left;
   cursor: pointer;
+}
+
+.library__card-title:hover {
+  color: var(--accent-text);
 }
 
 .library__stages {
@@ -138,6 +150,10 @@
   cursor: pointer;
 }
 
+.library__retry:hover {
+  background: color-mix(in srgb, var(--danger-fill) 10%, transparent);
+}
+
 /* The last grid cell — the §3.4 dashed absence/add-affordance pattern,
    same convention as NotesView's empty state / MatrixView's not-stated
    cells, reused rather than invented fresh here. */
@@ -152,4 +168,9 @@
   font: italic 12px var(--font-ui);
   color: var(--text-muted);
   cursor: pointer;
+}
+
+.library__import-placeholder:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
 }

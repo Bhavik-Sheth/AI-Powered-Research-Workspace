@@ -262,7 +262,7 @@ export function ExperimentsBoard({ projectId, socket }: { projectId: string; soc
 
   return (
     <div className="experiments">
-      {error && loaded && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
+      {error && loaded && <ErrorCard title="Couldn't refresh" message={error} onRetry={refresh} />}
       <div className="experiments__header">
         <div>
           <h1 className="experiments__title">Experiments</h1>

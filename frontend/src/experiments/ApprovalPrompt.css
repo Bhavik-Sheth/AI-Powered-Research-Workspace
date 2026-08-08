@@ -195,10 +195,19 @@
   color: var(--text);
 }
 
+.approval-prompt__button--cancel:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-text-outline);
+}
+
 .approval-prompt__button--approve {
   background: var(--accent);
   color: var(--surface-raised);
   border: none;
+}
+
+.approval-prompt__button--approve:hover:not(:disabled) {
+  background: var(--link-hover);
 }
 
 .approval-prompt__button:disabled {

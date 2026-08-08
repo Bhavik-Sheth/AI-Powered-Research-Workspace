@@ -34,6 +34,10 @@
   cursor: pointer;
 }
 
+.search__submit:hover {
+  background: var(--link-hover);
+}
+
 .search__progress {
   display: flex;
   align-items: center;
@@ -102,6 +106,10 @@
   color: var(--accent-text);
   border: none;
   cursor: pointer;
+}
+
+.search__card-add:hover:not(:disabled) {
+  background: var(--accent-tint-15);
 }
 
 .search__card-add:disabled {

@@ -28,6 +28,11 @@
   cursor: pointer;
 }
 
+.live-notebook__stop:hover {
+  border-color: var(--danger-badge-border);
+  color: var(--danger-text);
+}
+
 /* JupyterLab hard-codes its own "mobile layout" breakpoint at 760px
    (github.com/jupyterlab/jupyterlab#9567) — below that its toolbar,
    kernel picker and cell gutter start overlapping instead of wrapping
@@ -77,4 +82,8 @@
   background: var(--accent);
   color: var(--surface-raised);
   cursor: pointer;
+}
+
+.live-notebook__closed button:hover {
+  background: var(--link-hover);
 }

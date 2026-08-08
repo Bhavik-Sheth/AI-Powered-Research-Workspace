@@ -61,6 +61,10 @@ body {
   cursor: pointer;
 }
 
+.top-bar__switcher:hover {
+  border-color: var(--accent);
+}
+
 .top-bar__switcher-wrap::after {
   content: "▾";
   position: absolute;
@@ -105,6 +109,10 @@ body {
   cursor: pointer;
   line-height: 1;
   padding: 0;
+}
+
+.top-bar__settings:hover {
+  color: var(--text-strong);
 }
 
 .shell-body {
@@ -214,6 +222,10 @@ button.left-nav__item {
   cursor: pointer;
 }
 
+.left-nav__item:hover {
+  background: var(--surface-muted);
+}
+
 .left-nav__item::before {
   content: "";
   width: 9px;
@@ -225,7 +237,8 @@ button.left-nav__item {
 
 /* Active row (UI_DESIGN.md §2 "Row states") — the one nav row matching the
    currently open tab's kind. */
-.left-nav__item--active {
+.left-nav__item--active,
+.left-nav__item--active:hover {
   border-left: 3px solid var(--accent);
   background: var(--accent-tint-12);
   border-radius: 0 6px 6px 0;
@@ -284,6 +297,10 @@ button.left-nav__item {
   font: 600 12px var(--font-ui);
 }
 
+.tab-bar__overflow-toggle:hover {
+  color: var(--text-strong);
+}
+
 .tab-bar__overflow-menu {
   position: absolute;
   top: 100%;
@@ -334,7 +351,12 @@ button.left-nav__item {
   flex: none;
 }
 
-.tab-bar__tab--active {
+.tab-bar__tab:hover {
+  color: var(--text-strong);
+}
+
+.tab-bar__tab--active,
+.tab-bar__tab--active:hover {
   background: var(--surface);
   color: var(--text-strong);
   box-shadow: var(--panel-shadow);

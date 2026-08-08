@@ -118,6 +118,11 @@
   padding: 0;
 }
 
+.matrix__row-link:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
 .matrix__cell {
   display: block;
   width: 100%;
@@ -137,6 +142,10 @@
   color: var(--text-strong);
 }
 
+.matrix__cell--quote:hover {
+  background: var(--accent-tint-25);
+}
+
 .matrix__cell--user {
   color: var(--text);
   border: 1px solid transparent;
@@ -150,6 +159,11 @@
   font-style: italic;
   color: var(--text-muted);
   border: 1px dashed var(--border-dashed);
+}
+
+.matrix__cell--not-stated:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 
 .matrix__cell-edit {

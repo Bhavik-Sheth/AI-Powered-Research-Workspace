@@ -31,6 +31,10 @@
   padding: 0;
 }
 
+.notes-view__new:hover {
+  color: var(--link-hover);
+}
+
 .notes-view__empty {
   border: 1px dashed var(--border-dashed);
   border-radius: 8px;
@@ -64,7 +68,12 @@
   cursor: pointer;
 }
 
-.notes-view__row--active {
+.notes-view__row:hover {
+  background: var(--surface-muted);
+}
+
+.notes-view__row--active,
+.notes-view__row--active:hover {
   background: var(--accent-tint-12);
   border-left-color: var(--accent);
 }
@@ -150,6 +159,10 @@
   color: #fff;
   border: none;
   cursor: pointer;
+}
+
+.notes-view__save:hover:not(:disabled) {
+  background: var(--link-hover);
 }
 
 .notes-view__save:disabled {

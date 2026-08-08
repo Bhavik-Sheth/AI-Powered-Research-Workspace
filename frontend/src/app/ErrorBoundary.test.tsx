@@ -20,7 +20,7 @@ describe("ErrorBoundary (Phase 1.1 — the app cannot go permanently blank)", ()
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+    expect(screen.getByText("This screen crashed")).toBeInTheDocument();
     expect(screen.getByText("boom")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
 
@@ -35,6 +35,6 @@ describe("ErrorBoundary (Phase 1.1 — the app cannot go permanently blank)", ()
     );
 
     expect(screen.getByText("All good")).toBeInTheDocument();
-    expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
+    expect(screen.queryByText("This screen crashed")).not.toBeInTheDocument();
   });
 });

@@ -36,7 +36,12 @@
   border-left: 2px solid transparent;
 }
 
-.writing__draft-row--active {
+.writing__draft-row:hover {
+  background: var(--surface-muted);
+}
+
+.writing__draft-row--active,
+.writing__draft-row--active:hover {
   background: var(--accent-tint-12);
   border-left: 2px solid var(--accent);
 }

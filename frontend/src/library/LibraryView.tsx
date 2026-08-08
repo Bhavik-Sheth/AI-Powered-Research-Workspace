@@ -141,7 +141,7 @@ export function LibraryView({
 
       {retryError && (
         <ErrorCard
-          title="Something went wrong"
+          title="Couldn't refresh"
           message={retryError}
           onRetry={() => {
             setRetryError(null);

@@ -20,52 +20,49 @@ plain files in a folder you own.
 ```bash
 cd backend
 uv sync
-cp .env.example .env      # edit if you want to paste a provider key — see below
+cp .env.example .env
 uv run python main.py
 ```
 
-This checks the vault folder, brings up Postgres+pgvector in Docker, runs migrations, and starts
-the API. It prints the port it bound to (e.g. `34585`) — keep this terminal open.
+Brings up Postgres in Docker, runs migrations, starts the API on port `41500`. Keep it running.
 
-### 2. Give it a real model to test with
-
-The app normally takes a provider key through the onboarding wizard in the UI (validated live,
-then encrypted at rest — D13). To skip the wizard for quick backend testing, paste a key into
-`backend/.env`:
-
-```
-GROQ_API_KEY=gsk_...
-```
-
-(a free key: <https://console.groq.com/keys>), then with the backend from step 1 still running, in
-a second terminal:
+Auto-reload on save instead:
 
 ```bash
-cd backend
+uv run uvicorn main:app --reload --host 127.0.0.1 --port 41500
+```
+
+### 2. Give it a model to test with
+
+Paste a key into `backend/.env`, then run the config script:
+
+```bash
+GROQ_API_KEY=gsk_...   # free key: https://console.groq.com/keys
+```
+
+```bash
 uv run python scripts/configure_provider.py
 ```
 
-This saves it through the exact same validated, encrypted-storage path the UI uses — it isn't a
-side door. Any LiteLLM-supported provider works the same way: `uv run python
-scripts/configure_provider.py openai gpt-4.1-mini` with `OPENAI_API_KEY` set in `.env`.
+Other providers: `configure_provider.py openai gpt-4.1-mini` with `OPENAI_API_KEY` set. Local
+GPU: set `OLLAMA_BASE_URL` in `.env`, then `configure_provider.py ollama` — no key needed.
 
 ### 3. Frontend
 
 ```bash
 cd frontend
-cp .env.development.example .env.development.local   # set VITE_DEV_PORT to the port from step 1
+cp .env.development.example .env.development.local
 npm install
 npm run dev
 ```
 
-Open the printed `http://localhost:5173` URL.
+Open the printed URL.
 
-### Or: the real desktop app
+### Or: the desktop app
 
-`npm run dev:desktop` from the repo root launches the actual Electron shell, which spawns the
-sidecar and generates its own per-launch token itself — no `.env` needed for this path.
+`npm run dev:desktop` from the repo root — launches Electron, which starts the backend itself.
 
-### Running the tests
+### Tests
 
 ```bash
 BEARER_TOKEN=devtoken PYTHONPATH=backend uv run --project backend pytest tests/ -q
@@ -76,13 +73,18 @@ BEARER_TOKEN=devtoken PYTHONPATH=backend uv run --project backend pytest tests/ 
 Phase 1 (US1–US7) and Voice.1 are implemented and live-verified end to end:
 
 - **Search & library** — federated search across arXiv/OpenAlex/Semantic Scholar, deduped and
-  reranked; add a paper to a project's library.
+  reranked; add a paper to a project's library and mark it relevant / somewhat / not relevant with
+  your own note on why. A paper's *content* (PDF, parsed text, embeddings) is fetched once and
+  shared if you add it to a second project, but its relevance mark and your note are scoped to
+  **that** project — so "what papers mattered here" is always answerable per project, even for a
+  paper that lives in several.
 - **Reader** — renders the real PDF via PDF.js, with a validated extractive card (problem / method
   / datasets / results / limitations, each a verbatim, offset-checked quote).
 - **Companion** — select text in the reader for "Ask about this" / "Highlight" / "Explain"; the
   Companion answers over WebSocket with every factual claim backed by an inline citation, and a
   claim that fails validation is shown as `⚠ unverified` rather than trusted.
-- **Notes** — plain markdown files, written and indexed in the same operation.
+- **Notes** — plain markdown files, written and indexed in the same operation, and always scoped
+  to the project that owns them (`projects/<slug>/notes/*.md`) — there is no global notes pile.
 - **Project memory** — `notes`/papers you've added are chunked and embedded; the Companion can
   search across them (hybrid dense+lexical retrieval, cross-encoder reranked) and cites the
   specific row an answer came from.
@@ -97,3 +99,11 @@ Phase 1 (US1–US7) and Voice.1 are implemented and live-verified end to end:
 
 Not yet built: execution sandbox / experiments (Phase 2), literature matrix and knowledge graph
 (Phase 3), the LaTeX writing workspace (Phase 4), and the research feed (Phase 5).
+
+**On the Docker sandbox specifically:** Docker is already load-bearing today — it's how Postgres
+runs (step 1 above) and it's a hard, verified-at-onboarding dependency for the whole app, not an
+optional extra. What's *not* built yet is Phase 2's per-experiment kernel: a notebook cell the
+Companion can propose but never run on its own, executed only inside its own throwaway container
+(pinned image, no network by default, only that experiment's folder mounted) after you explicitly
+approve the run. That approval gate and the sandbox are independent, both mandatory, and neither
+is a config flag — see `DECISIONS.md` invariants #4–#5.

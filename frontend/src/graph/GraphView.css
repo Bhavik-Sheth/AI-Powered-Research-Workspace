@@ -44,6 +44,10 @@
   cursor: pointer;
 }
 
+.graph__chip:hover {
+  border-color: var(--accent);
+}
+
 .graph__chip--on {
   background: var(--surface);
   color: oklch(25% 0.05 210);
@@ -152,6 +156,10 @@
   color: var(--text-muted);
 }
 
+.graph__detail-close:hover {
+  color: var(--danger-text);
+}
+
 .graph__detail-type {
   display: block;
   font: 700 10px var(--font-ui);
@@ -200,4 +208,9 @@
   padding: 5px 10px;
   font: 700 11px var(--font-ui);
   cursor: pointer;
+}
+
+.graph__detail-open:hover {
+  border-color: var(--accent);
+  color: var(--accent-text-outline);
 }

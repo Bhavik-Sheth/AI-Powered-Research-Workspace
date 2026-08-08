@@ -242,7 +242,7 @@ export function MatrixView({ projectId, onOpenPaper }: { projectId: string; onOp
     <div className="matrix">
       {error && (
         <ErrorCard
-          title="Something went wrong"
+          title="Couldn't refresh"
           message={error}
           onRetry={() => activeMatrixId && void refreshView(activeMatrixId)}
         />

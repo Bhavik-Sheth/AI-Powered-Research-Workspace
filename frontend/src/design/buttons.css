@@ -29,10 +29,19 @@
   color: #fff;
 }
 
+.btn--primary:hover:not(:disabled) {
+  background: var(--link-hover);
+}
+
 .btn--outline {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   color: var(--text);
+}
+
+.btn--outline:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-text-outline);
 }
 
 .btn--inline {
@@ -49,4 +58,8 @@
   border-radius: var(--radius-button);
   padding: 3px 8px;
   cursor: pointer;
+}
+
+.select:hover {
+  border-color: var(--accent);
 }

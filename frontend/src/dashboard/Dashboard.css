@@ -153,3 +153,8 @@
   color: var(--text-muted);
   cursor: pointer;
 }
+
+.dashboard__nudge-retry:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

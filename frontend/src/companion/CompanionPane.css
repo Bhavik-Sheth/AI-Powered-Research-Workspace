@@ -179,13 +179,82 @@
   color: var(--danger-body);
 }
 
-.companion__tool-result {
-  border-left: 2px solid var(--accent-rule, var(--border));
-  background: var(--accent-tint-12);
-  border-radius: 0 8px 8px 0;
-  padding: 8px 10px;
-  font: 11px/1.5 var(--font-ui);
+/* Tool-call chip (UI_DESIGN.md §3.1) — inline, running state. Rewritten
+   into `.companion__tool-card` in place once the result arrives, so it is
+   never present in the transcript at the same time as its own result. */
+.companion__tool-chip {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface-muted);
+  border-radius: var(--radius-badge);
+  padding: 5px 9px;
+  font: 700 10px var(--font-mono);
   color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.companion__tool-spinner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  border-top-color: transparent;
+  animation: companion-tool-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion__tool-spinner {
+    animation: none;
+  }
+}
+
+@keyframes companion-tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Tool-result card — what the chip above collapses into. */
+.companion__tool-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.companion__tool-card-header {
+  font: 700 10px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.companion__tool-card-body {
+  font: 11px/1.5 var(--font-ui);
+  color: var(--text);
+  margin: 0;
+}
+
+.companion__tool-card-link {
+  align-self: flex-start;
+  font: 700 11px var(--font-ui);
+  color: var(--link);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.companion__tool-card-link:hover,
+.companion__tool-card-link:focus-visible {
+  color: var(--link-hover);
 }
 
 .companion__composer {

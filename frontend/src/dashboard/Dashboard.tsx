@@ -79,7 +79,7 @@ export function Dashboard({
     <div className="dashboard">
       <h1 className="dashboard__title">{projectName}</h1>
 
-      {error && summary && <ErrorCard title="Something went wrong" message={error} onRetry={refresh} />}
+      {error && summary && <ErrorCard title="Couldn't refresh" message={error} onRetry={refresh} />}
 
       <div className="dashboard__stats">
         <div className="dashboard__stat">

@@ -67,8 +67,17 @@
   color: #fff;
 }
 
+.feed__save:hover {
+  background: var(--link-hover);
+}
+
 .feed__dismiss {
   border: 1px solid var(--border);
   background: none;
   color: var(--text-muted);
+}
+
+.feed__dismiss:hover {
+  border-color: var(--danger-badge-border);
+  color: var(--danger-text);
 }

@@ -49,6 +49,10 @@
   white-space: nowrap;
 }
 
+.experiments__new-button:hover:not(:disabled) {
+  background: var(--link-hover);
+}
+
 .experiments__new-button:disabled {
   background: var(--surface-inactive);
   color: var(--text-muted);
@@ -132,6 +136,10 @@
   overflow: hidden;
 }
 
+.experiments__card-head:hover .experiments__card-title {
+  color: var(--accent-text);
+}
+
 .experiments__card-hypothesis {
   font: 500 11px/1.5 var(--font-ui);
   color: var(--text-muted);
@@ -201,6 +209,10 @@
   color: var(--accent-text-outline);
   cursor: pointer;
   white-space: nowrap;
+}
+
+.experiments__measured-button:hover {
+  background: var(--accent-tint-10);
 }
 
 .experiments__measured-hint {
@@ -308,6 +320,10 @@
   background: var(--accent);
   color: var(--surface-raised);
   cursor: pointer;
+}
+
+.experiments__new-cell button:hover:not(:disabled) {
+  background: var(--link-hover);
 }
 
 .experiments__new-cell button:disabled {

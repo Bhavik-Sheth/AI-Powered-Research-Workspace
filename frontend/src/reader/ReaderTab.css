@@ -66,7 +66,12 @@
   border-left: none;
 }
 
-.reader__relevance-segment--active {
+.reader__relevance-segment:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.reader__relevance-segment--active,
+.reader__relevance-segment--active:hover:not(:disabled) {
   background: var(--accent-tint-15);
   font-weight: 700;
   color: var(--accent-text);
@@ -112,6 +117,11 @@
   border: none;
   text-align: left;
   width: 100%;
+}
+
+.reader__section-link:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
 }
 
 .reader__pages {
@@ -206,7 +216,12 @@
    values, not the inline ones; this is what makes the reader highlight and
    the extractive card's field visibly "light up together" with exactly one
    active span at a time. */
-.reader__card-quote--active {
+.reader__card-quote:hover {
+  background: var(--accent-tint-25);
+}
+
+.reader__card-quote--active,
+.reader__card-quote--active:hover {
   background: var(--accent-tint-25);
   border-left: 2px solid var(--accent);
   border-radius: 0 6px 6px 0;

@@ -35,3 +35,7 @@
   cursor: pointer;
   margin-top: 4px;
 }
+
+.app-boot__retry:hover {
+  background: var(--link-hover);
+}

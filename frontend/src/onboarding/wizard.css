@@ -81,6 +81,10 @@
   cursor: pointer;
 }
 
+.wizard__button:hover:not(:disabled) {
+  background: var(--link-hover);
+}
+
 .wizard__button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -90,6 +94,11 @@
   background: none;
   color: var(--accent-text-outline);
   border: 1px solid var(--border);
+}
+
+.wizard__button--secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-tint-10);
 }
 
 .wizard__skip {

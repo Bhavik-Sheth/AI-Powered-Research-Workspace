@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         <AppBootScreen
-          title="Something went wrong"
+          title="This screen crashed"
           message={this.state.error.message}
           onRetry={() => window.location.reload()}
           retryLabel="Reload"
