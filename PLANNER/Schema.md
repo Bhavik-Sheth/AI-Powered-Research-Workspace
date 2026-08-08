@@ -60,10 +60,11 @@ federated search and the endpoint key for the knowledge graph.
 | `source_url` | TEXT | NULL | The landing page shown in the degraded state. |
 | `pdf_path` | TEXT | NULL | Vault-relative path to `paper.pdf`. NULL = no OA copy and no user upload. |
 | `pdf_origin` | TEXT | NULL, CHECK IN (`arxiv`,`unpaywall`,`s2_oa`,`user_upload`) | How the PDF was obtained. **Never a paywall** (invariant #3). |
-| `fetch_state` | TEXT | NOT NULL, DEFAULT `queued`, CHECK IN (`queued`,`running`,`done`,`failed`,`degraded`) | Per-paper processing state, surfaced by `GET /api/papers/:paperId/status`. |
+| `fetch_state` | TEXT | NOT NULL, DEFAULT `queued`, CHECK IN (`queued`,`running`,`done`,`failed`,`degraded`,`skipped`) | Per-paper processing state, surfaced by `GET /api/papers/:paperId/status`. `skipped` (Phase 6.3) marks a metadata-only reference stub — deliberately never fetched, distinct from `degraded` (an OA fetch was attempted and found nothing). |
 | `parse_state` | TEXT | NOT NULL, DEFAULT `queued`, same CHECK | docling parse state. |
 | `embed_state` | TEXT | NOT NULL, DEFAULT `queued`, same CHECK | Chunk + embed state. |
 | `extract_state` | TEXT | NOT NULL, DEFAULT `queued`, same CHECK | Extractive-card state. **"still extracting" must be visually distinct from "not stated"** (PRD §6), which is why this is a column and not an inference. |
+| `references_state` | TEXT | NOT NULL, DEFAULT `queued`, same CHECK | Reference-trace state (Phase 6.4). `queued` (its default, never reset by re-parse) is read as "trace never run" by the open-paper read path — opening a paper still at `queued` enqueues `trace_references_job` once, healing papers added before Phase 6.4 without a mass migration job. |
 
 ---
 
@@ -77,8 +78,8 @@ federated search and the endpoint key for the knowledge graph.
 | `full_text` | TEXT | NOT NULL | The concatenated parsed text. **The substring validator (D24) runs against this stream**, so it is the authoritative offset space. |
 | `sections` | JSONB | NOT NULL, DEFAULT `'[]'` | `[{section_id, heading, level, char_start, char_end}]` — drives the structure sidebar and section-aware chunking. |
 | `references` | JSONB | NOT NULL, DEFAULT `'[]'` | `[{ref_id, raw, title?, doi?, arxiv_id?}]`. `ref_id` is stable within a parse and is what `open_reference(paper_id, ref_id)` takes. |
-| `datasets` | JSONB | NOT NULL, DEFAULT `'[]'` | Datasets named by the paper or by Papers with Code. |
-| `code_links` | JSONB | NOT NULL, DEFAULT `'[]'` | Repo URLs from Papers with Code / GitHub enrichment. |
+| `datasets` | JSONB | NOT NULL, DEFAULT `'[]'` | Datasets from the paper's own text, else HuggingFace's papers API, else Firecrawl (D26 amendment; PwC is discontinued). |
+| `code_links` | JSONB | NOT NULL, DEFAULT `'[]'` | Repo URLs from the paper's own text, else HuggingFace's papers API, else Firecrawl (D26 amendment; PwC is discontinued). |
 | `parser_version` | TEXT | NOT NULL | docling version. A change here invalidates offsets — anchors survive because the **quote** is durable and offsets are re-derived (D33). |
 | `parsed_at` | TIMESTAMPTZ | NOT NULL | When the parse ran. |
 

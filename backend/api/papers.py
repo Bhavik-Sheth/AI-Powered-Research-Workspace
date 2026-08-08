@@ -68,7 +68,11 @@ async def get_paper(paper_id: uuid.UUID, include: str = "") -> PaperDetail:
     `paper_content` row, so any one of them fetches the whole row."""
     fields = {f.strip() for f in include.split(",") if f.strip()}
     async with db.session() as session:
-        paper = await papers.get_paper(session, paper_id)
+        # `heal=True`: opening a paper whose reference trace has never run
+        # (Phase 6.4) enqueues `trace_references_job` once — the only read
+        # path that does, so a plain internal lookup never gets this side
+        # effect.
+        paper = await papers.get_paper(session, paper_id, heal=True)
         if paper is None:
             raise HTTPException(status_code=404, detail="paper not found")
         content = await papers.get_paper_content(session, paper_id) if fields & _CONTENT_FIELDS else None
@@ -95,6 +99,24 @@ async def reprocess_paper(project_id: uuid.UUID, paper_id: uuid.UUID) -> Paper:
         paper = await papers.reprocess_paper(session, paper_id)
         if paper is None:
             raise HTTPException(status_code=404, detail="paper not found")
+        return paper
+
+
+@router.post("/api/projects/{project_id}/papers/{paper_id}/promote", response_model=Paper)
+async def promote_reference_stub(project_id: uuid.UUID, paper_id: uuid.UUID) -> Paper:
+    """Turns a metadata-only reference stub (Phase 6.3's `add_reference_stub`)
+    into a full paper via the ordinary `Add to library` action from the
+    Reader's References box. Reuses `reprocess_paper` rather than forking a
+    second fetch/parse path — a stub's `fetch_state='skipped'` is exactly the
+    kind of incomplete stage it already re-drives — then adds this project's
+    library membership, since promote is invoked from inside a reader tab."""
+    async with db.session() as session:
+        if await projects.get_project(session, project_id) is None:
+            raise HTTPException(status_code=404, detail="project not found")
+        paper = await papers.reprocess_paper(session, paper_id)
+        if paper is None:
+            raise HTTPException(status_code=404, detail="paper not found")
+        await projects.add_paper_to_project(session, project_id, paper_id)
         return paper
 
 

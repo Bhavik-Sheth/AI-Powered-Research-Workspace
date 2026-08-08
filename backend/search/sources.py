@@ -148,6 +148,83 @@ async def search_openalex(keywords: list[str], filters: SearchFilters, max_resul
     return hits
 
 
+async def fetch_openalex_references(openalex_id: str, max_results: int = 5) -> list[RawHit]:
+    """A paper's own `referenced_works` (D26/Phase 6.3), ranked by citation
+    count. OpenAlex's `Work.referenced_works` is a list of OpenAlex work ids
+    in the paper's own citation order, not citation-count order, so this
+    batch-fetches their metadata (id filter, up to 50 per call, well under
+    OpenAlex's own filter-list limit) and sorts the results itself."""
+    bare_id = openalex_id.rsplit("/", 1)[-1]
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        work = await client.get(f"https://api.openalex.org/works/{bare_id}")
+        work.raise_for_status()
+        referenced_ids: list[str] = [w.rsplit("/", 1)[-1] for w in work.json().get("referenced_works", []) if w]
+        if not referenced_ids:
+            return []
+
+        works: list[dict] = []
+        for i in range(0, len(referenced_ids), 50):
+            chunk = referenced_ids[i : i + 50]
+            response = await client.get(
+                "https://api.openalex.org/works",
+                params={"filter": "openalex_id:" + "|".join(chunk), "per_page": len(chunk)},
+            )
+            response.raise_for_status()
+            works.extend(response.json().get("results", []))
+
+    hits = []
+    for work_data in works:
+        ids = work_data.get("ids", {})
+        primary_location = work_data.get("primary_location") or {}
+        open_access = work_data.get("open_access") or {}
+        authors = [
+            name
+            for authorship in work_data.get("authorships", [])
+            if (name := (authorship.get("author") or {}).get("display_name"))
+        ]
+        hits.append(
+            RawHit(
+                source_ids=SourceIds(doi=ids.get("doi"), openalex_id=ids.get("openalex")),
+                title=work_data.get("title") or work_data.get("display_name") or "",
+                authors=authors,
+                year=work_data.get("publication_year"),
+                citation_count=work_data.get("cited_by_count"),
+                source_url=primary_location.get("landing_page_url"),
+                pdf_url=primary_location.get("pdf_url") or open_access.get("oa_url"),
+            )
+        )
+    hits.sort(key=lambda h: h.citation_count or 0, reverse=True)
+    return hits[:max_results]
+
+
+async def fetch_s2_references(s2_id: str, max_results: int = 5) -> list[RawHit]:
+    """A paper's own `references` (D26/Phase 6.3) via S2's Graph API, which
+    already returns each reference's own `citationCount` inline — no second
+    batch call needed, unlike OpenAlex."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        response = await client.get(
+            f"https://api.semanticscholar.org/graph/v1/paper/{s2_id}",
+            params={"fields": "references.title,references.year,references.externalIds,references.citationCount"},
+        )
+        response.raise_for_status()
+
+    hits = []
+    for ref in response.json().get("references") or []:
+        if not ref or not ref.get("title"):
+            continue
+        external = ref.get("externalIds") or {}
+        hits.append(
+            RawHit(
+                source_ids=SourceIds(doi=external.get("DOI"), arxiv_id=external.get("ArXiv"), s2_id=ref.get("paperId")),
+                title=ref["title"],
+                year=ref.get("year"),
+                citation_count=ref.get("citationCount"),
+            )
+        )
+    hits.sort(key=lambda h: h.citation_count or 0, reverse=True)
+    return hits[:max_results]
+
+
 async def search_s2(keywords: list[str], max_results: int = 30) -> list[RawHit]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         response = await client.get(

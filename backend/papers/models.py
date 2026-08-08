@@ -39,6 +39,7 @@ class Paper(BaseModel):
     parse_state: str
     embed_state: str
     extract_state: str
+    references_state: str
 
 
 class SectionInfo(BaseModel):
@@ -52,6 +53,11 @@ class SectionInfo(BaseModel):
 class ReferenceInfo(BaseModel):
     ref_id: str
     raw: str
+    title: str | None = None
+    # The resolved stub/full `papers.id` this reference points to (Phase
+    # 6.3) — `None` until `trace_references_job` has resolved it, or when
+    # resolution found nothing.
+    paper_id: uuid.UUID | None = None
 
 
 class PaperContentView(BaseModel):

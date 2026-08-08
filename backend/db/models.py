@@ -176,6 +176,10 @@ class Paper(Base):
         CheckConstraint(
             "extract_state IN ('queued', 'running', 'done', 'failed', 'degraded')", name="papers_extract_state_check"
         ),
+        CheckConstraint(
+            "references_state IN ('queued', 'running', 'done', 'failed', 'degraded')",
+            name="papers_references_state_check",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -196,6 +200,7 @@ class Paper(Base):
     parse_state: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'queued'"))
     embed_state: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'queued'"))
     extract_state: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'queued'"))
+    references_state: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'queued'"))
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

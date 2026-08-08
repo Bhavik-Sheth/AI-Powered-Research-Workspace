@@ -17,7 +17,11 @@ class MetadataEdge(BaseModel):
     dst_type: NodeType
     dst_id: str
     relation: Relation
-    source_api: str
+    # NULL when the edge did not come from an API at all (e.g. an in-text
+    # arXiv/DOI id parsed straight out of the PDF's own reference list,
+    # Phase 6.4) — never claim `openalex`/`s2` for a source that wasn't
+    # actually queried.
+    source_api: str | None = None
 
 
 class LLMEdge(BaseModel):
