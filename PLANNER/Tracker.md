@@ -39,3 +39,42 @@ documented quick-start (it previously only handled key-based providers and would
 `ollama`/`vllm`). No PLANNER file needed a content change — the gap was in the README's
 discoverability and the dev script, not in the locked design.
 
+**2026-08-08 — Fix Round 1 (Phase 6.1–6.11) built, live-verified, signed off.** All ten build
+phases plus the sign-off checkpoint from `ImplementationPlan.md`'s Fix Round 1 section landed
+against the running app — real Postgres, real Docker sandbox, real dev-server pair driven with
+Playwright, not just unit tests. `PLANNER/DECISIONS.md` carries the D21 (Firecrawl relevance
+authority) and D26 (text → HuggingFace → Firecrawl enrichment order) amendments;
+`PLANNER/Things_to_finish.md` is closed with a per-item verification summary.
+
+Two real defects surfaced during live verification (step 4 of the `execute` skill) and were fixed
+in place, each as its own `fix(...)` commit, never folded into the `feat(...)` that exposed them:
+
+- **`frontend/src/graph/GraphView.tsx`** — `wrapAndCapLabel`'s word-wrap split only on whitespace,
+  so a slugified LLM-derived concept-node id (all hyphens, zero whitespace — e.g.
+  `we-propose-a-new-simple-network-architecture-…`) was handed back as one unbroken "word" and
+  rendered as a single overflowing line, exactly the bug Phase 6.6 was built to fix, just for a
+  label shape its own test cases hadn't covered. Fixed by also breaking after hyphens and hard-
+  breaking any token that still doesn't fit. Verified live: the same concept node now wraps to 3
+  clean lines.
+- **`backend/papers/parser.py`** — `_split_references_section`'s fallback only split on a leading
+  `[12]`/`12.` marker, so any unnumbered author-year bibliography (ACL/EMNLP/AAAI style — the
+  common case for NLP papers, e.g. BERT's own reference list) came back as a single unsplit blob
+  covering the entire References section, discovered live when BERT's References box rendered one
+  giant citation-soup entry instead of 5 individual rows. Root cause: docling already emits one
+  bibliography entry per newline-separated item regardless of citation style; splitting on the
+  numbered marker instead of the newline silently failed for every unnumbered paper. Fixed by
+  splitting on newlines primarily (stripping a leading numeric marker per line, cosmetic only).
+  Verified live end to end on a freshly-added real paper (BERT, arXiv:1810.04805): 57 references
+  correctly split, 5 traced, 1 resolved to a real clickable stub with a `cites` graph edge.
+
+**Caveat recorded honestly, not swept under the rug:** the literal "attention is all you need
+returns that paper first" acceptance line (`Things_to_finish.md` #2) could not be fully exercised
+in this sandboxed dev environment — no `FIRECRAWL_API_KEY` was configured (D21's actual relevance
+authority for exactly this query shape), and the free-tier Groq model backing LLM query-
+understanding and card extraction was intermittently unreliable at structured tool-calling (a
+handful of `400`s from Groq itself mid-session, unrelated to any Phase 6 code, all recoverable on
+retry). The deterministic lexical-score fallback's own design bar is "search is never unusable,"
+not "always ranks the canonical paper first without Firecrawl" — it held to that bar in every live
+run (5 results, always degrading gracefully, `sources_failed` always named). Every other phase's
+acceptance criterion was independently verified live against real data with no caveats.
+
