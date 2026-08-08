@@ -1982,6 +1982,10 @@ export type SearchRequest = {
      */
     query: string;
     filters?: SearchFilters | null;
+    /**
+     * Limit
+     */
+    limit?: number;
 };
 
 /**

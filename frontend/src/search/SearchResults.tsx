@@ -10,7 +10,22 @@ import {
 import { ErrorCard } from "../design/ErrorCard";
 import "./SearchResults.css";
 
-const SOURCE_LABEL: Record<string, string> = { arxiv: "arXiv", openalex: "OpenAlex", s2: "Semantic Scholar" };
+const SOURCE_LABEL: Record<string, string> = {
+  arxiv: "arXiv",
+  openalex: "OpenAlex",
+  s2: "Semantic Scholar",
+  firecrawl: "Firecrawl",
+  reranker: "the reranker",
+};
+
+// Phase 6.1: `POST /api/search` already caps `results` to its `limit`
+// (default 5) server-side, but `GET /api/results/:resultId` still returns
+// the full cached pool (Schema.md `result_store.ui_view`) so Phase 6.2's
+// "Search more" has it — this display cap is what keeps exactly 5 cards on
+// screen regardless of which endpoint the result set came from. A display
+// truncation, not a re-rank: order is never touched here (Rules.md: no
+// client-side ranking).
+const DISPLAYED_RESULT_COUNT = 5;
 
 /**
  * Federated search (D20/D21, MODULES.md Search Results). Phase 1.3 ships one
@@ -155,7 +170,7 @@ export function SearchResults({
       {loading && (
         <div className="search__progress">
           <span className="search__spinner" />
-          Searching arXiv, OpenAlex, Semantic Scholar…
+          Searching…
         </div>
       )}
 
@@ -182,7 +197,7 @@ export function SearchResults({
 
       {result && result.results.length > 0 && (
         <div className="search__grid">
-          {result.results.map((paper) => {
+          {result.results.slice(0, DISPLAYED_RESULT_COUNT).map((paper) => {
             const added = addedIds.has(paper.canonical_id);
             const adding = addingId === paper.canonical_id;
             return (

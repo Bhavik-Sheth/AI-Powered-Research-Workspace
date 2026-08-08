@@ -7,10 +7,50 @@ import xml.etree.ElementTree as ET
 import httpx
 
 from papers.models import SourceIds
-from search.models import RawHit, SearchFilters
+from search.models import FirecrawlHit, RawHit, SearchFilters
 
 _ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
 _TIMEOUT = 15.0
+
+# Verified against Firecrawl's current docs (https://docs.firecrawl.dev/api-reference/endpoint/search):
+# POST https://api.firecrawl.dev/v1/search, Bearer auth, body {"query": ..., "limit": ...},
+# response {"success": true, "data": [{"url": ..., "title": ..., "description": ..., ...}]} in
+# relevance order. The response is still walked defensively below (`.get()`, `isinstance` checks,
+# malformed entries skipped) since a field addition/rename on Firecrawl's side must degrade this
+# client to the fallback path, never raise past its caller.
+_FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v1/search"
+
+
+async def search_firecrawl(query: str, api_key: str, limit: int) -> list[FirecrawlHit]:
+    """Firecrawl `/search` is the relevance authority (D21 amendment): its
+    result order drives ranking, arXiv/OpenAlex/S2 only enrich each hit
+    afterwards. Raises `httpx.HTTPError` on a network/HTTP failure or
+    `ValueError` on unparsable JSON — the caller degrades to the
+    arXiv/OpenAlex/S2 fallback on either, the same shape as one literature
+    source failing in `_fan_out`."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        response = await client.post(
+            _FIRECRAWL_SEARCH_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"query": query, "limit": limit},
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    raw_hits = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(raw_hits, list):
+        return []
+
+    hits = []
+    for item in raw_hits:
+        if not isinstance(item, dict):
+            continue
+        url, title = item.get("url"), item.get("title")
+        if not url or not title:
+            continue
+        description = item.get("description")
+        hits.append(FirecrawlHit(url=url, title=title, description=description if isinstance(description, str) else None))
+    return hits
 
 
 async def search_arxiv(keywords: list[str], max_results: int = 30) -> list[RawHit]:

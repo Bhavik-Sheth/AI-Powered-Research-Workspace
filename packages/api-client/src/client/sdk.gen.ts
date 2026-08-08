@@ -294,7 +294,11 @@ export const getNotebookServerApiExperimentsExperimentIdNotebookServerGet = <Thr
  *
  * Starts or stops the experiment's live, interactive Jupyter server
  * container (Phase 2.4) — mutually exclusive with an in-flight measured
- * run, surfaced here as 409 rather than a generic 500.
+ * run, surfaced here as 409 rather than a generic 500. A `stop` whose
+ * forced save couldn't be confirmed (Phase 6.7's `NotebookSaveError`) is
+ * surfaced as 503 — an external dependency (the container's Jupyter
+ * server) temporarily not cooperating, recoverable by retrying Stop, not a
+ * client mistake — and the container is left running, never removed.
  */
 export const notebookServerActionApiExperimentsExperimentIdNotebookServerPost = <ThrowOnError extends boolean = false>(options: Options<NotebookServerActionApiExperimentsExperimentIdNotebookServerPostData, ThrowOnError>): RequestResult<NotebookServerActionApiExperimentsExperimentIdNotebookServerPostResponses, NotebookServerActionApiExperimentsExperimentIdNotebookServerPostErrors, ThrowOnError> => (options.client ?? client).post<NotebookServerActionApiExperimentsExperimentIdNotebookServerPostResponses, NotebookServerActionApiExperimentsExperimentIdNotebookServerPostErrors, ThrowOnError>({
     url: '/api/experiments/{experiment_id}/notebook_server',

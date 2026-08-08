@@ -13,6 +13,17 @@ class SearchFilters(BaseModel):
     author: str | None = None
 
 
+class FirecrawlHit(BaseModel):
+    """One ordered hit from Firecrawl `/search` (Phase 6.1/D21 amendment) —
+    relevance-ranked, not yet resolved to a canonical paper id. Only the
+    fields the enrichment match needs; anything else Firecrawl returns is
+    ignored rather than modelled."""
+
+    url: str
+    title: str
+    description: str | None = None
+
+
 class RawHit(BaseModel):
     """One source's un-deduped, un-reranked hit, before it becomes a `PaperSummary`."""
 

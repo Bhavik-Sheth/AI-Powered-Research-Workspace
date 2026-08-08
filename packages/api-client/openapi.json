@@ -1537,7 +1537,7 @@
       },
       "post": {
         "summary": "Notebook Server Action",
-        "description": "Starts or stops the experiment's live, interactive Jupyter server\ncontainer (Phase 2.4) \u2014 mutually exclusive with an in-flight measured\nrun, surfaced here as 409 rather than a generic 500.",
+        "description": "Starts or stops the experiment's live, interactive Jupyter server\ncontainer (Phase 2.4) \u2014 mutually exclusive with an in-flight measured\nrun, surfaced here as 409 rather than a generic 500. A `stop` whose\nforced save couldn't be confirmed (Phase 6.7's `NotebookSaveError`) is\nsurfaced as 503 \u2014 an external dependency (the container's Jupyter\nserver) temporarily not cooperating, recoverable by retrying Stop, not a\nclient mistake \u2014 and the container is left running, never removed.",
         "operationId": "notebook_server_action_api_experiments__experiment_id__notebook_server_post",
         "parameters": [
           {
@@ -7093,6 +7093,11 @@
                 "type": "null"
               }
             ]
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 5
           }
         },
         "type": "object",

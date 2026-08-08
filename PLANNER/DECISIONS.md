@@ -443,6 +443,21 @@ One LLM query-understanding pass → parallel fan-out to academic sources → de
 - **Dedup** on the D25 canonical id; **rerank** with the D15 cross-encoder; **cache** as a
   `result_id` in the D18 node 3 result store.
 
+**Amended, Phase 6.1 — Firecrawl is the relevance authority.** `/search` from **Firecrawl** now
+ranks every search: its result order drives ranking, and arXiv/OpenAlex/S2 are demoted from
+"primary fan-out" to **enrichment** — for each Firecrawl hit, resolving a real canonical id,
+citation count and OA PDF via their existing clients (dedup, `resolve_canonical_id` and
+`add_paper` are unchanged). Exactly 5 results render. When `FIRECRAWL_API_KEY` is unset, the
+quota is exhausted, or the call fails, search degrades to the arXiv/OpenAlex/S2 fan-out ranked by
+a deterministic `lexical_score` (exact-title match, phrase overlap, citation count) — never raw
+source order — and names `firecrawl` in `sources_failed`. The D15 cross-encoder is now an
+*optional refinement* pass on top of whichever ranking is active, never the sole ranker and never
+a blocking dependency search waits on. **Credential handling deviates from D13 on purpose:**
+`FIRECRAWL_API_KEY` is an infra key, the same category as the DB DSN, not an LLM provider
+credential — it is read directly from `backend/config.py`/`.env`, not through Settings Store's
+encrypted provider-key path (D13 still governs LLM provider credentials only). The five invariants
+(Rules.md) are unaffected.
+
 ### D22 — Structured extraction: two-stage, lazy
 
 1. The results list shows **abstract summary + metadata only** (title, venue, year, citations,
