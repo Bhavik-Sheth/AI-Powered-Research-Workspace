@@ -41,6 +41,10 @@ const COMPANION_DEFAULT_WIDTH = 280;
 const COMPANION_MAX_WIDTH = 520;
 // UI_DESIGN.md §7's "responsive story for ~1280px and below" (§9.2 item I).
 const RESPONSIVE_BREAKPOINT_PX = 1280;
+// JupyterLab's own hard floor (LiveNotebookPanel.css) — below this measured
+// width its own UI starts overlapping, so the Companion auto-collapses
+// before that happens rather than letting the framed app break (Phase 6.8).
+const NOTEBOOK_MIN_WIDTH_PX = 760;
 
 /** A drag handle between two panes. `direction` says which way the pointer
  * must move to grow the pane it resizes (+1 = right grows it, -1 = left
@@ -394,6 +398,10 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     updateTabLabel,
     reorderTab,
   } = useTabStack(projectId);
+  // Declared early (rather than alongside `renderTabContent` below, its
+  // other use site) — the width-driven Companion auto-collapse effect just
+  // below needs it too.
+  const activeTabKind = tabs.find((tab) => tab.id === activeTab)?.kind;
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
@@ -417,7 +425,11 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   // consumed there the same one-shot way `pendingAsk` already is.
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
   const [navCollapsed, toggleNav, setNavCollapsed] = useCollapsible("leftNavCollapsed");
-  const [companionCollapsed, toggleCompanion] = useCollapsible("companionCollapsed");
+  const [companionCollapsed, toggleCompanion, setCompanionCollapsed] = useCollapsible("companionCollapsed");
+  // The Experiments detail pane's own measured width (Phase 6.8), reported
+  // by `ExperimentsBoard` while a notebook is open there; `null` when no
+  // notebook is open, so the effect below has nothing to react to.
+  const [notebookWidth, setNotebookWidth] = useState<number | null>(null);
 
   // Below UI_DESIGN.md §7's ~1280px threshold, the nav collapses to icons
   // automatically — "the nav collapses to icons before the companion is
@@ -437,6 +449,23 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     return () => query.removeEventListener("change", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Width-driven Companion auto-collapse (Phase 6.8) — mirrors the nav's own
+  // one-directional breakpoint collapse just above: crossing under the
+  // notebook's floor forces a collapse, but recovering above it does not
+  // force a re-expand, so a Companion the user reopened at a narrow width
+  // (the manual toggle still works either way) isn't yanked shut again on
+  // the next measurement. Uses the *existing* restore handle
+  // (`toggleCompanion`/the `pane-toggle` button) — this only ever triggers
+  // that affordance's collapsed state, it doesn't build a new one.
+  useEffect(() => {
+    // Every open tab stays mounted (hidden, not unmounted — see
+    // `ProjectShell`'s own doc comment), so a stale/zero measurement can
+    // still arrive from an Experiments tab that isn't the active one;
+    // only react while it's actually on screen.
+    if (activeTabKind !== "experiments" || notebookWidth === null) return;
+    if (notebookWidth < NOTEBOOK_MIN_WIDTH_PX) setCompanionCollapsed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookWidth, activeTabKind]);
   const [navWidth, setNavWidth] = usePaneWidth("leftNavWidth", NAV_DEFAULT_WIDTH, NAV_MIN_WIDTH, NAV_MAX_WIDTH);
   const [companionWidth, setCompanionWidth] = usePaneWidth(
     "companionWidth",
@@ -571,8 +600,6 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     .map((tab) => (tab.kind === "reader" ? tab.params?.paperId : undefined))
     .filter((paperId): paperId is string => Boolean(paperId));
 
-  const activeTabKind = tabs.find((tab) => tab.id === activeTab)?.kind;
-
   function renderTabContent(tab: TabRef) {
     switch (tab.kind) {
       case "dashboard":
@@ -583,6 +610,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             tabs={tabs}
             activeTabId={activeTab}
             onResume={activateTab}
+            onOpenPaper={openReaderTab}
           />
         );
       case "library":
@@ -590,7 +618,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
       case "notes":
         return <NotesView projectId={projectId} />;
       case "experiments":
-        return <ExperimentsBoard projectId={projectId} socket={socket} />;
+        return <ExperimentsBoard projectId={projectId} socket={socket} onNotebookWidthChange={setNotebookWidth} />;
       case "matrix":
         return <MatrixView projectId={projectId} onOpenPaper={openReaderTab} />;
       case "graph":
@@ -607,6 +635,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
             onAskCompanion={askCompanion}
             onTitleResolved={tab.label ? undefined : (title) => updateTabLabel(tab.id, title)}
             pendingAnchor={pendingAnchor?.paperId === tab.params?.paperId ? pendingAnchor : null}
+            onOpenPaper={openReaderTab}
           />
         );
       case "search":

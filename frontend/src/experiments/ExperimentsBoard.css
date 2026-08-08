@@ -59,23 +59,63 @@
   cursor: not-allowed;
 }
 
-.experiments__board {
+/* Rail + wide detail pane (Phase 6.8) — replaces the four-column kanban.
+   JupyterLab's own UI breaks below 760px (LiveNotebookPanel.css); a
+   four-column layout could never guarantee that, a ~240px rail next to one
+   wide detail pane always can. */
+.experiments__layout {
   display: flex;
   gap: 12px;
   flex: 1;
   min-height: 0;
 }
 
-.experiments__column {
-  flex: 1 1 0;
-  min-width: 190px;
+.experiments__rail {
+  flex: none;
+  width: 240px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+  transition: width 0.15s ease;
 }
 
-.experiments__column-header {
+.experiments__rail--collapsed {
+  width: 28px;
+  overflow: hidden;
+}
+
+.experiments__rail-toggle {
+  align-self: flex-end;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: 700 11px var(--font-ui);
+}
+
+.experiments__rail-toggle:hover {
+  color: var(--accent-text);
+}
+
+.experiments__rail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.experiments__rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.experiments__rail-group-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -91,44 +131,38 @@
   color: var(--text-muted);
 }
 
-.experiments__column-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .experiments__empty {
   font: 500 11px var(--font-ui);
   color: var(--text-muted);
   padding: 8px 2px;
 }
 
-.experiments__card {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.experiments__card-head {
+.experiments__rail-item {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  background: none;
-  border: none;
-  padding: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 8px 10px;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.experiments__card-title {
-  font: 700 14px/1.3 var(--font-reading);
+.experiments__rail-item:hover {
+  border-color: var(--accent);
+}
+
+.experiments__rail-item--active {
+  border-color: var(--accent);
+  background: var(--accent-tint-12);
+}
+
+.experiments__rail-item-title {
+  font: 700 12px/1.3 var(--font-reading);
   color: var(--text-strong);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -136,8 +170,37 @@
   overflow: hidden;
 }
 
-.experiments__card-head:hover .experiments__card-title {
-  color: var(--accent-text);
+/* Wide detail pane — fills the rest of the content area next to the rail. */
+.experiments__detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px;
+}
+
+.experiments__detail-empty {
+  font: 500 11px var(--font-ui);
+  color: var(--text-muted);
+  padding: 8px 2px;
+}
+
+.experiments__detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.experiments__detail-title {
+  font: 700 16px/1.3 var(--font-reading);
+  color: var(--text-strong);
+  margin: 0;
 }
 
 .experiments__card-hypothesis {
@@ -166,28 +229,80 @@
   border-color: transparent;
 }
 
-/* Status badges (UI_DESIGN.md §4.6): done = filled accent tint,
-   in-progress = outlined accent, planned/remaining = outlined neutral.
-   Never the danger family — there is no "failed" status (PRD §13). */
-.experiments__badge {
+/* Rail-item triage dropdown (Phase 6.9) — same three-way palette as the
+   badges above, applied to a native `<select>` so a rail item's status can
+   change without opening it. Never the danger family (PRD §13). */
+.experiments__status-select {
   font: 700 10px var(--font-ui);
-  padding: 2px 8px;
+  padding: 2px 20px 2px 8px;
   border-radius: var(--radius-badge);
   border: 1px solid var(--border);
+  background: var(--surface-raised) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'%3E%3Cpath d='M0 0L4 6L8 0Z' fill='%23888'/%3E%3C/svg%3E") no-repeat right 6px center;
   color: var(--text-muted);
   white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
 }
 
-.experiments__badge--done {
-  background: var(--accent-tint-12);
+.experiments__status-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.experiments__status-select--done {
+  background-color: var(--accent-tint-12);
   color: var(--accent-text);
   border-color: transparent;
 }
 
-.experiments__badge--in-progress {
+.experiments__status-select--in-progress {
+  background-color: transparent;
+  color: var(--accent-text-outline);
+  border-color: var(--accent);
+}
+
+/* Detail-pane segmented control (Phase 6.9) — one segment per status value,
+   clicking PATCHes the open experiment's status. Active segment gets the
+   same accent treatment as the badges/dropdown above; inactive segments
+   stay neutral. Never the danger family (PRD §13). */
+.experiments__status-segmented {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.experiments__segment {
+  font: 700 10px var(--font-ui);
+  padding: 4px 10px;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.experiments__segment:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.experiments__segment:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.experiments__segment--active {
   background: transparent;
   color: var(--accent-text-outline);
   border-color: var(--accent);
+}
+
+.experiments__segment--active.experiments__segment--done {
+  background: var(--accent-tint-12);
+  color: var(--accent-text);
+  border-color: transparent;
 }
 
 /* Record Measured Run (Phase 2.4) — deliberately separate from the live

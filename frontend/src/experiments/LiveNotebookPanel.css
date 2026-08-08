@@ -5,6 +5,12 @@
   border-top: 1px solid var(--border);
   padding-top: 8px;
   min-width: 0;
+  /* Phase 6.8 — the panel now renders inside a wide detail pane (normally
+     comfortably over 760px), not a ~190px kanban column, so the frame can
+     query its own available width and only fall back to horizontal scroll
+     (below) when it's genuinely narrow, instead of that being the default
+     presentation. */
+  container-type: inline-size;
 }
 
 .live-notebook__toolbar {
@@ -36,12 +42,15 @@
 /* JupyterLab hard-codes its own "mobile layout" breakpoint at 760px
    (github.com/jupyterlab/jupyterlab#9567) — below that its toolbar,
    kernel picker and cell gutter start overlapping instead of wrapping
-   cleanly (jupyterlab#13115). That floor belongs to the framed app, not
-   to us, so this wrapper is the one place that scrolls horizontally when
-   the surrounding pane is narrower than 760px, rather than the column,
-   board or center pane above it doing so. */
+   cleanly (jupyterlab#13115). That floor belongs to the framed app, not to
+   us. Phase 6.8: the detail pane is normally wide enough that the iframe
+   just renders full-width, full-height, genuinely usable — real editing,
+   full-width cells, readable text. AppShell also auto-collapses the
+   Companion pane before the detail pane would ever be squeezed under
+   760px (Phase 6.8, AppShell.tsx), so the container-query fallback below
+   is a last resort for a genuinely narrow browser window, not the normal
+   case. */
 .live-notebook__iframe-frame {
-  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--surface-raised);
@@ -50,9 +59,21 @@
 .live-notebook__iframe {
   display: block;
   width: 100%;
-  min-width: 760px;
-  height: 520px;
+  height: 720px;
   border: none;
+}
+
+/* Last-resort fallback: only when this panel's own available width drops
+   below JupyterLab's floor does it scroll horizontally, instead of the
+   framed app's toolbar/kernel-picker/cell-gutter overlapping. */
+@container (max-width: 760px) {
+  .live-notebook__iframe-frame {
+    overflow-x: auto;
+  }
+
+  .live-notebook__iframe {
+    min-width: 760px;
+  }
 }
 
 .live-notebook__loading,

@@ -27,9 +27,15 @@ function isNotebookServerStoppedEvent(message: unknown): message is NotebookServ
  * A real, live, interactive Jupyter notebook per experiment (Phase 2.4) —
  * embedded via `<iframe>`, not a custom editor. `backend/sandbox`'s
  * `start_notebook_server` runs the actual Jupyter server inside a
- * long-lived per-experiment container; this panel owns exactly the
- * start-on-mount / stop-on-unmount lifecycle plus the explicit "Stop
- * notebook" affordance — everything else (cell editing, running cells in
+ * long-lived per-experiment container.
+ *
+ * Phase 6.7 — the server survives navigating away: this panel no longer
+ * stops the server when it unmounts (collapsing the card, switching tabs).
+ * On mount it first asks the backend whether this experiment already has a
+ * live server (`GET .../notebook_server`) and reattaches to it — same
+ * container, same kernel state — rather than always starting a fresh one.
+ * The server stops only via the explicit "Stop notebook" button or the
+ * backend's own 4h ceiling; everything else (cell editing, running cells in
  * any order, rich outputs, markdown) is Jupyter's own UI, running inside
  * the iframe's own browsing context.
  */
@@ -51,10 +57,21 @@ export function LiveNotebookPanel({
   useEffect(() => {
     let cancelled = false;
 
-    async function start() {
+    async function attach() {
       setError(null);
       setClosedReason(null);
       try {
+        // Reattach first: an already-live server (from before this panel
+        // remounted) keeps its kernel state — never start a second one on
+        // top of it.
+        const { data: existing } = await getNotebookServerApiExperimentsExperimentIdNotebookServerGet({
+          path: { experiment_id: experimentId },
+          throwOnError: true,
+        });
+        if (existing.state === "running") {
+          if (!cancelled) setStatus(existing);
+          return;
+        }
         const { data } = await notebookServerActionApiExperimentsExperimentIdNotebookServerPost({
           path: { experiment_id: experimentId },
           body: { action: "start" },
@@ -66,14 +83,12 @@ export function LiveNotebookPanel({
       }
     }
 
-    void start();
+    void attach();
+    // No stop on unmount (Phase 6.7) — collapsing the card or switching tabs
+    // must not tear the server down; only the explicit Stop button and the
+    // backend's own 4h ceiling do that.
     return () => {
       cancelled = true;
-      void notebookServerActionApiExperimentsExperimentIdNotebookServerPost({
-        path: { experiment_id: experimentId },
-        body: { action: "stop" },
-        throwOnError: true,
-      });
     };
   }, [experimentId, retryKey]);
 
