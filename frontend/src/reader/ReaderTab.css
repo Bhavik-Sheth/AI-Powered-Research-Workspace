@@ -124,6 +124,17 @@
   text-decoration: underline;
 }
 
+/* Phase 6.5: which enrichment tier (text/huggingface/firecrawl) found a
+   code/dataset link — a quiet provenance hint, not a call to action. */
+.reader__source-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font: 10px var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .reader__pages {
   flex: 1;
   overflow: auto;
@@ -245,6 +256,23 @@
   padding: 24px;
   font: 13px/1.6 var(--font-ui);
   color: var(--text);
+}
+
+/* Promotes a reference stub (Phase 6.3) to a full paper. */
+.reader__promote {
+  margin-top: 12px;
+  padding: 8px 14px;
+  font: 13px/1 var(--font-ui);
+  color: var(--surface);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+}
+
+.reader__promote:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Selection popover (D33): "Ask about this" / "Highlight" / "Explain". */

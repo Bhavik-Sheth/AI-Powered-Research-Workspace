@@ -5,6 +5,7 @@ import {
   getPaperApiPapersPaperIdGet,
   listProjectPapersApiProjectsProjectIdPapersGet,
   patchProjectPaperApiProjectsProjectIdPapersPaperIdPatch,
+  promoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePost,
   type LibraryEntry,
   type PaperCardField,
   type PaperDetail,
@@ -68,6 +69,14 @@ function codeLinkUrl(codeLink: Record<string, unknown>): string | null {
   return typeof url === "string" && url ? url : null;
 }
 
+/** Phase 6.5: which of the three enrichment tiers found this link — shown
+ * as a small provenance tag so "the paper's own text said so" reads
+ * differently from "HuggingFace/Firecrawl guessed it". */
+function linkSource(entry: Record<string, unknown>): string | null {
+  const source = entry.source;
+  return typeof source === "string" && source ? source : null;
+}
+
 /** One page: a canvas render plus an invisible, selectable text layer. */
 function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPageProxy; pageNumber: number; containerRef: (el: HTMLDivElement | null) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -127,6 +136,7 @@ export function ReaderTab({
   onAskCompanion,
   onTitleResolved,
   pendingAnchor,
+  onOpenPaper,
 }: {
   paperId: string;
   projectId: string;
@@ -141,6 +151,10 @@ export function ReaderTab({
    * tab. One-shot, consumed by `nonce` the same way `CompanionPane`'s own
    * `pendingAsk` is. */
   pendingAnchor?: { quote: string; charStart: number; charEnd: number; nonce: number } | null;
+  /** Opens a reader tab for a resolved reference stub (Phase 6.3) — the same
+   * callback LibraryView/MatrixView/GraphView already receive as
+   * `onOpenPaper`, threaded through here for the References box. */
+  onOpenPaper?: (paperId: string, title: string) => void;
 }) {
   const [detail, setDetail] = useState<PaperDetail | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
@@ -149,6 +163,7 @@ export function ReaderTab({
   const [popover, setPopover] = useState<SelectionPopover | null>(null);
   const [highlightState, setHighlightState] = useState<"idle" | "saving" | "saved">("idle");
   const [relevanceSaving, setRelevanceSaving] = useState(false);
+  const [promoting, setPromoting] = useState(false);
   const queryClient = useQueryClient();
   // Not in `PaperDetail` (that's a paper's own content, not its per-project
   // relevance). Shares its cache key with LibraryView's own list query
@@ -223,6 +238,22 @@ export function ReaderTab({
       // the control just stays on its last known value.
     } finally {
       setRelevanceSaving(false);
+    }
+  }
+
+  async function handlePromote() {
+    setPromoting(true);
+    try {
+      const { data } = await promoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePost({
+        path: { project_id: projectId, paper_id: paperId },
+        throwOnError: true,
+      });
+      setDetail((prev) => (prev ? { ...prev, paper: data } : prev));
+      queryClient.invalidateQueries({ queryKey: ["projectPapers", projectId] });
+    } catch {
+      // Stays on the degraded/stub view; the button remains clickable to retry.
+    } finally {
+      setPromoting(false);
     }
   }
 
@@ -314,6 +345,10 @@ export function ReaderTab({
     return <div className="reader__degraded">Loading…</div>;
   }
   if (!detail.paper.pdf_origin) {
+    // A reference stub (Phase 6.3) has `fetch_state: "skipped"` — deliberately
+    // never fetched, distinct from a paper whose OA fetch genuinely found
+    // nothing (`"degraded"`). Only the former gets an `Add to library` action.
+    const isStub = detail.paper.fetch_state === "skipped";
     return (
       <div className="reader__degraded">
         <h2>{detail.paper.title}</h2>
@@ -324,6 +359,11 @@ export function ReaderTab({
               View at source
             </a>
           </p>
+        )}
+        {isStub && (
+          <button type="button" className="reader__promote" disabled={promoting} onClick={() => void handlePromote()}>
+            {promoting ? "Adding…" : "Add to library"}
+          </button>
         )}
       </div>
     );
@@ -375,17 +415,26 @@ export function ReaderTab({
           ))}
           <h4>References ({references.length})</h4>
           {references.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
-          {references.map((reference) => (
-            <button
-              key={reference.ref_id}
-              type="button"
-              className="reader__section-link"
-              title={reference.raw}
-              onClick={() => void scrollToQuote(reference.raw)}
-            >
-              {reference.raw}
-            </button>
-          ))}
+          {references.map((reference) => {
+            const label = reference.title ?? reference.raw;
+            // A resolved reference (Phase 6.3) opens the referenced paper's
+            // own tab — a stub if it was never added, the real reader if it
+            // already was. One with no resolved `paper_id` falls back to
+            // the previous behaviour of jumping to its own citation text.
+            return (
+              <button
+                key={reference.ref_id}
+                type="button"
+                className="reader__section-link"
+                title={label}
+                onClick={() =>
+                  reference.paper_id ? onOpenPaper?.(reference.paper_id, label) : void scrollToQuote(reference.raw)
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
 
           <h4>Datasets ({datasets.length})</h4>
           {datasets.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
@@ -397,6 +446,7 @@ export function ReaderTab({
               onClick={() => void scrollToQuote(datasetLabel(dataset))}
             >
               {datasetLabel(dataset)}
+              {linkSource(dataset) && <span className="reader__source-tag">{linkSource(dataset)}</span>}
             </button>
           ))}
 
@@ -404,9 +454,11 @@ export function ReaderTab({
           {codeLinks.length === 0 && <p className="reader__not-stated">not stated in this paper</p>}
           {codeLinks.map((codeLink, index) => {
             const url = codeLinkUrl(codeLink);
+            const source = linkSource(codeLink);
             return url ? (
               <a key={index} className="reader__section-link" href={url} target="_blank" rel="noreferrer">
                 {url}
+                {source && <span className="reader__source-tag">{source}</span>}
               </a>
             ) : (
               <p key={index} className="reader__section-link">

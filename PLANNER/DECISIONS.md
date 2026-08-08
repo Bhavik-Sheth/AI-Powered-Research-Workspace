@@ -542,8 +542,14 @@ reads as per-project anyway (D3: symlinks + `papers.md`).
 
 ### D26 — Knowledge graph: metadata-first, LLM only on opened papers
 
-- **Free and exact edges from APIs:** cites / cited-by (OpenAlex, S2), authored-by, uses-dataset
-  and has-code (Papers with Code), topic tags.
+- **Free and exact edges from APIs:** cites / cited-by (OpenAlex, S2), authored-by, topic tags.
+- **uses-dataset / has-code (Phase 6.5 amendment):** Papers with Code is discontinued (its API
+  301s to huggingface.co). Sourced instead, degrading tier by tier, each tried only if the one
+  before found nothing: (1) URLs verbatim in the paper's own parsed text (github/gitlab/
+  huggingface.co/zenodo.org/kaggle.com — `source_api='text'`), (2) HuggingFace's papers API by
+  arXiv id, the real successor to PwC (`source_api='huggingface'`), (3) a Firecrawl search for
+  `"<title>" official implementation` as a last resort (`source_api='firecrawl'`). All three
+  finding nothing is a legitimate `[]`, never an error.
 - **LLM-derived edges** (method→method, idea→paper) are extracted **only for papers the user
   actually opened**, reusing the D22 extraction pass. A graph whose value is trustworthiness
   cannot afford hallucinated edges.

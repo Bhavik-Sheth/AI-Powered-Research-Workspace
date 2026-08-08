@@ -22,13 +22,14 @@ import db
 import jobs
 import memory
 import settings
+from config import get_config
 from db.models import Paper as PaperRow
 from db.models import PaperCards, PaperContent, QuoteAnchors
 from graph import write_llm_edges, write_metadata_edges
 from graph.models import LLMEdge, MetadataEdge
 from llm import LLMError, Message, complete_structured
 from papers.fetch import download_pdf, resolve_oa_pdf_url
-from papers.models import Paper, PaperCardField, PaperContentView, PaperInput, SourceIds
+from papers.models import Paper, PaperCardField, PaperContentView, PaperInput, ReferenceInfo, SourceIds
 from papers.parser import parse_pdf
 from provenance import validate_and_anchor
 from settings import get_vault_path
@@ -50,6 +51,19 @@ _ENRICH_JOB_TIMEOUT_S = 30
 _EMBED_JOB_TIMEOUT_S = 120
 
 _FIELD_KEYS = ("problem", "method", "datasets", "results", "limitations")
+
+# Top N references shown in the Reader's References box (Phase 6.3), ranked
+# by citation count where a source provides one.
+_TOP_REFERENCES = 5
+_TRACE_REFERENCES_JOB_TIMEOUT_S = 30
+
+# A raw PDF-parsed reference string sometimes carries an inline arXiv id or
+# DOI even with no API record for the *citing* paper — e.g. a preprint's own
+# bibliography still names arXiv ids for what it cites. Extracting an
+# explicit, already-present id from text is parsing, not invention; no
+# fabricated id is ever produced for a reference that names none.
+_ARXIV_ID_IN_TEXT = re.compile(r"arxiv:\s*(\d{4}\.\d{4,5})", re.IGNORECASE)
+_DOI_IN_TEXT = re.compile(r"10\.\d{4,9}/[^\s,;()]+")
 
 # Which extractive-card fields double as LLM-derived graph edges (D26), and
 # which node type/relation each becomes — a paper-intrinsic edge is only
@@ -105,6 +119,7 @@ def paper_from_row(row: PaperRow) -> Paper:
         parse_state=row.parse_state,
         embed_state=row.embed_state,
         extract_state=row.extract_state,
+        references_state=row.references_state,
     )
 
 
@@ -192,13 +207,28 @@ async def reprocess_paper(session: AsyncSession, paper_id: uuid.UUID) -> Paper |
             row.embed_state = "queued"
             await session.flush()
             await jobs.enqueue("embed_paper_job", paper_id=str(row.id), timeout=_EMBED_JOB_TIMEOUT_S)
+        if row.references_state not in _TERMINAL_STAGE_STATES:
+            row.references_state = "queued"
+            await session.flush()
+            await jobs.enqueue("trace_references_job", paper_id=str(row.id), timeout=_TRACE_REFERENCES_JOB_TIMEOUT_S)
 
     return paper_from_row(row)
 
 
-async def get_paper(session: AsyncSession, paper_id: uuid.UUID) -> Paper | None:
+async def get_paper(session: AsyncSession, paper_id: uuid.UUID, *, heal: bool = False) -> Paper | None:
+    """`heal=True` is the open-paper read path only (`GET /api/papers/:id`):
+    a paper whose reference trace has never run (`references_state` still at
+    its `queued` default — Phase 6.3 papers predate the trace entirely, and
+    a handful of Phase 6.4-era papers may have raced the enqueue in
+    `parse_paper_job`) gets it enqueued exactly once here. Every other
+    caller of this function (harness tools, matrix, internal reads) passes
+    `heal=False` (the default) so a plain lookup never has a side effect."""
     row = await session.get(PaperRow, paper_id)
-    return paper_from_row(row) if row else None
+    if row is None:
+        return None
+    if heal and row.references_state == "queued":
+        await jobs.enqueue("trace_references_job", paper_id=str(row.id), timeout=_TRACE_REFERENCES_JOB_TIMEOUT_S)
+    return paper_from_row(row)
 
 
 async def get_pdf_path(session: AsyncSession, paper_id: uuid.UUID) -> str | None:
@@ -275,6 +305,7 @@ async def parse_paper_job(_ctx: dict, *, paper_id: str) -> None:
 
     await jobs.enqueue("extract_card_job", paper_id=paper_id, timeout=_EXTRACT_JOB_TIMEOUT_S)
     await jobs.enqueue("embed_paper_job", paper_id=paper_id, timeout=_EMBED_JOB_TIMEOUT_S)
+    await jobs.enqueue("trace_references_job", paper_id=paper_id, timeout=_TRACE_REFERENCES_JOB_TIMEOUT_S)
 
 
 _EXTRACTION_PROMPT = (
@@ -466,42 +497,330 @@ async def extract_card_job(_ctx: dict, *, paper_id: str) -> None:
     await jobs.enqueue("enrich_paper_job", paper_id=paper_id, timeout=_ENRICH_JOB_TIMEOUT_S)
 
 
-async def enrich_paper_job(_ctx: dict, *, paper_id: str) -> None:
-    """Papers with Code / GitHub enrichment, on open only (D21/D26).
+# Tier 1 (text scan): domains carrying implementation code vs. datasets, in
+# one alternation so the paper's full text is scanned once. github/gitlab
+# and huggingface.co model/Space links are code; huggingface.co/datasets,
+# kaggle.com/datasets and zenodo.org (DOI-style archival records, almost
+# always a dataset/artifact release) are datasets — see the classifier
+# below for the exact split.
+_SOURCE_URL = re.compile(
+    r"https?://(?:www\.)?(?:github\.com|gitlab\.com|huggingface\.co|kaggle\.com|zenodo\.org)/[^\s)\"'<>\]]+",
+    re.IGNORECASE,
+)
 
-    As of this build, paperswithcode.com's API redirects to huggingface.co
-    — the service appears discontinued. This degrades gracefully (no code
-    links, no metadata edges) rather than failing the job; nothing
-    downstream depends on enrichment succeeding.
-    """
+
+def _harvest_text_links(full_text: str) -> tuple[list[dict], list[dict]]:
+    """Tier 1 (D26 amendment): URLs verbatim in the paper's own parsed text
+    — about as metadata-exact as it gets, hence `source_api='text'` and
+    `provenance='metadata'` (no inference, just extraction of an explicit
+    string already present in the PDF)."""
+    code: list[dict] = []
+    datasets: list[dict] = []
+    seen_code: set[str] = set()
+    seen_datasets: set[str] = set()
+    for raw_url in _SOURCE_URL.findall(full_text):
+        url = raw_url.rstrip(".,;:)")
+        is_dataset = "zenodo.org" in url or "/datasets/" in url  # HF or Kaggle dataset path, or a Zenodo record
+        bucket, seen = (datasets, seen_datasets) if is_dataset else (code, seen_code)
+        if url in seen:
+            continue
+        seen.add(url)
+        bucket.append({"name": url.rsplit("/", 1)[-1], "url": url, "source": "text"} if is_dataset else {"url": url, "source": "text"})
+    return code, datasets
+
+
+# HuggingFace's papers API (verified live against a known paper's arXiv id
+# during Phase 6.5 tracer fire): `GET /api/papers/{arxiv_id}` returns 200
+# with `linkedModels`/`linkedDatasets`/`linkedSpaces` — HF repos whose own
+# README cites this arXiv id, not necessarily the paper authors' own
+# canonical repo, but the real, still-live successor to Papers with Code
+# (D26 amendment) and the best structured signal available post-PwC. A
+# paper with no HF repo citing it 404s with an `{"error": ...}` body,
+# handled as "found nothing", not a failure.
+_HF_PAPERS_API_URL = "https://huggingface.co/api/papers/{arxiv_id}"
+_HF_LINKED_MODELS_LIMIT = 3
+_HF_LINKED_DATASETS_LIMIT = 3
+
+
+async def _harvest_huggingface_links(arxiv_id: str) -> tuple[list[dict], list[dict]]:
+    """Tier 2, only called when tier 1 found nothing. Defensive `.get()`
+    throughout: an undocumented shape drift on HuggingFace's side must
+    degrade to tier 3, never crash the job (Rules.md)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(_HF_PAPERS_API_URL.format(arxiv_id=arxiv_id))
+        if response.status_code != 200:
+            return [], []
+        payload = response.json()
+    except (httpx.HTTPError, ValueError):
+        return [], []
+
+    if not isinstance(payload, dict):
+        return [], []
+
+    code = [
+        {"url": f"https://huggingface.co/{model_id}", "source": "huggingface"}
+        for model in payload.get("linkedModels", [])[:_HF_LINKED_MODELS_LIMIT]
+        if isinstance(model, dict) and (model_id := model.get("id"))
+    ]
+    datasets = [
+        {"name": dataset_id, "url": f"https://huggingface.co/datasets/{dataset_id}", "source": "huggingface"}
+        for dataset in payload.get("linkedDatasets", [])[:_HF_LINKED_DATASETS_LIMIT]
+        if isinstance(dataset, dict) and (dataset_id := dataset.get("id"))
+    ]
+    return code, datasets
+
+
+# Tier 3's search query (D26 amendment) — last resort, only when tiers 1
+# and 2 both found nothing.
+_FIRECRAWL_CODE_QUERY = '"{title}" official implementation'
+_FIRECRAWL_RESULT_LIMIT = 5
+_FIRECRAWL_CODE_DOMAINS = ("github.com", "gitlab.com")
+
+
+async def _harvest_firecrawl_link(title: str) -> list[dict]:
+    """Tier 3, reusing Phase 6.1's Firecrawl client — same optional-key
+    degrade Search Federation already established: no key configured means
+    no fallback, not a failure."""
+    # Imported locally, not at module top: search/__init__.py imports
+    # `resolve_canonical_id` from this module (papers), so a top-level
+    # import of anything under `search` here would cycle — same pattern
+    # `trace_references_job` already uses for `search.sources` imports.
+    from search.sources import search_firecrawl
+
+    config = get_config()
+    if not config.firecrawl_api_key:
+        return []
+    try:
+        hits = await search_firecrawl(
+            _FIRECRAWL_CODE_QUERY.format(title=title), config.firecrawl_api_key, _FIRECRAWL_RESULT_LIMIT
+        )
+    except httpx.HTTPError:
+        return []
+    for hit in hits:
+        if any(domain in hit.url for domain in _FIRECRAWL_CODE_DOMAINS):
+            return [{"url": hit.url, "source": "firecrawl"}]
+    return []
+
+
+def _dataset_edge_dst_id(dataset: dict) -> str:
+    """Node identity, split by trust (D26): a HuggingFace-sourced dataset
+    already has a real dataset id/slug (used directly); a dataset name
+    harvested from text gets the same light normalisation a concept node
+    gets — dup-tolerant, under-merging beats false-merging."""
+    return dataset["name"] if dataset.get("source") == "huggingface" else slugify(dataset["name"])
+
+
+async def enrich_paper_job(_ctx: dict, *, paper_id: str) -> None:
+    """Code/dataset provenance, on open only (D21/D26 amendment): the
+    paper's own text, then HuggingFace's papers API (the real successor to
+    the discontinued Papers with Code), then a Firecrawl search, each tier
+    only tried if the previous one found nothing. Writes
+    `paper_content.code_links`/`datasets` plus the corresponding
+    `has_code`/`uses_dataset` metadata edges. Partial source failure
+    degrades, it never fails the job — worst case, all three tiers find
+    nothing and both fields legitimately stay `[]`."""
     pid = uuid.UUID(paper_id)
     async with db.session() as session:
         paper = await session.get(PaperRow, pid)
-        if paper is None or not paper.arxiv_id:
+        content = await session.get(PaperContent, pid)
+        if paper is None or content is None:
             return
 
-        try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-                response = await client.get(
-                    "https://paperswithcode.com/api/v1/papers/", params={"arxiv_id": paper.arxiv_id}
-                )
-            if response.status_code != 200:
-                return
-            results = response.json().get("results", [])
-        except httpx.HTTPError:
+        code, datasets = _harvest_text_links(content.full_text)
+
+        if not code and not datasets and paper.arxiv_id:
+            code, datasets = await _harvest_huggingface_links(paper.arxiv_id)
+
+        if not code and not datasets:
+            code = await _harvest_firecrawl_link(paper.title)
+
+        if not code and not datasets:
             return
+
+        content.code_links = code
+        content.datasets = datasets
 
         edges = [
             MetadataEdge(
                 src_type="paper",
                 src_id=paper.canonical_id,
                 dst_type="repo",
-                dst_id=repo_url,
+                dst_id=link["url"],
                 relation="has_code",
-                source_api="pwc",
+                source_api=link["source"],
             )
-            for entry in results
-            if (repo_url := entry.get("url_source_url") or entry.get("url_abs"))
+            for link in code
+        ] + [
+            MetadataEdge(
+                src_type="paper",
+                src_id=paper.canonical_id,
+                dst_type="dataset",
+                dst_id=_dataset_edge_dst_id(dataset),
+                relation="uses_dataset",
+                source_api=dataset["source"],
+            )
+            for dataset in datasets
         ]
         if edges:
             await write_metadata_edges(session, pid, edges)
+
+
+def _extract_ids_from_raw_reference(raw: str) -> SourceIds | None:
+    """An explicit arXiv id or DOI already present in a PDF-parsed reference
+    string — parsing, not invention (Rules.md "never invent"). `None` when
+    the raw text names neither, which is common and expected."""
+    arxiv_match = _ARXIV_ID_IN_TEXT.search(raw)
+    doi_match = _DOI_IN_TEXT.search(raw)
+    if arxiv_match is None and doi_match is None:
+        return None
+    return SourceIds(
+        doi=doi_match.group(0) if doi_match else None,
+        arxiv_id=arxiv_match.group(1) if arxiv_match else None,
+    )
+
+
+async def _set_references_state(pid: uuid.UUID, state: str) -> None:
+    async with db.session() as session:
+        paper = await session.get(PaperRow, pid)
+        if paper is not None:
+            paper.references_state = state
+
+
+async def add_reference_stub(session: AsyncSession, source_ids: SourceIds, title: str) -> PaperRow:
+    """A metadata-only reference stub (Phase 6.3) — title/authors/year/
+    canonical id only, `fetch_state='skipped'` so no fetch/parse/extract job
+    is ever enqueued for it. Dedupes on canonical id exactly like
+    `add_paper`: if the referenced paper already has a row (a full paper, or
+    an earlier trace's stub), that row is returned untouched rather than
+    downgraded or duplicated."""
+    canonical_id = resolve_canonical_id(source_ids)
+    existing = await session.scalar(select(PaperRow).where(PaperRow.canonical_id == canonical_id))
+    if existing is not None:
+        return existing
+
+    row = PaperRow(
+        id=uuid.uuid4(),
+        canonical_id=canonical_id,
+        canonical_id_source=canonical_id.split(":", 1)[0],
+        doi=source_ids.doi,
+        arxiv_id=source_ids.arxiv_id,
+        openalex_id=source_ids.openalex_id,
+        s2_id=source_ids.s2_id,
+        title=title or canonical_id,
+        fetch_state="skipped",
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def trace_references_job(_ctx: dict, *, paper_id: str) -> None:
+    """API-first, PDF-section-fallback reference tracing (Phase 6.3, edges
+    added Phase 6.4): resolves the top `_TOP_REFERENCES` references, by
+    citation count where a source provides one, into metadata-only stub rows
+    via `add_reference_stub`, then overwrites `paper_content.references` with
+    the resolved list so the Reader's References box has a real title and a
+    `paper_id` to navigate to for each entry. A reference this cannot
+    resolve to any source id still renders (its raw text is kept) but has no
+    `paper_id` — a "not stated" style degrade, never a fabricated link.
+
+    Every reference that *did* resolve to a stub/full `papers` row also gets
+    a `cites` `paper_edges` row via `write_metadata_edges` — the Graph View's
+    real paper->paper tracebacks. `source_api` names whichever source
+    actually resolved it (`openalex`/`s2`); the PDF-section fallback's
+    inline-id case resolved no API at all, so its edges carry no
+    `source_api` rather than fabricating one that wasn't queried.
+    `references_state` tracks this stage exactly like `parse_state`/
+    `extract_state`: `running` at the start, `done` on success, `failed` on
+    an unhandled exception (this job is the job-worker boundary — the one
+    place Rules.md permits a bare `except Exception`, same as
+    `embed_paper_job`)."""
+    # Imported locally, not at module top: search/__init__.py imports
+    # `resolve_canonical_id` from this module, so a top-level import here
+    # would cycle (the same pattern jobs/__init__.py already uses for its
+    # own handler imports).
+    from search.models import RawHit
+    from search.sources import fetch_openalex_references, fetch_s2_references
+
+    pid = uuid.UUID(paper_id)
+    await _set_references_state(pid, "running")
+    try:
+        async with db.session() as session:
+            paper = await session.get(PaperRow, pid)
+            content = await session.get(PaperContent, pid)
+            if paper is None or content is None:
+                return
+
+            hits: list[RawHit] = []
+            source_api: str | None = None
+            if paper.openalex_id:
+                try:
+                    hits = await fetch_openalex_references(paper.openalex_id, _TOP_REFERENCES)
+                    if hits:
+                        source_api = "openalex"
+                except httpx.HTTPError:
+                    hits = []  # degrade to the S2/PDF fallback, never fail the job (Rules.md)
+            if not hits and paper.s2_id:
+                try:
+                    hits = await fetch_s2_references(paper.s2_id, _TOP_REFERENCES)
+                    if hits:
+                        source_api = "s2"
+                except httpx.HTTPError:
+                    hits = []  # degrade to the PDF-section fallback below
+
+            resolved: list[dict] = []
+            edges: list[MetadataEdge] = []
+            if hits:
+                for hit in hits[:_TOP_REFERENCES]:
+                    try:
+                        stub = await add_reference_stub(session, hit.source_ids, hit.title)
+                    except ValueError:
+                        continue  # a hit with no usable source id at all — skip rather than fabricate one
+                    resolved.append(
+                        {"ref_id": f"r{len(resolved)}", "raw": hit.title, "title": hit.title, "paper_id": str(stub.id)}
+                    )
+                    edges.append(
+                        MetadataEdge(
+                            src_type="paper",
+                            src_id=paper.canonical_id,
+                            dst_type="paper",
+                            dst_id=stub.canonical_id,
+                            relation="cites",
+                            source_api=source_api,
+                        )
+                    )
+            else:
+                for entry in content.references_[:_TOP_REFERENCES]:
+                    raw = entry.get("raw", "")
+                    stub_id: str | None = None
+                    source_ids = _extract_ids_from_raw_reference(raw)
+                    if source_ids is not None:
+                        stub = None
+                        try:
+                            stub = await add_reference_stub(session, source_ids, raw[:200])
+                        except ValueError:
+                            pass
+                        if stub is not None:
+                            stub_id = str(stub.id)
+                            edges.append(
+                                MetadataEdge(
+                                    src_type="paper",
+                                    src_id=paper.canonical_id,
+                                    dst_type="paper",
+                                    dst_id=stub.canonical_id,
+                                    relation="cites",
+                                    source_api=None,
+                                )
+                            )
+                    resolved.append(
+                        {"ref_id": entry.get("ref_id") or f"r{len(resolved)}", "raw": raw, "title": None, "paper_id": stub_id}
+                    )
+
+            content.references_ = resolved
+            if edges:
+                await write_metadata_edges(session, pid, edges)
+            paper.references_state = "done"
+    except Exception:
+        await _set_references_state(pid, "failed")
+        raise
