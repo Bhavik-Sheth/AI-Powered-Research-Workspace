@@ -202,3 +202,84 @@ PRD author reads it as a decision rather than a consequence.
 ## Escalations
 
 _(none)_
+
+---
+
+# Fix Round 1 — post-V0 issue grill
+
+status: complete
+started: 2026-08-08
+completed: 2026-08-08
+source of issues: `PLANNER/Things_to_finish.md`
+
+## Root causes found in the code before asking anything
+
+- **Search order.** `backend/search/reranker.py` downloads a ~91MB cross-encoder on first use with
+  a 30s bound and no local cache; on timeout `search_papers._rank` silently returns the raw
+  fan-out order (arXiv's 30, then OpenAlex's 30, then S2's 30) and only names `reranker` in
+  `sources_failed`. No top-N cap existed anywhere.
+- **Empty References box.** `papers/parser.py` collects only docling items labelled
+  `DocItemLabel.REFERENCE`, which docling rarely emits, so `paper_content.references_` is normally
+  `[]`.
+- **No graph tracebacks.** Nothing in the backend ever writes a `cites` edge — the relation is in
+  the CHECK constraint and the `GraphEdge` vocabulary, but has no writer.
+- **No code/dataset traces.** `parse_paper_job` writes `datasets=[]` and `code_links=[]`
+  unconditionally, and `enrich_paper_job`'s only source (paperswithcode.com) is discontinued — its
+  API 301s to huggingface.co.
+- **Notebook loss.** The notebook file *is* local and bind-mounted from
+  `~/ResearchOS/projects/<p>/experiments/<e>/notebook.ipynb`, but
+  `LiveNotebookPanel`'s unmount cleanup stops and removes the container on every collapse or tab
+  switch, discarding anything Jupyter had not autosaved (~2 min window).
+- **Notebook aspect ratio.** The panel renders inside one of four kanban columns; JupyterLab's own
+  UI breaks below 760px, which the CSS worked around with horizontal scrolling.
+- **No status change.** `PATCH /api/projects/:id/experiments/:experimentId` already accepts
+  `status`; no UI ever calls it.
+- **Graph labels.** `text-max-width: 90px` + `text-wrap: ellipsis` truncates every title mid-word.
+
+## Decisions taken
+
+1. **Build order** — search → references → graph → experiments → dashboard. References before
+   graph because both symptoms share one root cause.
+2. **Firecrawl is the relevance authority.** Firecrawl `/search` ranks; arXiv/OpenAlex/S2 are
+   demoted to enrichment (canonical id, citation count, OA PDF). Amends D21.
+3. **Firecrawl degradation** — missing key / quota / failure falls back to the existing fan-out
+   ranked by a new deterministic lexical score (exact title, phrase overlap, citations), surfaced
+   through the existing `sources_failed` card. Search is never unusable.
+4. **Top 5, reveal-then-widen.** First pass shows exactly 5. `Search more` reveals the rest of the
+   already-fetched pool with no network call; only once exhausted does a further click widen the
+   query for real.
+5. **References: API first, PDF fallback.** OpenAlex `referenced_works` / S2 `references` for the
+   top 5 by citation count; parse the PDF's References section only for papers with no API record.
+6. **Referenced papers become metadata-only stub rows** — real title in the graph, clickable in the
+   References box, full fetch/parse/extract only on an explicit `Add to library`.
+7. **Code/dataset tracing** — harvest URLs verbatim from the paper's own text first, then
+   HuggingFace's papers API (PwC's actual successor), then Firecrawl search. The dead PwC call is
+   removed outright. Amends D26.
+8. **Backfill** — old papers heal the first time they are opened; the existing `Retry` forces it.
+   No mass migration job.
+9. **Notebook lifetime** — the server survives navigation and stops only on explicit Stop or the
+   4h ceiling; every stop path forces a save through Jupyter's REST API and confirms the vault
+   file landed before removing the container.
+10. **Notebook layout** — the board becomes a ~240px status-grouped rail plus a wide detail pane;
+    the Companion pane auto-collapses when width would push the notebook under Jupyter's 760px
+    floor.
+11. **Status controls** — segmented control in the detail header *and* a dropdown on rail items.
+12. **Graph labels** — wrap to 3 lines at ~160px with more layout spacing, plus a hover tooltip
+    carrying the full title.
+13. **Dashboard "currently working on"** — no new `research_questions` table; reuse the project's
+    existing `focus_seed` plus in-progress experiment hypotheses.
+14. **Progress meter** — experiment completion only, as one bar segmented by the four statuses.
+15. **Top relevant papers** — drawn from the project's own library, ranked against the current
+    focus with the existing embedding/rerank machinery (not the Feed's unseen items).
+16. **Dashboard retains** "Continue where you left off" and "Needs attention"; the four bare count
+    tiles fold into the new blocks.
+17. **DECISIONS.md is amended as part of the work** (D21, D26), not afterwards, so the locked
+    architecture stays the single source of truth.
+18. **Verification** — each phase ends with a live app check of the exact symptom; automated tests
+    only where the logic is genuinely tricky (ranking, reference resolution, save-then-stop).
+
+## Flagged, decided knowingly
+
+- `FIRECRAWL_API_KEY` is read from `backend/config.py` / `.env`, not through Settings Store's
+  encrypted provider path. D13 governs *LLM provider* credentials; Firecrawl is an infra key of the
+  same category as the Postgres DSN. Recorded in the D21 amendment rather than left implicit.

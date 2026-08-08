@@ -432,3 +432,288 @@ Phase 5.1
 `GET/POST /api/projects/:id/feed`; `frontend/src/feed/` (Feed View) — card list with why-relevant,
 save/dismiss actions; tables: `feed_items` (`score`, `why_relevant`, `state`), `seen_set`,
 `projects.corpus_centroid`, `scheduled_jobs` (`job_kind='interest_profile_reextract'`).
+
+---
+
+# Fix Round 1 — post-V0 issue fixes (Phase 6)
+
+**Same binding vocabulary as above.** Build units are `Phase 6.M`, each a vertical,
+independently runnable slice; the last sub-unit (Phase 6.11) is this round's hard sign-off.
+Source of the issue list: `PLANNER/Things_to_finish.md`. Every decision below was resolved
+in the grill session recorded in `PLANNER/GrillLog.md` (Fix Round 1 section) — this document
+introduces no new decision.
+
+Build order, fixed by the grill session: **search → references → graph → experiments → dashboard**.
+References come before graph on purpose: the empty References box and the missing graph tracebacks
+are one root cause (nothing in the backend ever writes a `cites` edge), so Phase 6.3/6.4 fix both.
+
+---
+
+## Phase 6.1: Firecrawl ranks the search, top 5 results, deterministic fallback
+
+### What this delivers
+Searching "attention is all you need" returns that paper first: Firecrawl `/search` becomes the
+relevance authority and its result order drives ranking, with arXiv/OpenAlex/S2 demoted to
+enrichment (resolving each Firecrawl hit to a real canonical id, citation count and OA PDF so
+dedup, `add_paper` and the whole Paper Pipeline are unchanged). Exactly 5 results render. When no
+`FIRECRAWL_API_KEY` is configured, the quota is exhausted, or the call fails, search degrades to
+today's arXiv/OpenAlex/S2 fan-out ranked by a new deterministic lexical score (exact-title match,
+phrase overlap, citation count) and names `firecrawl` in `sources_failed` — search is never
+unusable and never falls back to raw source order again.
+
+### Depends on
+none
+
+### Touches
+`backend/search/` (Search Federation) — new `search_firecrawl` client in `sources.py`, new
+deterministic `lexical_score` module, `search_papers` reordered to rank-then-enrich, `_rank`
+replaced (the cross-encoder in `reranker.py` becomes an optional refinement, never the only
+ranker); `backend/config.py` — reads `FIRECRAWL_API_KEY` (flagged deviation: D13's
+Settings-Store-encrypted path covers *LLM provider* credentials; Firecrawl is an infra key, same
+category as the DB DSN — recorded in the D21 amendment below); `backend/.env.example` — documents
+`FIRECRAWL_API_KEY`; `backend/papers/` (Paper Pipeline) — `resolve_canonical_id` reused unchanged
+to key enrichment; `backend/api/search.py` (REST API) — `POST /api/search` gains a `limit`
+(default 5); `frontend/src/search/` (Search Results) — renders 5 cards; `packages/api-client/`
+(Generated API Client) — regenerated; `PLANNER/DECISIONS.md` — D21 amended (Firecrawl is the
+relevance authority; the three literature APIs become enrichment sources), invariants unchanged.
+
+---
+
+## Phase 6.2: "Search more" widens the search only when asked
+
+### What this delivers
+A `Search more` control below the 5 results reveals the rest of the already-fetched pool
+(results 6 onward) with no network call; once that pool is exhausted, a further click runs a
+genuinely wider query (next Firecrawl page / deeper per-source `max_results`) and appends the new
+results. No additional papers are ever searched, resolved or enriched unless the user asks.
+
+### Depends on
+Phase 6.1
+
+### Touches
+`backend/search/` (Search Federation) — `search_papers` gains a `page`/`offset` parameter,
+`refine_results` extended to serve an already-cached page from `result_store` without re-querying;
+`backend/api/search.py` (REST API) — `GET /api/results/:resultId` accepts an offset,
+`POST /api/search` accepts `page`; `frontend/src/search/` (Search Results) — `Search more` button,
+reveal-then-widen state, exhausted state; `packages/api-client/` (Generated API Client) —
+regenerated; table: `result_store` (`ui_view` holds the full fetched pool, `expires_at` unchanged).
+
+---
+
+## Phase 6.3: A paper's top 5 references appear in the References box and are clickable
+
+### What this delivers
+Opening a paper shows its top 5 references (ranked by citation count) in the Reader's References
+box, each with a real title, and clicking one opens that paper. References come from OpenAlex
+`referenced_works` / Semantic Scholar `references`; a paper with no API record falls back to
+parsing the References section out of the docling `full_text`. Each reference is written as a
+metadata-only stub `papers` row (title/authors/year/canonical id, no PDF fetch, no parse, no
+extraction), so clicking it opens a lightweight detail with an `Add to library` action that
+triggers the full pipeline on demand.
+
+### Depends on
+none
+
+### Touches
+`backend/papers/` (Paper Pipeline) — new `trace_references_job` (API-first, PDF-section fallback),
+new `add_reference_stub` (writes a `papers` row with `fetch_state='skipped'`), `parse_paper_job`
+enqueues it, `parser.py` gains reference-section splitting; `backend/search/sources.py`
+(Search Federation) — reference-list fetch reused from the existing OpenAlex/S2 clients;
+`backend/api/papers.py` (REST API) — `GET /api/papers/:id/content` returns resolved references
+with `paper_id`, `POST /api/projects/:id/papers/:paperId/promote` promotes a stub to a full paper;
+`frontend/src/reader/ReaderTab.tsx` (Reader) — References box renders clickable rows +
+`Add to library`; `packages/api-client/` (Generated API Client) — regenerated; tables: `papers`
+(stub rows), `paper_content.references_` (now populated).
+
+---
+
+## Phase 6.4: Citations reach the Knowledge Graph, and old papers heal on open
+
+### What this delivers
+The traced references are written as `cites` edges, so the Graph View finally shows real
+paper→paper tracebacks with real titles (the stub rows from Phase 6.3 supply
+`Graph.paper_titles`). Papers added before this round heal automatically: opening a paper whose
+reference trace has never run enqueues it once, and the Library's existing `Retry` action
+re-runs it on demand — no mass migration job, no startup stall.
+
+### Depends on
+Phase 6.3
+
+### Touches
+`backend/graph/` (Knowledge Graph) — `write_metadata_edges` called with `relation='cites'`,
+`source_api='openalex'|'s2'`; `backend/papers/` (Paper Pipeline) — `trace_references_job` writes
+the edges, `reprocess_paper` re-drives the trace stage, an open-paper read enqueues the trace when
+it has never run; `backend/api/papers.py` (REST API) — open-paper read path;
+`frontend/src/graph/GraphView.tsx` (Graph View) — no change beyond consuming the new edges;
+tables: `paper_edges` (`relation='cites'`, `provenance='metadata'`), `papers` (a new
+`references_state` column, mirroring `parse_state`/`extract_state`, via a new Alembic migration).
+
+---
+
+## Phase 6.5: Implementation repos and dataset sources are traced
+
+### What this delivers
+An opened paper shows where its code and datasets actually live: URLs harvested verbatim from the
+parsed full text (github.com / gitlab / huggingface.co / zenodo / kaggle), then — if the paper
+states none — HuggingFace's papers API by arXiv id (the real successor to the discontinued
+Papers-with-Code), then Firecrawl search for `"<title>" official implementation` as a last resort.
+Results populate `paper_content.code_links` / `datasets` and become `has_code` / `uses_dataset`
+edges in the graph. The dead paperswithcode.com call is removed.
+
+### Depends on
+Phase 6.1
+
+### Touches
+`backend/papers/` (Paper Pipeline) — `enrich_paper_job` rewritten: text-scan → HuggingFace papers
+API → Firecrawl fallback, PwC call deleted, writes `code_links`/`datasets` instead of leaving them
+`[]`; `backend/search/sources.py` (Search Federation) — Firecrawl client reused;
+`backend/graph/` (Knowledge Graph) — `has_code` metadata edges (`source_api='huggingface'|'text'`),
+`uses_dataset` edges; `backend/api/papers.py` (REST API) — content response carries the links;
+`frontend/src/reader/ReaderTab.tsx` (Reader) — code/dataset links rendered with their origin;
+`PLANNER/DECISIONS.md` — D26 amended (enrichment source is the paper's own text → HuggingFace →
+Firecrawl, never PwC); tables: `paper_content` (`code_links`, `datasets`), `paper_edges`.
+
+---
+
+## Phase 6.6: Graph node labels are readable
+
+### What this delivers
+A node's title is legible on the canvas: labels wrap onto up to 3 lines at ~160px instead of
+ellipsising mid-word, layout spacing grows so wrapped labels do not collide, and hovering any node
+shows its complete title. Selecting a node still shows the full title and its connections in the
+detail panel.
+
+### Depends on
+Phase 6.4
+
+### Touches
+`frontend/src/graph/GraphView.tsx` (Graph View) — `STYLESHEET` label rules (`text-wrap: wrap`,
+`text-max-width`, `text-max-lines`), `LAYOUT` node repulsion/padding, hover tooltip via a
+`mouseover`/`mouseout` handler; `frontend/src/graph/GraphView.css` (Graph View) — tooltip styling
+from Design Tokens; `frontend/src/graph/nodeStyle.ts` (Graph View) — unchanged legend.
+
+---
+
+## Phase 6.7: A notebook survives navigating away
+
+### What this delivers
+Leaving an experiment no longer destroys work. The per-experiment Jupyter server stays alive when
+the user navigates away or collapses the card, and coming back reattaches to the same live session
+(kernel state intact); it stops only on the explicit `Stop notebook` action or the existing 4-hour
+ceiling. Every stop path first forces a save through Jupyter's own REST API and waits for
+`notebook.ipynb` to land in the vault at
+`~/ResearchOS/projects/<project>/experiments/<experiment>/notebook.ipynb` before the container is
+removed — so nothing is ever lost to an unsaved autosave window.
+
+### Depends on
+none
+
+### Touches
+`backend/sandbox/` (Execution Sandbox) — `stop_notebook_server` gains a save-then-verify step
+(`PUT`/`POST` against the container's Jupyter contents API, then confirm the vault file's mtime
+advanced) before `container.remove`; the sidecar-shutdown path and `_enforce_ceiling` use the same
+step; `sweep_orphaned_notebook_servers` unchanged; `backend/vault/` (Vault Writer) —
+`write_experiment_files` unchanged, called after the confirmed save; `backend/api/experiments.py`
+(REST API) — `POST /api/experiments/:id/notebook_server` unchanged in shape;
+`frontend/src/experiments/LiveNotebookPanel.tsx` (Experiments Board) — the unmount cleanup no
+longer stops the server; mount reattaches via
+`GET /api/experiments/:id/notebook_server` before starting a new one; table: `experiments`
+(`notebook_path`).
+
+---
+
+## Phase 6.8: The notebook gets the page — rail plus wide detail pane
+
+### What this delivers
+The Experiments Board becomes a ~240px rail of experiment titles grouped by the four statuses,
+itself collapsible; selecting an experiment opens its live notebook in a wide detail pane filling
+the rest of the content area. When the available width would drop the notebook below JupyterLab's
+own 760px floor, the Companion pane auto-collapses (leaving its existing restore handle) rather
+than letting the framed app break. The notebook is genuinely usable: full-width cells, readable
+text, real editing.
+
+### Depends on
+Phase 6.7
+
+### Touches
+`frontend/src/experiments/ExperimentsBoard.tsx` (Experiments Board) — four-column kanban replaced
+by rail + detail pane, `expandedId` becomes the selected experiment, `RunLogPanel` and
+`ApprovalPrompt` move into the detail pane; `frontend/src/experiments/ExperimentsBoard.css`
+(Experiments Board) — rail/detail grid; `frontend/src/experiments/LiveNotebookPanel.css`
+(Experiments Board) — the 760px horizontal-scroll workaround becomes the last resort, not the
+normal case; `frontend/src/app/AppShell.tsx` (App Shell) — width-driven Companion auto-collapse;
+`frontend/src/state/usePaneWidth.ts`, `frontend/src/state/useCollapsible.ts` (Client State) —
+programmatic collapse with a restorable prior width.
+
+---
+
+## Phase 6.9: Experiment status can actually be changed
+
+### What this delivers
+Moving an experiment planned → in-progress → done works from the UI: a segmented control in the
+detail pane header shows all four statuses for the open experiment and PATCHes on click, and each
+rail item carries a compact status dropdown for triage without opening anything. The rail regroups
+immediately, and the status badge vocabulary (no `failed` status, never the danger family) is
+unchanged.
+
+### Depends on
+Phase 6.8
+
+### Touches
+`frontend/src/experiments/ExperimentsBoard.tsx` (Experiments Board) — segmented control + rail
+dropdown, both calling the existing
+`PATCH /api/projects/:id/experiments/:experimentId`; `frontend/src/experiments/ExperimentsBoard.css`
+(Experiments Board) — control styling from Design Tokens; `backend/api/experiments.py` (REST API) —
+`update_experiment` unchanged (it already accepts `status`); `backend/experiments/` (Experiment
+Record) — unchanged; table: `experiments` (`status`).
+
+---
+
+## Phase 6.10: The dashboard answers "what am I working on, and how far along am I"
+
+### What this delivers
+The project's landing view opens with what the user is actually doing: the project's `focus_seed`
+plus the hypotheses of every in-progress experiment as "currently working on", a single segmented
+progress meter of experiment completion (planned / remaining / in-progress / done as bands of one
+bar), the pending experiments themselves, and the top relevant papers from the project's own
+library ranked against that focus using the existing embedding/rerank machinery. "Continue where
+you left off" and "Needs attention" are kept below; the four bare count tiles fold into the new
+blocks.
+
+### Depends on
+Phase 6.9
+
+### Touches
+`backend/projects/` (Dashboard's data source) — `get_dashboard` extended; `DashboardSummary` in
+`backend/projects/models.py` gains `focus`, `progress` (per-status experiment counts),
+`pending_experiments`, `relevant_papers`; `backend/memory/` (Memory Index) — existing embedding +
+`reranker.py` reused to rank library papers against the focus text, no new model;
+`backend/api/projects.py` (REST API) — `GET /api/projects/:id/dashboard`;
+`frontend/src/dashboard/Dashboard.tsx` and `Dashboard.css` (Dashboard) — new focus/progress/pending/
+relevant-papers sections, resume rows and needs-attention retained; `packages/api-client/`
+(Generated API Client) — regenerated; tables: `projects` (`focus_seed`, `corpus_centroid`),
+`experiments` (`status`, `hypothesis`), `project_papers`, `paper_chunks`.
+
+---
+
+## Phase 6.11: Fix Round 1 sign-off
+
+### What this delivers
+Every symptom in `PLANNER/Things_to_finish.md` is verified gone in the running app, and the locked
+architecture documents match what was built. Live acceptance, in one pass: searching
+"attention is all you need" returns that paper first with 5 results and a working `Search more`;
+an opened paper shows 5 clickable references, its code repo and its dataset sources; the graph
+shows readable titles and real `cites` tracebacks; a notebook survives closing the experiment,
+switching tabs and reopening, at full page width, with status changeable in both places; the
+dashboard opens on the current focus, a progress meter, pending experiments and relevant papers.
+`PLANNER/DECISIONS.md` carries the D21 and D26 amendments (invariants #1–#4 untouched), and
+`PLANNER/Things_to_finish.md` is closed out.
+
+### Depends on
+Phase 6.10
+
+### Touches
+`PLANNER/DECISIONS.md` — D21/D26 amendments verified consistent; `PLANNER/Things_to_finish.md` —
+closed; `PLANNER/Tracker.md` — Fix Round 1 entry in the post-approval verification log;
+`backend/` and `frontend/` — the existing pytest and vitest suites pass, plus the targeted tests
+added in Phase 6.1 (ranking), Phase 6.3 (reference resolution) and Phase 6.7 (save-then-stop).

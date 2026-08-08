@@ -13,7 +13,7 @@ import {
 import type { SelectionState } from "../companion/wsTypes";
 import { relevanceLabel, RELEVANCE_VALUES, type Relevance } from "../design/labels";
 import { fetchBinary } from "../state/bridge";
-import { loadDocument, TextLayer, type PDFDocumentProxy } from "./pdf";
+import { loadDocument, RenderingCancelledException, TextLayer, type PDFDocumentProxy } from "./pdf";
 import "./ReaderTab.css";
 import { useAnchorSync } from "./useAnchorSync";
 
@@ -87,8 +87,15 @@ function Page({ page, pageNumber, containerRef }: { page: import("./pdf").PDFPag
       renderTask = page.render({ canvas, canvasContext: ctx, viewport });
       try {
         await renderTask.promise;
-      } catch {
-        return; // cancelled — the effect's own cleanup already tore this render down
+      } catch (err) {
+        if (err instanceof RenderingCancelledException) {
+          return; // expected — the effect's own cleanup already tore this render down
+        }
+        // A real render failure (e.g. an unsupported PDF feature) would
+        // otherwise look identical to a blank-but-fine page — nothing else
+        // in this effect surfaces it.
+        console.error("PDF page render failed", err);
+        return;
       }
 
       if (textLayerRef.current && !cancelled) {
