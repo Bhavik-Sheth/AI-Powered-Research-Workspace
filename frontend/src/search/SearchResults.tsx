@@ -18,14 +18,12 @@ const SOURCE_LABEL: Record<string, string> = {
   reranker: "the reranker",
 };
 
-// Phase 6.1: `POST /api/search` already caps `results` to its `limit`
-// (default 5) server-side, but `GET /api/results/:resultId` still returns
-// the full cached pool (Schema.md `result_store.ui_view`) so Phase 6.2's
-// "Search more" has it — this display cap is what keeps exactly 5 cards on
-// screen regardless of which endpoint the result set came from. A display
-// truncation, not a re-rank: order is never touched here (Rules.md: no
-// client-side ranking).
-const DISPLAYED_RESULT_COUNT = 5;
+// Phase 6.2 "Search more": both `POST /api/search` and `GET
+// /api/results/:resultId` return exactly one page of `PAGE_SIZE` — the
+// backend does the slicing (Rules.md D17: the renderer never paginates a
+// pool it already has), this is only the page size to ask for, matching
+// `backend/api/search.py`'s own `_DEFAULT_LIMIT`.
+const PAGE_SIZE = 5;
 
 /**
  * Federated search (D20/D21, MODULES.md Search Results). Phase 1.3 ships one
@@ -64,6 +62,21 @@ export function SearchResults({
   const [error, setError] = useState<string | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [addingId, setAddingId] = useState<string | null>(null);
+  // Phase 6.2 "Search more". `mode` is UI-only bookkeeping (Rules.md: not
+  // business logic), derived each time straight from the last response's
+  // own `has_more` — never re-derived from `result.results.length`, which
+  // would be the renderer guessing at pool state the backend already told
+  // it: "reveal" while the cached pool the backend already fetched still
+  // has unrevealed rows, "widen" once reveal is exhausted and a further
+  // click must run a real deeper query, "exhausted" once a widen came back
+  // with nothing new.
+  const [poolSize, setPoolSize] = useState(0);
+  const [mode, setMode] = useState<"reveal" | "widen" | "exhausted">("reveal");
+  // How many widen pages have already been fetched for the current
+  // `result.result_id` — passed back as `page` on the next widen call so
+  // `search_papers` knows how much deeper to reach (search/__init__.py).
+  const [widenPage, setWidenPage] = useState(0);
+  const [searchMoreLoading, setSearchMoreLoading] = useState(false);
   // Aborts a still-in-flight search when a newer one starts, so a slower
   // earlier response can never land after (and overwrite) a faster later
   // one — the generated client's request `Options` extend `RequestInit`,
@@ -77,8 +90,12 @@ export function SearchResults({
     setLoading(true);
     (async () => {
       try {
-        const { data } = await getResultApiResultsResultIdGet({ path: { result_id: initialResultId }, throwOnError: true });
-        if (!cancelled) setResult(data);
+        const { data } = await getResultApiResultsResultIdGet({
+          path: { result_id: initialResultId },
+          query: { offset: 0, limit: PAGE_SIZE },
+          throwOnError: true,
+        });
+        if (!cancelled) applyFreshResult(data);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load this result set");
       } finally {
@@ -98,6 +115,16 @@ export function SearchResults({
     // text still needs to re-fire (see the doc comment above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery?.nonce]);
+
+  // A fresh result set (a new query, or the Companion's `initialResultId`)
+  // replaces everything Phase 6.2's "Search more" was tracking — a new
+  // `result_id` means the previously cached pool no longer applies.
+  function applyFreshResult(data: ResultSet) {
+    setResult(data);
+    setPoolSize(data.pool_size ?? data.results.length);
+    setWidenPage(0);
+    setMode((data.has_more ?? false) ? "reveal" : "widen");
+  }
 
   async function handleAdd(paper: PaperSummary) {
     setAddingId(paper.canonical_id);
@@ -138,17 +165,71 @@ export function SearchResults({
     setError(null);
     try {
       const { data } = await postSearchApiSearchPost({
-        body: { query: effectiveQuery },
+        body: { query: effectiveQuery, limit: PAGE_SIZE },
         signal: controller.signal,
         throwOnError: true,
       });
       if (controller.signal.aborted) return;
-      setResult(data);
+      applyFreshResult(data);
     } catch (err) {
       if (controller.signal.aborted) return; // superseded by a newer search, not a real failure
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {
       if (searchAbortRef.current === controller) setLoading(false);
+    }
+  }
+
+  // Phase 6.2 "Search more". "reveal": ask the backend for the next
+  // `PAGE_SIZE` rows of the pool it already cached for this `result_id` —
+  // no network call to a literature source. "widen": once reveal is
+  // exhausted, ask `search_papers` (via `POST /api/search`) to actually
+  // fetch deeper and append the new rows to that same cached pool, then
+  // return the newly available slice. "exhausted": a widen that came back
+  // with nothing new — nothing further to do.
+  async function handleSearchMore() {
+    if (!result || mode === "exhausted") return;
+    setSearchMoreLoading(true);
+    setError(null);
+    try {
+      if (mode === "reveal") {
+        const { data } = await getResultApiResultsResultIdGet({
+          path: { result_id: result.result_id },
+          query: { offset: result.results.length, limit: PAGE_SIZE },
+          throwOnError: true,
+        });
+        setResult((prev) => (prev ? { ...prev, results: [...prev.results, ...data.results] } : prev));
+        setPoolSize(data.pool_size ?? poolSize);
+        setMode((data.has_more ?? false) ? "reveal" : "widen");
+      } else {
+        const nextPage = widenPage + 1;
+        const { data } = await postSearchApiSearchPost({
+          body: {
+            query: result.query,
+            page: nextPage,
+            result_id: result.result_id,
+            offset: result.results.length,
+            limit: PAGE_SIZE,
+          },
+          throwOnError: true,
+        });
+        setWidenPage(nextPage);
+        setPoolSize(data.pool_size ?? poolSize);
+        if (data.results.length === 0) {
+          // The deeper fetch found nothing not already in the cached pool —
+          // done trying, not "try an even deeper page next click".
+          setMode("exhausted");
+        } else {
+          setResult((prev) => (prev ? { ...prev, results: [...prev.results, ...data.results] } : prev));
+          // The widened pool may now have more already-cached rows than
+          // this one slice showed (`has_more`) — the next click reveals
+          // those from cache before trying to widen any further.
+          setMode((data.has_more ?? false) ? "reveal" : "widen");
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load more results");
+    } finally {
+      setSearchMoreLoading(false);
     }
   }
 
@@ -197,7 +278,7 @@ export function SearchResults({
 
       {result && result.results.length > 0 && (
         <div className="search__grid">
-          {result.results.slice(0, DISPLAYED_RESULT_COUNT).map((paper) => {
+          {result.results.map((paper) => {
             const added = addedIds.has(paper.canonical_id);
             const adding = addingId === paper.canonical_id;
             return (
@@ -219,6 +300,23 @@ export function SearchResults({
               </article>
             );
           })}
+        </div>
+      )}
+
+      {result && result.results.length > 0 && (
+        <div className="search__more">
+          {mode === "exhausted" ? (
+            <p className="search__more-exhausted">No more results.</p>
+          ) : (
+            <button
+              type="button"
+              className="search__more-button"
+              disabled={searchMoreLoading}
+              onClick={() => handleSearchMore()}
+            >
+              {searchMoreLoading ? "Loading…" : "Search more"}
+            </button>
+          )}
         </div>
       )}
     </div>

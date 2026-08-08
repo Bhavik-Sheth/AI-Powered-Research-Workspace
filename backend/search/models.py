@@ -56,3 +56,11 @@ class ResultSet(BaseModel):
     query: str
     results: list[PaperSummary]
     sources_failed: list[str] = []
+    # Phase 6.2 ("Search more"): `pool_size` is how many cached (and, for
+    # `GET /api/results/:resultId`, filter-matched) papers exist behind this
+    # `result_id` in total; `has_more` is whether `results` stops short of
+    # that pool. Both default to the "this is the whole set" shape so a
+    # caller that never asks for a page (e.g. `refine_results`'s pre-6.2
+    # callers) sees the same `ResultSet` as before.
+    has_more: bool = False
+    pool_size: int = 0

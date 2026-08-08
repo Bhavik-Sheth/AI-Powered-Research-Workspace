@@ -237,6 +237,25 @@ export type CreateProjectRequest = {
 };
 
 /**
+ * CurrentFocus
+ *
+ * "Currently working on" (Phase 6.10) — no new `research_questions` table
+ * (grill decision): the project's own `focus_seed` plus the hypothesis of
+ * every `in-progress` experiment, both already-owned fields projected
+ * here, nothing computed or inferred.
+ */
+export type CurrentFocus = {
+    /**
+     * Focus Seed
+     */
+    focus_seed: string | null;
+    /**
+     * In Progress Hypotheses
+     */
+    in_progress_hypotheses: Array<string>;
+};
+
+/**
  * DashboardStat
  *
  * One stat-row tile (UI_DESIGN.md §4.1): `total` is the tile's big
@@ -263,6 +282,16 @@ export type DashboardSummary = {
     notes: DashboardStat;
     experiments: DashboardStat;
     feed: DashboardStat;
+    focus: CurrentFocus;
+    progress: ExperimentProgress;
+    /**
+     * Pending Experiments
+     */
+    pending_experiments: Array<PendingExperimentItem>;
+    /**
+     * Relevant Papers
+     */
+    relevant_papers: Array<RelevantPaperItem>;
     /**
      * Needs Attention
      */
@@ -477,6 +506,31 @@ export type ExperimentMetric = {
      * Recorded At
      */
     recorded_at: string;
+};
+
+/**
+ * ExperimentProgress
+ *
+ * One segmented meter, four bands (Phase 6.10) — exactly the four
+ * `experiments.status` values, counted, never a fifth `failed` band.
+ */
+export type ExperimentProgress = {
+    /**
+     * Planned
+     */
+    planned: number;
+    /**
+     * Remaining
+     */
+    remaining: number;
+    /**
+     * In Progress
+     */
+    in_progress: number;
+    /**
+     * Done
+     */
+    done: number;
 };
 
 /**
@@ -1360,6 +1414,10 @@ export type Paper = {
      * Extract State
      */
     extract_state: string;
+    /**
+     * References State
+     */
+    references_state: string;
 };
 
 /**
@@ -1521,6 +1579,31 @@ export type PatchProjectPaperRequest = {
      * Why Relevant
      */
     why_relevant?: string | null;
+};
+
+/**
+ * PendingExperimentItem
+ *
+ * A `planned`/`remaining` experiment surfaced on its own (Phase 6.10) —
+ * distinct from the `in-progress` ones already named under `focus`.
+ */
+export type PendingExperimentItem = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Hypothesis
+     */
+    hypothesis?: string | null;
 };
 
 /**
@@ -1764,6 +1847,37 @@ export type ReferenceInfo = {
      * Raw
      */
     raw: string;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Paper Id
+     */
+    paper_id?: string | null;
+};
+
+/**
+ * RelevantPaperItem
+ *
+ * A library paper ranked against the project's current focus text
+ * (Phase 6.10) via the existing embedding/rerank machinery — no new
+ * model, no Feed involvement (this is the project's own library, not
+ * unseen Feed items).
+ */
+export type RelevantPaperItem = {
+    /**
+     * Paper Id
+     */
+    paper_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Score
+     */
+    score: number;
 };
 
 /**
@@ -1786,6 +1900,14 @@ export type ResultSet = {
      * Sources Failed
      */
     sources_failed?: Array<string>;
+    /**
+     * Has More
+     */
+    has_more?: boolean;
+    /**
+     * Pool Size
+     */
+    pool_size?: number;
 };
 
 /**
@@ -1986,6 +2108,18 @@ export type SearchRequest = {
      * Limit
      */
     limit?: number;
+    /**
+     * Offset
+     */
+    offset?: number;
+    /**
+     * Page
+     */
+    page?: number;
+    /**
+     * Result Id
+     */
+    result_id?: string | null;
 };
 
 /**
@@ -3470,6 +3604,46 @@ export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponse
 
 export type ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponse = ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponses[keyof ReprocessPaperApiProjectsProjectIdPapersPaperIdReprocessPostResponses];
 
+export type PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: string;
+        /**
+         * Paper Id
+         */
+        paper_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/papers/{paper_id}/promote';
+};
+
+export type PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostError = PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostErrors[keyof PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostErrors];
+
+export type PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Paper;
+};
+
+export type PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostResponse = PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostResponses[keyof PromoteReferenceStubApiProjectsProjectIdPapersPaperIdPromotePostResponses];
+
 export type PatchProjectPaperApiProjectsProjectIdPapersPaperIdPatchData = {
     body: PatchProjectPaperRequest;
     headers?: {
@@ -3591,7 +3765,16 @@ export type GetResultApiResultsResultIdGetData = {
          */
         result_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Limit
+         */
+        limit?: number | null;
+    };
     url: '/api/results/{result_id}';
 };
 

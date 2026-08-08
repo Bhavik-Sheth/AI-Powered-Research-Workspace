@@ -2213,6 +2213,73 @@
         }
       }
     },
+    "/api/projects/{project_id}/papers/{paper_id}/promote": {
+      "post": {
+        "summary": "Promote Reference Stub",
+        "description": "Turns a metadata-only reference stub (Phase 6.3's `add_reference_stub`)\ninto a full paper via the ordinary `Add to library` action from the\nReader's References box. Reuses `reprocess_paper` rather than forking a\nsecond fetch/parse path \u2014 a stub's `fetch_state='skipped'` is exactly the\nkind of incomplete stage it already re-drives \u2014 then adds this project's\nlibrary membership, since promote is invoked from inside a reader tab.",
+        "operationId": "promote_reference_stub_api_projects__project_id__papers__paper_id__promote_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paper"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/papers/{paper_id}": {
       "patch": {
         "summary": "Patch Project Paper",
@@ -2413,6 +2480,32 @@
             "schema": {
               "type": "string",
               "title": "Result Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           },
           {
@@ -4070,6 +4163,35 @@
         ],
         "title": "CreateProjectRequest"
       },
+      "CurrentFocus": {
+        "properties": {
+          "focus_seed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Seed"
+          },
+          "in_progress_hypotheses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "In Progress Hypotheses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "focus_seed",
+          "in_progress_hypotheses"
+        ],
+        "title": "CurrentFocus",
+        "description": "\"Currently working on\" (Phase 6.10) \u2014 no new `research_questions` table\n(grill decision): the project's own `focus_seed` plus the hypothesis of\nevery `in-progress` experiment, both already-owned fields projected\nhere, nothing computed or inferred."
+      },
       "DashboardStat": {
         "properties": {
           "total": {
@@ -4103,6 +4225,26 @@
           "feed": {
             "$ref": "#/components/schemas/DashboardStat"
           },
+          "focus": {
+            "$ref": "#/components/schemas/CurrentFocus"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/ExperimentProgress"
+          },
+          "pending_experiments": {
+            "items": {
+              "$ref": "#/components/schemas/PendingExperimentItem"
+            },
+            "type": "array",
+            "title": "Pending Experiments"
+          },
+          "relevant_papers": {
+            "items": {
+              "$ref": "#/components/schemas/RelevantPaperItem"
+            },
+            "type": "array",
+            "title": "Relevant Papers"
+          },
           "needs_attention": {
             "items": {
               "$ref": "#/components/schemas/NeedsAttentionItem"
@@ -4117,6 +4259,10 @@
           "notes",
           "experiments",
           "feed",
+          "focus",
+          "progress",
+          "pending_experiments",
+          "relevant_papers",
           "needs_attention"
         ],
         "title": "DashboardSummary"
@@ -4500,6 +4646,35 @@
         ],
         "title": "ExperimentMetric",
         "description": "The `experiment_metrics` row (Schema.md), returned by the metrics endpoint."
+      },
+      "ExperimentProgress": {
+        "properties": {
+          "planned": {
+            "type": "integer",
+            "title": "Planned"
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining"
+          },
+          "in_progress": {
+            "type": "integer",
+            "title": "In Progress"
+          },
+          "done": {
+            "type": "integer",
+            "title": "Done"
+          }
+        },
+        "type": "object",
+        "required": [
+          "planned",
+          "remaining",
+          "in_progress",
+          "done"
+        ],
+        "title": "ExperimentProgress",
+        "description": "One segmented meter, four bands (Phase 6.10) \u2014 exactly the four\n`experiments.status` values, counted, never a fifth `failed` band."
       },
       "ExperimentRun": {
         "properties": {
@@ -5998,6 +6173,10 @@
           "extract_state": {
             "type": "string",
             "title": "Extract State"
+          },
+          "references_state": {
+            "type": "string",
+            "title": "References State"
           }
         },
         "type": "object",
@@ -6008,7 +6187,8 @@
           "fetch_state",
           "parse_state",
           "embed_state",
-          "extract_state"
+          "extract_state",
+          "references_state"
         ],
         "title": "Paper"
       },
@@ -6332,6 +6512,42 @@
         },
         "type": "object",
         "title": "PatchProjectPaperRequest"
+      },
+      "PendingExperimentItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "title": "PendingExperimentItem",
+        "description": "A `planned`/`remaining` experiment surfaced on its own (Phase 6.10) \u2014\ndistinct from the `in-progress` ones already named under `focus`."
       },
       "ProjectPaperResponse": {
         "properties": {
@@ -6724,6 +6940,29 @@
           "raw": {
             "type": "string",
             "title": "Raw"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "paper_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paper Id"
           }
         },
         "type": "object",
@@ -6732,6 +6971,31 @@
           "raw"
         ],
         "title": "ReferenceInfo"
+      },
+      "RelevantPaperItem": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Paper Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "title",
+          "score"
+        ],
+        "title": "RelevantPaperItem",
+        "description": "A library paper ranked against the project's current focus text\n(Phase 6.10) via the existing embedding/rerank machinery \u2014 no new\nmodel, no Feed involvement (this is the project's own library, not\nunseen Feed items)."
       },
       "ResultSet": {
         "properties": {
@@ -6757,6 +7021,16 @@
             "type": "array",
             "title": "Sources Failed",
             "default": []
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          },
+          "pool_size": {
+            "type": "integer",
+            "title": "Pool Size",
+            "default": 0
           }
         },
         "type": "object",
@@ -7098,6 +7372,27 @@
             "type": "integer",
             "title": "Limit",
             "default": 5
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 0
+          },
+          "result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Id"
           }
         },
         "type": "object",
