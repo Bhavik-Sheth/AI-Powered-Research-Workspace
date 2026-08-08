@@ -14,7 +14,16 @@ import papers
 import projects
 from db.models import Project
 from papers.models import Paper
-from projects.models import DashboardStat, DashboardSummary, NeedsAttentionItem
+from projects.models import (
+    CurrentFocus,
+    DashboardStat,
+    DashboardSummary,
+    ExperimentProgress,
+    NeedsAttentionItem,
+    PendingExperimentItem,
+    RelevantPaperItem,
+)
+from search.reranker import rerank
 
 router = APIRouter()
 
@@ -22,6 +31,11 @@ router = APIRouter()
 # (Schema.md) — read here, not re-derived, same fields Library View's own
 # retry affordance already keys off (Bug Fix Plan Phase 1.3).
 _PIPELINE_STAGES = ("fetch_state", "parse_state", "embed_state", "extract_state")
+
+# Top N library papers shown as "relevant to your current focus" (Phase
+# 6.10) — the project's own library, ranked by the existing cross-encoder,
+# never the Feed's unseen-item pool.
+_TOP_RELEVANT_PAPERS = 5
 
 
 def _stalled(paper: Paper) -> bool:
@@ -107,7 +121,8 @@ async def get_dashboard(project_id: uuid.UUID) -> DashboardSummary:
     Pipeline, Notes, Experiment Record and Research Feed already own. No new
     table, no new state: this route only counts and mixes existing reads."""
     async with db.session() as session:
-        if await projects.get_project(session, project_id) is None:
+        project_row = await projects.get_project(session, project_id)
+        if project_row is None:
             raise HTTPException(status_code=404, detail="project not found")
 
         paper_rows = await projects.list_project_papers(session, project_id)
@@ -120,6 +135,48 @@ async def get_dashboard(project_id: uuid.UUID) -> DashboardSummary:
     unmarked = sum(1 for _row, membership in paper_rows if membership.relevance == "unset")
     in_progress = sum(1 for experiment in experiment_list if experiment.status == "in-progress")
     remaining = sum(1 for experiment in experiment_list if experiment.status == "remaining")
+
+    focus = CurrentFocus(
+        focus_seed=project_row.focus_seed,
+        in_progress_hypotheses=[
+            experiment.hypothesis
+            for experiment in experiment_list
+            if experiment.status == "in-progress" and experiment.hypothesis
+        ],
+    )
+    progress = ExperimentProgress(
+        planned=sum(1 for experiment in experiment_list if experiment.status == "planned"),
+        remaining=remaining,
+        in_progress=in_progress,
+        done=sum(1 for experiment in experiment_list if experiment.status == "done"),
+    )
+    pending_experiments = [
+        PendingExperimentItem(id=experiment.id, title=experiment.title, status=experiment.status, hypothesis=experiment.hypothesis)
+        for experiment in experiment_list
+        if experiment.status in ("planned", "remaining")
+    ]
+
+    # Ranked against the project's own focus text (seed + what's actively
+    # being worked on), never the Feed's unseen pool — reuses the existing
+    # cross-encoder, no new model (D15/Rules.md).
+    focus_text = " ".join(filter(None, [focus.focus_seed, *focus.in_progress_hypotheses])).strip()
+    relevant_papers: list[RelevantPaperItem] = []
+    if focus_text and paper_views:
+        documents = [f"{paper.title}. {paper.abstract or ''}" for paper in paper_views]
+        try:
+            scores = await rerank(focus_text, documents)
+        except TimeoutError:
+            # Same degrade `search_papers` already applies to a slow/offline
+            # cross-encoder load (Rules.md: partial failure degrades, it
+            # does not fail) — the dashboard still renders, just without
+            # this one section's ranking.
+            scores = []
+        if scores:
+            ranked = sorted(zip(paper_views, scores), key=lambda pair: pair[1], reverse=True)
+            relevant_papers = [
+                RelevantPaperItem(paper_id=paper.id, title=paper.title, score=score)
+                for paper, score in ranked[:_TOP_RELEVANT_PAPERS]
+            ]
 
     needs_attention: list[NeedsAttentionItem] = []
     for paper in paper_views:
@@ -163,6 +220,10 @@ async def get_dashboard(project_id: uuid.UUID) -> DashboardSummary:
         notes=DashboardStat(total=len(note_list), qualifier=f"{len(unlinked_note_ids)} unlinked"),
         experiments=DashboardStat(total=len(experiment_list), qualifier=f"{in_progress} in progress"),
         feed=DashboardStat(total=len(feed_items), qualifier=feed_qualifier),
+        focus=focus,
+        progress=progress,
+        pending_experiments=pending_experiments,
+        relevant_papers=relevant_papers,
         needs_attention=needs_attention,
     )
 

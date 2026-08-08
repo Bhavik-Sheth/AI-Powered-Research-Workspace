@@ -10,37 +10,130 @@
   margin: 0;
 }
 
-.dashboard__stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.dashboard__stat {
+/* "Currently working on" (Phase 6.10) — the project's focus_seed plus every
+   in-progress experiment's hypothesis, both plain projected text. */
+.dashboard__focus {
   background: var(--surface-raised);
   border-radius: var(--radius-card);
   box-shadow: var(--panel-shadow);
   padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.dashboard__stat-label {
-  font: 700 10px var(--font-ui);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.dashboard__stat-value {
-  font: 800 24px var(--font-ui);
+.dashboard__focus-seed {
+  font: 600 13px var(--font-reading);
   color: var(--text-strong);
-  margin-top: 4px;
+  margin: 0;
 }
 
-.dashboard__stat-qualifier {
-  font: 10px var(--font-ui);
+.dashboard__focus-hypothesis {
+  font: 12px var(--font-ui);
   color: var(--text-muted);
-  margin-top: 2px;
-  min-height: 12px;
+  margin: 0;
+}
+
+/* Progress meter (Phase 6.10) — one bar, four bands, exactly the four
+   `experiments.status` values. Never the danger family. */
+.dashboard__progress-meter {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-badge);
+  overflow: hidden;
+  background: var(--border);
+}
+
+.dashboard__progress-band {
+  height: 100%;
+}
+
+.dashboard__progress-band--planned {
+  background: var(--border);
+}
+
+.dashboard__progress-band--remaining {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.dashboard__progress-band--in_progress {
+  background: var(--accent-text-outline);
+}
+
+.dashboard__progress-band--done {
+  background: var(--accent);
+}
+
+.dashboard__progress-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.dashboard__progress-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 11px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.dashboard__progress-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.dashboard__progress-swatch--planned {
+  background: var(--border);
+}
+
+.dashboard__progress-swatch--remaining {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.dashboard__progress-swatch--in_progress {
+  background: var(--accent-text-outline);
+}
+
+.dashboard__progress-swatch--done {
+  background: var(--accent);
+}
+
+/* Pending experiments / relevant papers (Phase 6.10) — same row language as
+   the resume rows below. */
+.dashboard__pending-row,
+.dashboard__relevant-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--surface-raised);
+  border: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--panel-shadow);
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  text-align: left;
+  font: 600 13px var(--font-reading);
+  color: var(--text-strong);
+}
+
+.dashboard__relevant-row {
+  cursor: pointer;
+}
+
+.dashboard__relevant-row:hover {
+  border: 1px solid var(--accent);
+  padding: 9px 13px;
+}
+
+.dashboard__pending-hypothesis {
+  font: 12px var(--font-ui);
+  color: var(--text-muted);
 }
 
 .dashboard__section-label {

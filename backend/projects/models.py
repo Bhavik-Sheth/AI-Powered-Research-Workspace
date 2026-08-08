@@ -35,9 +35,54 @@ class NeedsAttentionItem(BaseModel):
     action: Literal["retry"] | None = None
 
 
+class CurrentFocus(BaseModel):
+    """"Currently working on" (Phase 6.10) — no new `research_questions` table
+    (grill decision): the project's own `focus_seed` plus the hypothesis of
+    every `in-progress` experiment, both already-owned fields projected
+    here, nothing computed or inferred."""
+
+    focus_seed: str | None
+    in_progress_hypotheses: list[str]
+
+
+class ExperimentProgress(BaseModel):
+    """One segmented meter, four bands (Phase 6.10) — exactly the four
+    `experiments.status` values, counted, never a fifth `failed` band."""
+
+    planned: int
+    remaining: int
+    in_progress: int
+    done: int
+
+
+class PendingExperimentItem(BaseModel):
+    """A `planned`/`remaining` experiment surfaced on its own (Phase 6.10) —
+    distinct from the `in-progress` ones already named under `focus`."""
+
+    id: uuid.UUID
+    title: str
+    status: str
+    hypothesis: str | None = None
+
+
+class RelevantPaperItem(BaseModel):
+    """A library paper ranked against the project's current focus text
+    (Phase 6.10) via the existing embedding/rerank machinery — no new
+    model, no Feed involvement (this is the project's own library, not
+    unseen Feed items)."""
+
+    paper_id: uuid.UUID
+    title: str
+    score: float
+
+
 class DashboardSummary(BaseModel):
     papers: DashboardStat
     notes: DashboardStat
     experiments: DashboardStat
     feed: DashboardStat
+    focus: CurrentFocus
+    progress: ExperimentProgress
+    pending_experiments: list[PendingExperimentItem]
+    relevant_papers: list[RelevantPaperItem]
     needs_attention: list[NeedsAttentionItem]

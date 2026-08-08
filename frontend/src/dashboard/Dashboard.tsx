@@ -10,6 +10,16 @@ import { ErrorCard } from "../design/ErrorCard";
 import type { TabRef } from "../state/useTabStack";
 import "./Dashboard.css";
 
+// Segmented progress meter bands, in display order (Phase 6.10) — the same
+// four `experiments.status` values, never a fifth "failed" band.
+const PROGRESS_BANDS = ["planned", "remaining", "in_progress", "done"] as const;
+const PROGRESS_BAND_LABEL: Record<(typeof PROGRESS_BANDS)[number], string> = {
+  planned: "Planned",
+  remaining: "Remaining",
+  in_progress: "In progress",
+  done: "Done",
+};
+
 const TAB_KIND_LABEL: Record<string, string> = {
   reader: "paper",
   library: "papers",
@@ -31,12 +41,16 @@ export function Dashboard({
   tabs,
   activeTabId,
   onResume,
+  onOpenPaper,
 }: {
   projectId: string;
   projectName: string;
   tabs: TabRef[];
   activeTabId: string | null;
   onResume: (tabId: string) => void;
+  /** Opens a reader tab for a relevant-papers row (Phase 6.10) — the same
+   * callback every other paper-listing view already receives. */
+  onOpenPaper?: (paperId: string, title: string) => void;
 }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,27 +95,88 @@ export function Dashboard({
 
       {error && summary && <ErrorCard title="Couldn't refresh" message={error} onRetry={refresh} />}
 
-      <div className="dashboard__stats">
-        <div className="dashboard__stat">
-          <div className="dashboard__stat-label">Papers</div>
-          <div className="dashboard__stat-value">{summary?.papers.total ?? "…"}</div>
-          <div className="dashboard__stat-qualifier">{summary?.papers.qualifier ?? ""}</div>
-        </div>
-        <div className="dashboard__stat">
-          <div className="dashboard__stat-label">Notes</div>
-          <div className="dashboard__stat-value">{summary?.notes.total ?? "…"}</div>
-          <div className="dashboard__stat-qualifier">{summary?.notes.qualifier ?? ""}</div>
-        </div>
-        <div className="dashboard__stat">
-          <div className="dashboard__stat-label">Experiments</div>
-          <div className="dashboard__stat-value">{summary?.experiments.total ?? "…"}</div>
-          <div className="dashboard__stat-qualifier">{summary?.experiments.qualifier ?? ""}</div>
-        </div>
-        <div className="dashboard__stat">
-          <div className="dashboard__stat-label">Feed</div>
-          <div className="dashboard__stat-value">{summary?.feed.total ?? "…"}</div>
-          <div className="dashboard__stat-qualifier">{summary?.feed.qualifier ?? ""}</div>
-        </div>
+      <div className="dashboard__section">
+        <h2 className="dashboard__section-label">Currently working on</h2>
+        {summary && !summary.focus.focus_seed && summary.focus.in_progress_hypotheses.length === 0 ? (
+          <p className="dashboard__empty">No focus set yet — add one from onboarding or the project settings.</p>
+        ) : (
+          <div className="dashboard__focus">
+            {summary?.focus.focus_seed && <p className="dashboard__focus-seed">{summary.focus.focus_seed}</p>}
+            {summary?.focus.in_progress_hypotheses.map((hypothesis, index) => (
+              <p className="dashboard__focus-hypothesis" key={index}>
+                {hypothesis}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="dashboard__section">
+        <h2 className="dashboard__section-label">Progress</h2>
+        {summary && (
+          <>
+            <div className="dashboard__progress-meter" role="img" aria-label="Experiment progress by status">
+              {PROGRESS_BANDS.map((band) => {
+                const total =
+                  summary.progress.planned + summary.progress.remaining + summary.progress.in_progress + summary.progress.done;
+                const count = summary.progress[band];
+                const width = total > 0 ? (count / total) * 100 : 0;
+                return count > 0 ? (
+                  <div
+                    key={band}
+                    className={`dashboard__progress-band dashboard__progress-band--${band}`}
+                    style={{ width: `${width}%` }}
+                    title={`${PROGRESS_BAND_LABEL[band]}: ${count}`}
+                  />
+                ) : null;
+              })}
+            </div>
+            <div className="dashboard__progress-legend">
+              {PROGRESS_BANDS.map((band) => (
+                <span className="dashboard__progress-legend-item" key={band}>
+                  <span className={`dashboard__progress-swatch dashboard__progress-swatch--${band}`} />
+                  {PROGRESS_BAND_LABEL[band]} ({summary.progress[band]})
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="dashboard__section">
+        <h2 className="dashboard__section-label">Pending experiments</h2>
+        {summary && summary.pending_experiments.length === 0 ? (
+          <p className="dashboard__empty">Nothing pending — every experiment is in progress or done.</p>
+        ) : (
+          summary?.pending_experiments.map((experiment) => (
+            <div className="dashboard__pending-row" key={experiment.id}>
+              <span className="dashboard__pending-title">{experiment.title}</span>
+              {experiment.hypothesis && <span className="dashboard__pending-hypothesis">{experiment.hypothesis}</span>}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="dashboard__section">
+        <h2 className="dashboard__section-label">Relevant papers</h2>
+        {summary && summary.relevant_papers.length === 0 ? (
+          <p className="dashboard__empty">
+            {summary.focus.focus_seed || summary.focus.in_progress_hypotheses.length > 0
+              ? "No library papers ranked against the current focus yet."
+              : "Set a focus to see your library ranked against it."}
+          </p>
+        ) : (
+          summary?.relevant_papers.map((paper) => (
+            <button
+              type="button"
+              className="dashboard__relevant-row"
+              key={paper.paper_id}
+              onClick={() => onOpenPaper?.(paper.paper_id, paper.title)}
+            >
+              {paper.title}
+            </button>
+          ))
+        )}
       </div>
 
       <div className="dashboard__section">
