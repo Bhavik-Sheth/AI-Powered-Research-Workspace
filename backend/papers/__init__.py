@@ -354,7 +354,16 @@ _EXTRACTION_PROMPT = (
 # Per-window extraction budget: a paper longer than this is extracted over
 # several section-aware windows rather than one truncated whole-paper call
 # (Bug Fix Plan Phase 1.2) — this bounds each window, not the paper.
-_MAX_EXTRACTION_CHARS = 60_000
+#
+# Lowered from 60_000 (Bug Fix Plan Phase 6.13): `llm._fit_to_budget` only
+# trims a window to a provider's *known* TPM ceiling (self-healed from an
+# explicit 429 body, e.g. Groq's) — a provider that never discloses a
+# number (verified live: Mistral's 429 body names none) leaves a 60k-char
+# (~15k-token) window sent raw, at real risk of being oversized on its own
+# regardless of how well-paced the calls around it are. 20_000 chars
+# (~5k tokens) is still generous for one paper section while cutting that
+# risk substantially for every provider, disclosed ceiling or not.
+_MAX_EXTRACTION_CHARS = 20_000
 
 
 class _ExtractedSpan(BaseModel):

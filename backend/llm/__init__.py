@@ -7,7 +7,6 @@ narrow widening of MODULES.md's stated signature, called out here rather
 than added silently.
 """
 
-import asyncio
 import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -15,6 +14,8 @@ from typing import Literal, NamedTuple, TypeVar
 
 import litellm
 from pydantic import BaseModel, ValidationError
+
+from ratelimit import RateLimiter, call_with_retry
 
 # Re-exported so callers can catch a call failure without importing litellm
 # themselves — this module is the only place that import is allowed. Not
@@ -35,11 +36,23 @@ LLMError = (
     litellm.ContextWindowExceededError,
 )
 
-# RateLimitError/Timeout/connection-level failures are retried by the
-# provider client under the hood (litellm's `num_retries` sets its
-# `max_retries`, honouring a `Retry-After` header when the provider sends
-# one) rather than surfacing on the first transient failure.
-_NUM_RETRIES = 3
+# Every `litellm.acompletion` call below passes `num_retries=0` (Bug Fix
+# Plan Phase 6.13): retries used to be litellm's own opaque internal
+# backoff, invisible to this module and unpaced against the per-provider
+# `RateLimiter` below — verified live to still exhaust a free-tier ceiling
+# (Groq's 6000 TPM, then Mistral's undisclosed one) even with it enabled.
+# `call_with_retry` (bottom of this file, wrapping every real call site) is
+# now the sole retry authority: it paces call *starts* through a shared
+# per-provider `RateLimiter` and backs off on the exact transient
+# exceptions below, reading the provider's own stated wait time
+# (`_parse_wait_seconds`) when one is given.
+_LLM_RETRYABLE_EXCEPTIONS = (
+    litellm.RateLimitError,
+    litellm.Timeout,
+    litellm.APIConnectionError,
+    litellm.ServiceUnavailableError,
+    litellm.InternalServerError,
+)
 
 # Reserved out of a tier's request-token budget for the completion itself,
 # when the caller does not pass an explicit `max_tokens`.
@@ -293,28 +306,49 @@ async def _call_with_rate_limit_self_heal(
         return await make_call(fitted)
 
 
-# Caps concurrent in-flight calls to one provider (Bug Fix Plan Phase
-# 6.12). A free-tier TPM ceiling (e.g. Groq's self-healed 6000 TPM budget,
-# `_persist_learned_budget`) is shared across every concurrent caller, so
-# several `extract_card_job` windows firing at once for different papers
-# can collectively blow past it even though each one individually stays
-# inside its own `_fit_to_budget` fitting. This is a queue, not a failure
-# mode: a call that can't acquire the semaphore yet just waits its turn,
-# same shape as `RateLimiter.acquire` in `search/rate_limit.py`.
-_PROVIDER_CONCURRENCY = 2
-_provider_semaphores: dict[str, asyncio.Semaphore] = {}
+# Paces call *starts* to one provider (Bug Fix Plan Phase 6.13, replacing
+# Phase 6.12's concurrency-only `asyncio.Semaphore`). A free-tier ceiling
+# (Groq's self-healed 6000 TPM, or an undisclosed one like Mistral's) is
+# shared across every caller regardless of whether they overlap in time —
+# verified live: sequential (non-overlapping) `extract_card_job` retries
+# fired ~3s apart still tripped Mistral's 429, which a concurrency cap
+# alone can never catch since nothing was ever running simultaneously.
+# 2.5s between call starts is a conservative flat default (~24/min) chosen
+# to sit comfortably under typical free-tier RPM ceilings across providers
+# without needing to know any one of them exactly; a caller that can't
+# start yet just waits its turn, same shape as `RateLimiter` everywhere
+# else in this codebase (`ratelimit.py`, `search/rate_limit.py`).
+_PROVIDER_MIN_INTERVAL_S = 2.5
+_provider_limiters: dict[str, RateLimiter] = {}
 
 
-def _get_provider_semaphore(provider: str | None) -> asyncio.Semaphore:
+def _get_provider_limiter(provider: str | None) -> RateLimiter:
     """`provider` is `None` for a `ProviderOverride` call (Settings Store's
     pre-save validation) — those share one bucket of their own rather than
     skipping throttling entirely."""
     key = provider or "__override__"
-    semaphore = _provider_semaphores.get(key)
-    if semaphore is None:
-        semaphore = asyncio.Semaphore(_PROVIDER_CONCURRENCY)
-        _provider_semaphores[key] = semaphore
-    return semaphore
+    limiter = _provider_limiters.get(key)
+    if limiter is None:
+        limiter = RateLimiter(_PROVIDER_MIN_INTERVAL_S)
+        _provider_limiters[key] = limiter
+    return limiter
+
+
+# Provider-stated wait time, when the 429 body names one — verified live
+# against a real captured Groq rejection: "...Please try again in 22.29s.
+# ...". Reusing this beats a blind exponential backoff whenever the
+# provider is honest about it, same reasoning as `_parse_rate_limit_ceiling`
+# above for the TPM number embedded in the same kind of message. Returns
+# `None` (falls back to exponential backoff, `call_with_retry`'s default)
+# for a provider that says only "rate limit exceeded" with no number, e.g.
+# Mistral's — verified live not to match this pattern.
+_RETRY_WAIT_PATTERN = re.compile(r"try again in ([\d.]+)\s*s", re.IGNORECASE)
+
+
+def _parse_wait_seconds(exc: BaseException) -> float | None:
+    message = getattr(exc, "message", None) or str(exc)
+    match = _RETRY_WAIT_PATTERN.search(message)
+    return float(match.group(1)) if match else None
 
 
 ResponseSchema = TypeVar("ResponseSchema", bound=BaseModel)
@@ -424,14 +458,23 @@ async def _repair_schema_violation(
         ),
     ]
     fitted = _fit_to_budget(resolved.model, corrective_messages, resolved.budget, max_tokens=None)
-    response = await litellm.acompletion(
-        model=resolved.model,
-        messages=[_to_wire_message(m) for m in fitted],
-        api_key=resolved.api_key,
-        base_url=resolved.base_url,
-        response_format=schema,
-        timeout=timeout,
-        num_retries=_NUM_RETRIES,
+
+    async def make_repair_call():
+        return await litellm.acompletion(
+            model=resolved.model,
+            messages=[_to_wire_message(m) for m in fitted],
+            api_key=resolved.api_key,
+            base_url=resolved.base_url,
+            response_format=schema,
+            timeout=timeout,
+            num_retries=0,  # call_with_retry below owns retry/backoff (Phase 6.13)
+        )
+
+    response = await call_with_retry(
+        _get_provider_limiter(resolved.provider),
+        make_repair_call,
+        retryable_exceptions=_LLM_RETRYABLE_EXCEPTIONS,
+        parse_wait_seconds=_parse_wait_seconds,
     )
     content = response.choices[0].message.content
     try:
@@ -479,23 +522,37 @@ async def complete_structured(
             base_url=resolved.base_url,
             response_format=schema,
             timeout=timeout,
-            num_retries=_NUM_RETRIES,
+            num_retries=0,  # call_with_retry below owns retry/backoff (Phase 6.13)
         )
 
-    async with _get_provider_semaphore(resolved.provider):
-        try:
-            response = await _call_with_rate_limit_self_heal(resolved, messages, None, make_call)
-        except litellm.BadRequestError as exc:
-            if not _is_schema_violation(exc):
-                raise
-            malformed_output, error_detail = _extract_failed_generation(exc)
-            return await _repair_schema_violation(resolved, messages, schema, malformed_output, error_detail, timeout)
+    async def attempt():
+        return await _call_with_rate_limit_self_heal(resolved, messages, None, make_call)
 
-        content = response.choices[0].message.content
-        try:
-            return schema.model_validate_json(content)
-        except ValidationError as exc:
-            return await _repair_schema_violation(resolved, messages, schema, content, str(exc), timeout)
+    try:
+        # Structured extraction runs in background jobs (`extract_card_job`,
+        # `trace_references_job`, ...) with real time to spend riding out a
+        # burst — a higher retry budget than the interactive `complete`
+        # below, which a person is waiting on live.
+        response = await call_with_retry(
+            _get_provider_limiter(resolved.provider),
+            attempt,
+            retryable_exceptions=_LLM_RETRYABLE_EXCEPTIONS,
+            parse_wait_seconds=_parse_wait_seconds,
+            max_retries=4,
+            base_backoff_s=2.0,
+            max_backoff_s=30.0,
+        )
+    except litellm.BadRequestError as exc:
+        if not _is_schema_violation(exc):
+            raise
+        malformed_output, error_detail = _extract_failed_generation(exc)
+        return await _repair_schema_violation(resolved, messages, schema, malformed_output, error_detail, timeout)
+
+    content = response.choices[0].message.content
+    try:
+        return schema.model_validate_json(content)
+    except ValidationError as exc:
+        return await _repair_schema_violation(resolved, messages, schema, content, str(exc), timeout)
 
 
 async def complete(
@@ -520,22 +577,30 @@ async def complete(
             max_tokens=max_tokens,
             timeout=timeout,
             stream=True,
-            num_retries=_NUM_RETRIES,
+            num_retries=0,  # call_with_retry below owns retry/backoff (Phase 6.13)
         )
 
-    async with _get_provider_semaphore(resolved.provider):
-        response = await _call_with_rate_limit_self_heal(resolved, messages, max_tokens, make_call)
-        async for chunk in response:
-            delta = chunk.choices[0].delta
-            content = delta.content
-            tool_call_deltas = [
-                ToolCallDelta(
-                    index=tc.index,
-                    id=tc.id,
-                    name=tc.function.name if tc.function else None,
-                    arguments=(tc.function.arguments if tc.function and tc.function.arguments else ""),
-                )
-                for tc in (delta.tool_calls or [])
-            ]
-            if content or tool_call_deltas:
-                yield LLMChunk(delta=content or "", tool_calls=tool_call_deltas)
+    async def attempt():
+        return await _call_with_rate_limit_self_heal(resolved, messages, max_tokens, make_call)
+
+    # Retry/backoff only covers getting the stream started — once the first
+    # chunk has been handed to a caller (the Companion's live turn), there
+    # is no way to un-yield it, so a mid-stream failure still propagates
+    # unretried exactly as before this change.
+    response = await call_with_retry(
+        _get_provider_limiter(resolved.provider), attempt, retryable_exceptions=_LLM_RETRYABLE_EXCEPTIONS, parse_wait_seconds=_parse_wait_seconds
+    )
+    async for chunk in response:
+        delta = chunk.choices[0].delta
+        content = delta.content
+        tool_call_deltas = [
+            ToolCallDelta(
+                index=tc.index,
+                id=tc.id,
+                name=tc.function.name if tc.function else None,
+                arguments=(tc.function.arguments if tc.function and tc.function.arguments else ""),
+            )
+            for tc in (delta.tool_calls or [])
+        ]
+        if content or tool_call_deltas:
+            yield LLMChunk(delta=content or "", tool_calls=tool_call_deltas)
