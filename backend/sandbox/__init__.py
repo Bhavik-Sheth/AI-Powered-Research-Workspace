@@ -648,9 +648,19 @@ async def _wait_for_http_ready(port: int, timeout: float = 10.0) -> bool:
     async with httpx.AsyncClient() as client:
         while asyncio.get_event_loop().time() < deadline:
             try:
-                await client.get(f"http://127.0.0.1:{port}/", timeout=1.0)
+                response = await client.get(f"http://127.0.0.1:{port}/", timeout=1.0)
+                response.raise_for_status()
                 return True
             except httpx.HTTPError:
+                # Covers both a connection-level failure (not listening yet)
+                # and a non-2xx (Tornado accepted the connection before its
+                # contents manager finished initializing — Bug Fix Plan
+                # Phase 6.12: the earlier bare `client.get` with no status
+                # check treated *any* response, including a transient
+                # non-2xx here, as "ready", occasionally handing the
+                # frontend a notebook URL the server couldn't yet actually
+                # serve — the live iframe's own "File Load Error ...
+                # Invalid response: 404 Not Found" dialog).
                 await asyncio.sleep(0.2)
     return False
 

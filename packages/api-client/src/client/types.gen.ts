@@ -2033,7 +2033,7 @@ export type SaveModelBudgetRequest = {
     /**
      * Provider
      */
-    provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
+    provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'mistral' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
     /**
      * Model
      */
@@ -2051,7 +2051,7 @@ export type SaveProviderRequest = {
     /**
      * Provider
      */
-    provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
+    provider: 'google' | 'groq' | 'openai' | 'anthropic' | 'mistral' | 'openrouter' | 'deepseek' | 'custom' | 'ollama' | 'vllm';
     credentials: ProviderCredentials;
 };
 

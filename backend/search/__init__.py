@@ -86,7 +86,7 @@ async def _fan_out(
     sources = {
         "arxiv": search_arxiv(keywords, max_results),
         "openalex": search_openalex(keywords, filters, max_results),
-        "s2": search_s2(keywords, max_results),
+        "s2": search_s2(keywords, max_results, api_key=get_config().s2_api_key),
     }
     outcomes = await asyncio.gather(*sources.values(), return_exceptions=True)
 

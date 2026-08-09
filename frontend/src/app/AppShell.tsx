@@ -25,6 +25,7 @@ import { useProjectSocket } from "../state/useProjectSocket";
 import { type TabRef, useTabStack } from "../state/useTabStack";
 import { ManuscriptTab } from "../writing/ManuscriptTab";
 import "./AppShell.css";
+import { BackgroundActivityIndicator } from "./BackgroundActivityIndicator";
 import { AppBootScreen } from "./ErrorBoundary";
 import { ReadinessStrip } from "./ReadinessStrip";
 
@@ -687,6 +688,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
           placeholder="Search everything…"
           aria-label="Search everything"
         />
+        <BackgroundActivityIndicator />
         <button
           type="button"
           className="top-bar__settings"

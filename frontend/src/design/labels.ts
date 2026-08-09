@@ -54,6 +54,7 @@ export const providerLabel: Record<Provider, string> = {
   groq: "Groq",
   openai: "OpenAI",
   anthropic: "Anthropic",
+  mistral: "Mistral",
   openrouter: "OpenRouter",
   deepseek: "DeepSeek",
   custom: "Custom (OpenAI-compatible)",

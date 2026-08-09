@@ -1,0 +1,23 @@
+.bg-activity {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 11px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.bg-activity__spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  animation: bg-activity-spin 0.7s linear infinite;
+}
+
+@keyframes bg-activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

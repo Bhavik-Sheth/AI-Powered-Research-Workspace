@@ -74,10 +74,18 @@ def _job_functions() -> list:
     # lifespan), papers/ is already fully loaded via main.py's own imports.
     from feed import interest_profile_reextract_job, poll_feed_job
     from memory import chunk_and_embed_job
-    from papers import embed_paper_job, enrich_paper_job, extract_card_job, parse_paper_job, trace_references_job
+    from papers import (
+        embed_paper_job,
+        enrich_paper_job,
+        extract_card_job,
+        fetch_pdf_job,
+        parse_paper_job,
+        trace_references_job,
+    )
     from sandbox import run_experiment_job
 
     return [
+        fetch_pdf_job,
         parse_paper_job,
         extract_card_job,
         enrich_paper_job,

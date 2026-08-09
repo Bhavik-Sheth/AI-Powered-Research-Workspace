@@ -45,6 +45,11 @@ _S2_CORPUS_PREFIX = re.compile(r"^\s*corpusid:\s*", re.IGNORECASE)
 
 # SAQ's own job default is 10s (fine for most jobs, far too short for these).
 # docling's first parse also cold-downloads its OCR/layout models.
+# `_FETCH_JOB_TIMEOUT_S`: Unpaywall's own 20s timeout plus `download_pdf`'s
+# 60s, plus headroom — this used to run inline on `POST .../papers` (Bug
+# Fix Plan Phase 6.12), leaving the "Add to library" click hanging for up
+# to that long; it is now `fetch_pdf_job`, off the request path.
+_FETCH_JOB_TIMEOUT_S = 90
 _PARSE_JOB_TIMEOUT_S = 600
 _EXTRACT_JOB_TIMEOUT_S = 180
 _ENRICH_JOB_TIMEOUT_S = 30
@@ -142,8 +147,13 @@ async def _fetch_pdf(session: AsyncSession, row: PaperRow, source_ids: SourceIds
 
 
 async def add_paper(session: AsyncSession, paper_input: PaperInput) -> Paper:
-    """Fetches (OA only) or dedupes on canonical id, then enqueues parse
-    (embed lands in Phase 1.7, extract is dispatched once parse completes)."""
+    """Dedupes on canonical id, or creates the row and enqueues `fetch_pdf_job`
+    (Bug Fix Plan Phase 6.12): OA resolution + download used to run inline
+    here, leaving `POST .../papers` ("Add to library") hanging for up to
+    ~80s on a slow/rate-limited source; now the row comes back immediately
+    with `fetch_state='queued'` and the fetch (then parse, then
+    embed/extract/trace once parse completes) happens off the request
+    path, same shape every other pipeline stage already used."""
     canonical_id = resolve_canonical_id(paper_input.source_ids)
 
     existing = await session.scalar(select(PaperRow).where(PaperRow.canonical_id == canonical_id))
@@ -161,17 +171,33 @@ async def add_paper(session: AsyncSession, paper_input: PaperInput) -> Paper:
         title=paper_input.title or canonical_id,
         abstract=paper_input.abstract,
         source_url=paper_input.source_url,
+        fetch_state="queued",
     )
     session.add(row)
     await session.flush()
 
-    await _fetch_pdf(session, row, paper_input.source_ids, paper_input.pdf_url)
-    await session.flush()
-
-    if row.fetch_state == "done":
-        await jobs.enqueue("parse_paper_job", paper_id=str(row.id), timeout=_PARSE_JOB_TIMEOUT_S)
+    await jobs.enqueue("fetch_pdf_job", paper_id=str(row.id), pdf_url=paper_input.pdf_url, timeout=_FETCH_JOB_TIMEOUT_S)
 
     return paper_from_row(row)
+
+
+async def fetch_pdf_job(_ctx: dict, *, paper_id: str, pdf_url: str | None) -> None:
+    """The background counterpart of the old inline `_fetch_pdf` call in
+    `add_paper` (Bug Fix Plan Phase 6.12) — same OA-only fetch (invariant
+    #3), driven to `fetch_state`'s usual `done`/`degraded`, then enqueues
+    `parse_paper_job` on success exactly as `add_paper` used to do inline."""
+    pid = uuid.UUID(paper_id)
+    async with db.session() as session:
+        row = await session.get(PaperRow, pid)
+        if row is None:
+            return
+        row.fetch_state = "running"
+        source_ids = SourceIds(doi=row.doi, arxiv_id=row.arxiv_id, openalex_id=row.openalex_id, s2_id=row.s2_id)
+        await _fetch_pdf(session, row, source_ids, pdf_url)
+        fetch_state = row.fetch_state
+
+    if fetch_state == "done":
+        await jobs.enqueue("parse_paper_job", paper_id=paper_id, timeout=_PARSE_JOB_TIMEOUT_S)
 
 
 _TERMINAL_STAGE_STATES = ("done", "degraded")
@@ -182,15 +208,22 @@ async def reprocess_paper(session: AsyncSession, paper_id: uuid.UUID) -> Paper |
     action (Bug Fix Plan Phase 1.3). Only stages not already in a terminal
     state (`done`/`degraded`) are reset to `queued` and re-enqueued; a stage
     downstream of one still incomplete is left alone, since its job assumes
-    the stage before it already produced output."""
+    the stage before it already produced output.
+
+    A fetch retry (Phase 6.12) enqueues `fetch_pdf_job` and returns
+    immediately, same as a fresh `add_paper` — it does not know yet whether
+    the retry will land on `done`, so it can't decide here whether parse
+    should also be queued; `fetch_pdf_job` itself does that on success,
+    same as it does for a brand new paper."""
     row = await session.get(PaperRow, paper_id)
     if row is None:
         return None
 
     if row.fetch_state not in _TERMINAL_STAGE_STATES:
-        source_ids = SourceIds(doi=row.doi, arxiv_id=row.arxiv_id, openalex_id=row.openalex_id, s2_id=row.s2_id)
-        await _fetch_pdf(session, row, source_ids, None)
+        row.fetch_state = "queued"
         await session.flush()
+        await jobs.enqueue("fetch_pdf_job", paper_id=str(row.id), pdf_url=None, timeout=_FETCH_JOB_TIMEOUT_S)
+        return paper_from_row(row)
 
     if row.fetch_state == "done" and row.parse_state not in _TERMINAL_STAGE_STATES:
         row.parse_state = "queued"
@@ -763,7 +796,7 @@ async def trace_references_job(_ctx: dict, *, paper_id: str) -> None:
                     hits = []  # degrade to the S2/PDF fallback, never fail the job (Rules.md)
             if not hits and paper.s2_id:
                 try:
-                    hits = await fetch_s2_references(paper.s2_id, _TOP_REFERENCES)
+                    hits = await fetch_s2_references(paper.s2_id, _TOP_REFERENCES, api_key=get_config().s2_api_key)
                     if hits:
                         source_api = "s2"
                 except httpx.HTTPError:

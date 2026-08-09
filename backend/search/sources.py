@@ -8,9 +8,22 @@ import httpx
 
 from papers.models import SourceIds
 from search.models import FirecrawlHit, RawHit, SearchFilters
+from search.rate_limit import (
+    ARXIV_LIMITER,
+    FIRECRAWL_LIMITER,
+    OPENALEX_LIMITER,
+    S2_LIMITER_NO_KEY,
+    S2_LIMITER_WITH_KEY,
+    call_with_backoff,
+)
 
 _ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
 _TIMEOUT = 15.0
+
+# Required by OpenAlex's usage terms to get bumped into the "polite pool"
+# (~10 req/s instead of the shared default pool) — a contact address for
+# their outreach, not a secret. https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication
+_OPENALEX_CONTACT = "research-companion-os@localhost"
 
 # Verified against Firecrawl's current docs (https://docs.firecrawl.dev/api-reference/endpoint/search):
 # POST https://api.firecrawl.dev/v1/search, Bearer auth, body {"query": ..., "limit": ...},
@@ -29,10 +42,13 @@ async def search_firecrawl(query: str, api_key: str, limit: int) -> list[Firecra
     arXiv/OpenAlex/S2 fallback on either, the same shape as one literature
     source failing in `_fan_out`."""
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await client.post(
-            _FIRECRAWL_SEARCH_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"query": query, "limit": limit},
+        response = await call_with_backoff(
+            FIRECRAWL_LIMITER,
+            lambda: client.post(
+                _FIRECRAWL_SEARCH_URL,
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"query": query, "limit": limit},
+            ),
         )
         response.raise_for_status()
         payload = response.json()
@@ -56,9 +72,12 @@ async def search_firecrawl(query: str, api_key: str, limit: int) -> list[Firecra
 async def search_arxiv(keywords: list[str], max_results: int = 30) -> list[RawHit]:
     query = " AND ".join(f"all:{kw}" for kw in keywords) if keywords else "all:*"
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await client.get(
-            "https://export.arxiv.org/api/query",
-            params={"search_query": query, "start": 0, "max_results": max_results},
+        response = await call_with_backoff(
+            ARXIV_LIMITER,
+            lambda: client.get(
+                "https://export.arxiv.org/api/query",
+                params={"search_query": query, "start": 0, "max_results": max_results},
+            ),
         )
         response.raise_for_status()
 
@@ -108,7 +127,7 @@ def _reconstruct_abstract(inverted_index: dict[str, list[int]] | None) -> str | 
 
 
 async def search_openalex(keywords: list[str], filters: SearchFilters, max_results: int = 30) -> list[RawHit]:
-    params: dict[str, str | int] = {"search": " ".join(keywords), "per_page": max_results}
+    params: dict[str, str | int] = {"search": " ".join(keywords), "per_page": max_results, "mailto": _OPENALEX_CONTACT}
     filter_parts = []
     if filters.year_min is not None:
         filter_parts.append(f"publication_year:>{filters.year_min - 1}")
@@ -118,7 +137,7 @@ async def search_openalex(keywords: list[str], filters: SearchFilters, max_resul
         params["filter"] = ",".join(filter_parts)
 
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await client.get("https://api.openalex.org/works", params=params)
+        response = await call_with_backoff(OPENALEX_LIMITER, lambda: client.get("https://api.openalex.org/works", params=params))
         response.raise_for_status()
 
     hits = []
@@ -156,7 +175,9 @@ async def fetch_openalex_references(openalex_id: str, max_results: int = 5) -> l
     OpenAlex's own filter-list limit) and sorts the results itself."""
     bare_id = openalex_id.rsplit("/", 1)[-1]
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        work = await client.get(f"https://api.openalex.org/works/{bare_id}")
+        work = await call_with_backoff(
+            OPENALEX_LIMITER, lambda: client.get(f"https://api.openalex.org/works/{bare_id}", params={"mailto": _OPENALEX_CONTACT})
+        )
         work.raise_for_status()
         referenced_ids: list[str] = [w.rsplit("/", 1)[-1] for w in work.json().get("referenced_works", []) if w]
         if not referenced_ids:
@@ -165,9 +186,12 @@ async def fetch_openalex_references(openalex_id: str, max_results: int = 5) -> l
         works: list[dict] = []
         for i in range(0, len(referenced_ids), 50):
             chunk = referenced_ids[i : i + 50]
-            response = await client.get(
-                "https://api.openalex.org/works",
-                params={"filter": "openalex_id:" + "|".join(chunk), "per_page": len(chunk)},
+            response = await call_with_backoff(
+                OPENALEX_LIMITER,
+                lambda chunk=chunk: client.get(
+                    "https://api.openalex.org/works",
+                    params={"filter": "openalex_id:" + "|".join(chunk), "per_page": len(chunk), "mailto": _OPENALEX_CONTACT},
+                ),
             )
             response.raise_for_status()
             works.extend(response.json().get("results", []))
@@ -197,14 +221,26 @@ async def fetch_openalex_references(openalex_id: str, max_results: int = 5) -> l
     return hits[:max_results]
 
 
-async def fetch_s2_references(s2_id: str, max_results: int = 5) -> list[RawHit]:
+async def fetch_s2_references(s2_id: str, max_results: int = 5, api_key: str | None = None) -> list[RawHit]:
     """A paper's own `references` (D26/Phase 6.3) via S2's Graph API, which
     already returns each reference's own `citationCount` inline — no second
-    batch call needed, unlike OpenAlex."""
+    batch call needed, unlike OpenAlex.
+
+    `api_key` (config.s2_api_key, optional): unset falls back to S2's
+    shared unauthenticated pool (5,000 req/5min, shared across every
+    unauthenticated user on the internet — the actual cause of frequent
+    "Semantic Scholar did not respond" degrades); a key raises this call to
+    a guaranteed 1 req/sec just for this app."""
+    headers = {"x-api-key": api_key} if api_key else None
+    limiter = S2_LIMITER_WITH_KEY if api_key else S2_LIMITER_NO_KEY
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await client.get(
-            f"https://api.semanticscholar.org/graph/v1/paper/{s2_id}",
-            params={"fields": "references.title,references.year,references.externalIds,references.citationCount"},
+        response = await call_with_backoff(
+            limiter,
+            lambda: client.get(
+                f"https://api.semanticscholar.org/graph/v1/paper/{s2_id}",
+                params={"fields": "references.title,references.year,references.externalIds,references.citationCount"},
+                headers=headers,
+            ),
         )
         response.raise_for_status()
 
@@ -225,15 +261,23 @@ async def fetch_s2_references(s2_id: str, max_results: int = 5) -> list[RawHit]:
     return hits[:max_results]
 
 
-async def search_s2(keywords: list[str], max_results: int = 30) -> list[RawHit]:
+async def search_s2(keywords: list[str], max_results: int = 30, api_key: str | None = None) -> list[RawHit]:
+    """`api_key` (config.s2_api_key, optional) — see `fetch_s2_references`'s
+    docstring for what this does and why it matters."""
+    headers = {"x-api-key": api_key} if api_key else None
+    limiter = S2_LIMITER_WITH_KEY if api_key else S2_LIMITER_NO_KEY
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await client.get(
-            "https://api.semanticscholar.org/graph/v1/paper/search",
-            params={
-                "query": " ".join(keywords),
-                "limit": max_results,
-                "fields": "title,abstract,year,venue,authors,externalIds,openAccessPdf,citationCount",
-            },
+        response = await call_with_backoff(
+            limiter,
+            lambda: client.get(
+                "https://api.semanticscholar.org/graph/v1/paper/search",
+                params={
+                    "query": " ".join(keywords),
+                    "limit": max_results,
+                    "fields": "title,abstract,year,venue,authors,externalIds,openAccessPdf,citationCount",
+                },
+                headers=headers,
+            ),
         )
         response.raise_for_status()
 

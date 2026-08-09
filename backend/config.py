@@ -12,13 +12,15 @@ D13 requires it go through Settings Store's validated, encrypted-storage
 path (`scripts/configure_provider.py` drives that path from `.env` for
 convenience; it does not bypass it).
 
-`FIRECRAWL_API_KEY` is the one flagged exception (D21 amendment): D13's
-Settings-Store-encrypted path covers *LLM provider* credentials only.
-Firecrawl is an infra key Search Federation calls directly, same category
-as the DB DSN above — so it is read here, not through Settings Store. It
-is optional: a missing key is a valid degrade-to-fallback state for search
-(Rules.md "Partial source failure degrades, it does not fail"), never a
-startup failure.
+`FIRECRAWL_API_KEY` and `S2_API_KEY` are the flagged exceptions (D21
+amendment): D13's Settings-Store-encrypted path covers *LLM provider*
+credentials only. Firecrawl and Semantic Scholar are infra keys Search
+Federation calls directly, same category as the DB DSN above — so they're
+read here, not through Settings Store. Both are optional: a missing key is
+a valid degrade-to-fallback state for search (Rules.md "Partial source
+failure degrades, it does not fail") — for S2 specifically, that means the
+shared unauthenticated rate-limit pool rather than a guaranteed 1 req/sec —
+never a startup failure.
 """
 
 from functools import lru_cache
@@ -36,6 +38,7 @@ class Config(BaseSettings):
     postgres_db: str = "researchos"
     postgres_port: int = 5433
     firecrawl_api_key: str | None = None
+    s2_api_key: str | None = None
 
     @property
     def database_url(self) -> str:

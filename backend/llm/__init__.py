@@ -7,6 +7,7 @@ narrow widening of MODULES.md's stated signature, called out here rather
 than added silently.
 """
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -49,6 +50,7 @@ PROVIDER_PREFIX: dict[str, str] = {
     "groq": "groq",
     "openai": "openai",
     "anthropic": "anthropic",
+    "mistral": "mistral",
     "openrouter": "openrouter",
     "deepseek": "deepseek",
     "custom": "openai",
@@ -291,6 +293,30 @@ async def _call_with_rate_limit_self_heal(
         return await make_call(fitted)
 
 
+# Caps concurrent in-flight calls to one provider (Bug Fix Plan Phase
+# 6.12). A free-tier TPM ceiling (e.g. Groq's self-healed 6000 TPM budget,
+# `_persist_learned_budget`) is shared across every concurrent caller, so
+# several `extract_card_job` windows firing at once for different papers
+# can collectively blow past it even though each one individually stays
+# inside its own `_fit_to_budget` fitting. This is a queue, not a failure
+# mode: a call that can't acquire the semaphore yet just waits its turn,
+# same shape as `RateLimiter.acquire` in `search/rate_limit.py`.
+_PROVIDER_CONCURRENCY = 2
+_provider_semaphores: dict[str, asyncio.Semaphore] = {}
+
+
+def _get_provider_semaphore(provider: str | None) -> asyncio.Semaphore:
+    """`provider` is `None` for a `ProviderOverride` call (Settings Store's
+    pre-save validation) — those share one bucket of their own rather than
+    skipping throttling entirely."""
+    key = provider or "__override__"
+    semaphore = _provider_semaphores.get(key)
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(_PROVIDER_CONCURRENCY)
+        _provider_semaphores[key] = semaphore
+    return semaphore
+
+
 ResponseSchema = TypeVar("ResponseSchema", bound=BaseModel)
 
 
@@ -456,19 +482,20 @@ async def complete_structured(
             num_retries=_NUM_RETRIES,
         )
 
-    try:
-        response = await _call_with_rate_limit_self_heal(resolved, messages, None, make_call)
-    except litellm.BadRequestError as exc:
-        if not _is_schema_violation(exc):
-            raise
-        malformed_output, error_detail = _extract_failed_generation(exc)
-        return await _repair_schema_violation(resolved, messages, schema, malformed_output, error_detail, timeout)
+    async with _get_provider_semaphore(resolved.provider):
+        try:
+            response = await _call_with_rate_limit_self_heal(resolved, messages, None, make_call)
+        except litellm.BadRequestError as exc:
+            if not _is_schema_violation(exc):
+                raise
+            malformed_output, error_detail = _extract_failed_generation(exc)
+            return await _repair_schema_violation(resolved, messages, schema, malformed_output, error_detail, timeout)
 
-    content = response.choices[0].message.content
-    try:
-        return schema.model_validate_json(content)
-    except ValidationError as exc:
-        return await _repair_schema_violation(resolved, messages, schema, content, str(exc), timeout)
+        content = response.choices[0].message.content
+        try:
+            return schema.model_validate_json(content)
+        except ValidationError as exc:
+            return await _repair_schema_violation(resolved, messages, schema, content, str(exc), timeout)
 
 
 async def complete(
@@ -496,18 +523,19 @@ async def complete(
             num_retries=_NUM_RETRIES,
         )
 
-    response = await _call_with_rate_limit_self_heal(resolved, messages, max_tokens, make_call)
-    async for chunk in response:
-        delta = chunk.choices[0].delta
-        content = delta.content
-        tool_call_deltas = [
-            ToolCallDelta(
-                index=tc.index,
-                id=tc.id,
-                name=tc.function.name if tc.function else None,
-                arguments=(tc.function.arguments if tc.function and tc.function.arguments else ""),
-            )
-            for tc in (delta.tool_calls or [])
-        ]
-        if content or tool_call_deltas:
-            yield LLMChunk(delta=content or "", tool_calls=tool_call_deltas)
+    async with _get_provider_semaphore(resolved.provider):
+        response = await _call_with_rate_limit_self_heal(resolved, messages, max_tokens, make_call)
+        async for chunk in response:
+            delta = chunk.choices[0].delta
+            content = delta.content
+            tool_call_deltas = [
+                ToolCallDelta(
+                    index=tc.index,
+                    id=tc.id,
+                    name=tc.function.name if tc.function else None,
+                    arguments=(tc.function.arguments if tc.function and tc.function.arguments else ""),
+                )
+                for tc in (delta.tool_calls or [])
+            ]
+            if content or tool_call_deltas:
+                yield LLMChunk(delta=content or "", tool_calls=tool_call_deltas)

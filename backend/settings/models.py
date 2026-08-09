@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Provider = Literal["google", "groq", "openai", "anthropic", "openrouter", "deepseek", "custom", "ollama", "vllm"]
+Provider = Literal["google", "groq", "openai", "anthropic", "mistral", "openrouter", "deepseek", "custom", "ollama", "vllm"]
 
 LOCAL_PROVIDERS: frozenset[str] = frozenset({"ollama", "vllm"})
 

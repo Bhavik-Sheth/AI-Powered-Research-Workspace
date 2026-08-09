@@ -61,6 +61,19 @@ export function LibraryView({
       });
       return data;
     },
+    // Bug Fix Plan Phase 6.12: "Add to library" moved its PDF fetch off the
+    // request path into a background job, so a just-added paper now comes
+    // back `fetch_state: "queued"` rather than already resolved — poll
+    // while anything is still mid-pipeline so its badge advances on its
+    // own; stop once every paper has settled into a terminal state.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      const stillProcessing = data.some((entry) =>
+        STAGES.some(({ key }) => entry.paper[key] === "queued" || entry.paper[key] === "running"),
+      );
+      return stillProcessing ? 4000 : false;
+    },
   });
   const entries = papersQuery.data ?? [];
   const [retryError, setRetryError] = useState<string | null>(null);

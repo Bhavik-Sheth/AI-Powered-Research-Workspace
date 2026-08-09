@@ -2,6 +2,8 @@
 
 import { client } from "@research-os/api-client";
 
+import { beginActivity, endActivity } from "./backgroundActivity";
+
 export interface DesktopBridge {
   port: number;
   token: string;
@@ -34,6 +36,25 @@ export function configureApiClient(): void {
     baseUrl: `http://127.0.0.1:${bridge.port}`,
     headers: { Authorization: `Bearer ${bridge.token}` },
   });
+
+  // Every REST call this app makes goes through this one generated client,
+  // so this is the single place that ticks the global background-activity
+  // signal (Bug Fix Plan Phase 6.12) — no per-call wiring needed anywhere
+  // else. Exactly one of `response`/`error` fires per request (`error`
+  // only when `fetch` itself never produced a response, e.g. offline), so
+  // this never double-decrements.
+  client.interceptors.request.use((request) => {
+    beginActivity();
+    return request;
+  });
+  client.interceptors.response.use((response) => {
+    endActivity();
+    return response;
+  });
+  client.interceptors.error.use((error) => {
+    endActivity();
+    return error;
+  });
 }
 
 /**
@@ -44,13 +65,18 @@ export function configureApiClient(): void {
  */
 export async function fetchBinary(path: string): Promise<ArrayBuffer> {
   const bridge = resolveBridge();
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
-    headers: { Authorization: `Bearer ${bridge.token}` },
-  });
-  if (!response.ok) {
-    throw new Error(`${path} failed: ${response.status}`);
+  beginActivity();
+  try {
+    const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+      headers: { Authorization: `Bearer ${bridge.token}` },
+    });
+    if (!response.ok) {
+      throw new Error(`${path} failed: ${response.status}`);
+    }
+    return await response.arrayBuffer();
+  } finally {
+    endActivity();
   }
-  return response.arrayBuffer();
 }
 
 /**
@@ -66,27 +92,37 @@ export function wsSessionUrl(projectId: string): string {
 /** Posts a raw binary body (recorded audio), returns the parsed JSON reply. */
 export async function postBinaryForJson<T>(path: string, body: ArrayBuffer): Promise<T> {
   const bridge = resolveBridge();
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/octet-stream" },
-    body,
-  });
-  if (!response.ok) {
-    throw new Error(`${path} failed: ${response.status}`);
+  beginActivity();
+  try {
+    const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/octet-stream" },
+      body,
+    });
+    if (!response.ok) {
+      throw new Error(`${path} failed: ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    endActivity();
   }
-  return response.json();
 }
 
 /** Posts a JSON body, returns the raw binary reply (synthesized audio). */
 export async function postJsonForBinary(path: string, body: unknown): Promise<ArrayBuffer> {
   const bridge = resolveBridge();
-  const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`${path} failed: ${response.status}`);
+  beginActivity();
+  try {
+    const response = await fetch(`http://127.0.0.1:${bridge.port}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`${path} failed: ${response.status}`);
+    }
+    return await response.arrayBuffer();
+  } finally {
+    endActivity();
   }
-  return response.arrayBuffer();
 }
