@@ -29,3 +29,6 @@ __pycache__/
 # Tool artifacts
 .playwright-mcp/
 /tester/
+
+# Status reports (local design/architecture notes, not shipped)
+# /backend/status_report/
