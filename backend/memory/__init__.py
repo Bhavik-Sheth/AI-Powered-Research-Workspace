@@ -7,6 +7,7 @@ real source row.
 
 import uuid
 
+from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import Range
 
 import db
@@ -100,6 +101,12 @@ async def _chunk_note(note_id: uuid.UUID) -> None:
             return
         project_id = note.project_id
         spans = split_span(note.body)
+        # Delete-then-insert (HarnessPlan H4, §3.3/§4): a note can be
+        # re-chunked (an edit re-enqueues this job), and the prior chunk
+        # rows for it must not survive alongside the fresh ones — same
+        # transaction as the inserts below, so a mid-write failure leaves
+        # either the old rows or the new ones, never a duplicate mix.
+        await session.execute(delete(ProjectChunks).where(ProjectChunks.source_type == "note", ProjectChunks.source_id == note_id))
         if not spans:
             return
         vectors = await embed([note.body[s:e] for s, e in spans])
@@ -122,6 +129,19 @@ async def _chunk_conversation_summary(conversation_id: uuid.UUID) -> None:
     an error, same as an empty retrieval result."""
     async with db.session() as session:
         conversation = await session.get(Conversations, conversation_id)
+        # HarnessPlan H4, §3.3/§4: compaction re-enqueues this job every
+        # time it writes a new rolling summary, so this is the first caller
+        # that re-runs for the same `source_id` — the prior chunk rows for
+        # this conversation must be replaced, not appended to, on every
+        # run. Same transaction as the inserts below: delete unconditionally
+        # (a conversation whose summary was somehow cleared should not keep
+        # stale chunks retrievable either), then re-chunk if there is a
+        # summary to chunk.
+        await session.execute(
+            delete(ProjectChunks).where(
+                ProjectChunks.source_type == "conversation_summary", ProjectChunks.source_id == conversation_id
+            )
+        )
         if conversation is None or not conversation.summary:
             return
         project_id = conversation.project_id
@@ -144,8 +164,12 @@ async def _chunk_conversation_summary(conversation_id: uuid.UUID) -> None:
 
 async def chunk_and_embed_job(_ctx: dict, *, source_type: SourceType, source_id: str) -> None:
     """Chunks and embeds one artifact with `gte-modernbert-base` (MODULES.md).
-    Re-running for the same artifact adds duplicate rows — v1 has no
-    re-indexing path yet, so callers enqueue this once per artifact."""
+    `note` and `conversation_summary` re-index on every run (HarnessPlan H4:
+    delete this artifact's existing `project_chunks` rows, then insert the
+    freshly chunked ones, in one transaction) — the only two source types a
+    caller re-enqueues for the same `source_id`. `abstract`/`paper_section`
+    still assume one run per paper; give them the same treatment if a
+    caller ever re-enqueues those too."""
     sid = uuid.UUID(source_id)
     if source_type == "abstract":
         await _chunk_abstract(sid)

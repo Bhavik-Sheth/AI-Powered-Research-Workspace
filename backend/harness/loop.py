@@ -68,8 +68,8 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 
 import db
-from db.models import Messages
-from harness import context, registry, trace
+from db.models import Conversations, Messages
+from harness import compaction, context, registry, trace
 from harness.models import (
     ErrorEvent,
     Ref,
@@ -163,10 +163,26 @@ def begin_turn(session_ref: SessionRef) -> asyncio.Event | None:
 
 
 async def _history(session, conversation_id: uuid.UUID) -> list[Message]:
-    rows = (
-        await session.scalars(select(Messages).where(Messages.conversation_id == conversation_id).order_by(Messages.seq))
-    ).all()
-    return [Message(role=row.role, content=row.content) for row in rows if row.role in ("user", "assistant")]
+    """Verbatim `user`/`assistant` turns for `conversation_id`, prefixed
+    with the rolling summary (HarnessPlan H4, §3.3) when one exists. Once
+    `compaction.maybe_compact` has written `conversations.summary` /
+    `summarised_through_seq`, the turns it already covers are no longer
+    read back individually — they stay in `messages` untouched, but band 3
+    (history) sees the summary in their place plus the un-summarised tail,
+    which is what keeps history from growing without bound. This is the one
+    place that decision is made; `context.build_blocks` still just receives
+    a `history: list[Message]` and does not need to know a summary exists."""
+    conversation = await session.get(Conversations, conversation_id)
+    watermark = conversation.summarised_through_seq if conversation else None
+    query = select(Messages).where(Messages.conversation_id == conversation_id)
+    if watermark:
+        query = query.where(Messages.seq > watermark)
+    rows = (await session.scalars(query.order_by(Messages.seq))).all()
+    messages = [Message(role=row.role, content=row.content) for row in rows if row.role in ("user", "assistant")]
+    if conversation and conversation.summary:
+        summary_message = Message(role="system", content=f"Summary of earlier conversation:\n{conversation.summary}")
+        messages = [summary_message, *messages]
+    return messages
 
 
 async def _next_seq(session, conversation_id: uuid.UUID) -> int:
@@ -400,6 +416,17 @@ async def run_turn(
 
             if live_ui_state is not None:
                 ui_state = live_ui_state()
+
+            # HarnessPlan H4, §3.3: compaction is a window operation that
+            # only ever runs between iterations, never mid-stream — right
+            # here, alongside the other per-iteration re-reads, before this
+            # iteration's context is assembled. `messages` rows are never
+            # touched; only what `_history` returns for this conversation
+            # changes once a new summary lands, hence the re-read.
+            if await compaction.maybe_compact(session_ref.conversation_id, history):
+                async with db.session() as db_session:
+                    history = await _history(db_session, session_ref.conversation_id)
+
             selected_id = ui_state.selection.paper_id if ui_state.selection is not None else None
             current_signature = frozenset([selected_id, *ui_state.open_paper_ids]) - {None}
             if current_signature != evidence_signature:
