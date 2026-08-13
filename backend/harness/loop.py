@@ -42,14 +42,27 @@ turn with an `error` event and `turn_complete(interrupted=true)` rather than
 leaving the status pill stuck, and the slot-releasing `finally` at the
 bottom of `run_turn` runs on that path exactly as it does on every other.
 
-Bug Fix Plan Phase 3.1 closes a gap in the citation validator above: a
-doubled or quote-wrapped `<cite>` tag can make `_CITE_OR_QUOTE_PATTERN`'s
-lazy match pair an opening tag with the wrong closing tag, leaving literal
-tag markup stranded inside a capture group or in the untouched text between
-matches. `_validate_citations` now strips that markup — from the captured
-span and from the text around it — before re-wrapping, so `⚠ unverified`
-always renders as clean text, never a real tag nested or stranded inside
-another.
+Bug Fix Plan Phase 3.1 closed a gap in the citation validator above: a
+doubled or quote-wrapped `<cite>` tag can make the cite/quote pattern's lazy
+match pair an opening tag with the wrong closing tag, leaving literal tag
+markup stranded inside a capture group or in the untouched text between
+matches. HarnessPlan H6 moved that whole validator — pattern, malformed-tag
+stripping and all — into `streaming.py`'s `CitationStream`, ported unchanged
+(§3.8): `⚠ unverified` still always renders as clean text, never a real tag
+nested or stranded inside another.
+
+HarnessPlan H6 also replaces whole-turn buffering with live streaming: the
+old shape accumulated an iteration's entire response, and only after the
+loop ended validated it and re-split it into `TextDeltaEvent`s — so the user
+watched a status pill for the whole generation. `run_turn` now feeds every
+`chunk.delta` into one `CitationStream` per turn as it arrives and yields
+each ready-to-emit piece immediately; only a `<cite>`/quoted span still
+buffers, for the length of its own validation. The same instance's `.text`
+and `.citations` are what gets persisted, so what streamed and what is
+stored can never disagree. `.flush()` runs on every exit path so a span left
+open by an interrupt, the iteration cap, or an error is force-closed as
+`<unverified>` rather than silently dropped (TRD §3: partial results, never
+well-formed ones).
 
 HarnessPlan H1 adds a 180s wall-clock bound alongside the existing
 iteration cap (§3.1: "a wall-clock bound matters more with a local model
@@ -59,7 +72,6 @@ run for minutes") and a `turn_traces` row per turn (§3.10).
 
 import asyncio
 import json
-import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -83,6 +95,7 @@ from harness.models import (
     UIActionEvent,
     UIState,
 )
+from harness.streaming import CitationStream
 from llm import LLMError, Message, ToolCall, complete
 from memory.models import CitedRow
 from provenance import validate_and_anchor
@@ -96,23 +109,6 @@ _MAX_ITERATIONS = 8
 # than an iteration bound does — eight iterations of a 30B model on CPU can
 # run for minutes. Same graceful-stop path as the iteration cap.
 _WALL_CLOCK_LIMIT_S = 180
-
-# Matches an explicit `<cite>` span, or a quotation-marked span the model
-# left untagged in plain prose — a 20B model routinely writes a fabricated
-# "quote" instead of wrapping it, and the prompt's citation discipline is
-# advisory only (Bug Fix Plan Phase 2.2), so both are validated the same
-# way rather than letting the untagged case pass through untouched. The
-# length floor keeps this to sentence-like spans, not every quoted term.
-_MIN_UNTAGGED_QUOTE_CHARS = 20
-_CITE_OR_QUOTE_PATTERN = re.compile(
-    r"<cite>(?P<cite>.*?)</cite>"
-    # `[^<>]`, not just excluding the quote char: a model that wraps its
-    # own `<cite>` tag in quote marks (`"<cite>...</cite>"`) must not have
-    # the quote-span alternative swallow the tag markup as "quoted" text.
-    rf'|"(?P<straight>[^"<>]{{{_MIN_UNTAGGED_QUOTE_CHARS},}}?)"'
-    rf"|“(?P<curly>[^”<>]{{{_MIN_UNTAGGED_QUOTE_CHARS},}}?)”",
-    re.DOTALL,
-)
 
 # Every other LLM call in this codebase passes an explicit timeout
 # (memory-decision, extraction, scoped-column queries); the primary
@@ -220,61 +216,24 @@ def _matching_memory_row(quote: str, memory_rows: list[CitedRow]) -> CitedRow | 
     return next((row for row in memory_rows if quote in row.text), None)
 
 
-# A doubled or quote-wrapped `<cite>` tag (Bug Fix Plan Phase 3.1) can make
-# `_CITE_OR_QUOTE_PATTERN`'s lazy `.*?` pair an opening tag with the wrong
-# closing tag, leaving literal `<cite>`/`</cite>`/`<unverified>`/`</unverified>`
-# markup stranded either inside a capture group or in the untouched text
-# between matches. Neither location is allowed to reach `messages.citations`
-# still carrying that markup — `renderAssistantContent` (Companion Pane)
-# splits on the outermost match only and does not recurse into one, so a
-# leftover tag prints as visible raw characters instead of being masked
-# behind `⚠ unverified`.
-_TAG_MARKUP_PATTERN = re.compile(r"</?(?:cite|unverified)>")
-
-
-def _strip_tag_markup(text: str) -> str:
-    """Removes any literal citation-tag markup from `text` — applied to a
-    captured span before it is re-wrapped, and to the untouched text between
-    matches, so no shape or depth of malformed tag the model emits can leave
-    a real `<cite>`/`<unverified>` tag nested or stranded inside the
-    validated result."""
-    return _TAG_MARKUP_PATTERN.sub("", text)
-
-
-async def _validate_citations(
-    session, paper_ids: list[uuid.UUID], memory_rows: list[CitedRow], text: str
-) -> tuple[str, list[dict]]:
-    """D24's substring validator, applied to every `<cite>` span *and* every
-    untagged quotation-marked span the model produced — against any paper in
-    `paper_ids` (the selected paper plus any open reader tabs, so a
-    cross-paper claim can resolve against either paper — US4) via
-    Provenance, or against a row `query_memory` actually retrieved. Returns
-    the text with every span relabelled `<cite>` or `<unverified>` as
-    appropriate, plus the structured citation list `messages.citations`
-    stores."""
-    citations: list[dict] = []
-    pieces: list[str] = []
-    cursor = 0
-    for match in _CITE_OR_QUOTE_PATTERN.finditer(text):
-        pieces.append(_strip_tag_markup(text[cursor : match.start()]))
-        quote = _strip_tag_markup(match.group("cite") or match.group("straight") or match.group("curly"))
-        anchor = None
-        for paper_id in paper_ids:
-            anchor = await validate_and_anchor(session, paper_id, quote, "", "")
-            if anchor is not None:
-                break
-        memory_row = None if anchor is not None else _matching_memory_row(quote, memory_rows)
+async def _resolve_citation(
+    session, paper_ids: list[uuid.UUID], memory_rows: list[CitedRow], quote: str
+) -> dict | None:
+    """D24's substring check, applied to one already-buffered `<cite>` or
+    quoted span: against any paper in `paper_ids` (the selected paper plus
+    any open reader tabs, so a cross-paper claim can resolve against either
+    paper — US4) via Provenance, else against a row `query_memory` actually
+    retrieved. `None` means the quote resolves neither way — the span this
+    validates is *what counts as a match*; `CitationStream` owns only the
+    buffering and state transitions around calling it."""
+    for paper_id in paper_ids:
+        anchor = await validate_and_anchor(session, paper_id, quote, "", "")
         if anchor is not None:
-            citations.append({"kind": "anchor", "anchor_id": str(anchor.id), "quote": quote})
-            pieces.append(f"<cite>{quote}</cite>")
-        elif memory_row is not None:
-            citations.append({"kind": "memory", "row_id": str(memory_row.id), "source_type": memory_row.source_type, "quote": quote})
-            pieces.append(f"<cite>{quote}</cite>")
-        else:
-            pieces.append(f"<unverified>{quote}</unverified>")
-        cursor = match.end()
-    pieces.append(_strip_tag_markup(text[cursor:]))
-    return "".join(pieces), citations
+            return {"kind": "anchor", "anchor_id": str(anchor.id), "quote": quote}
+    memory_row = _matching_memory_row(quote, memory_rows)
+    if memory_row is not None:
+        return {"kind": "memory", "row_id": str(memory_row.id), "source_type": memory_row.source_type, "quote": quote}
+    return None
 
 
 class _ToolDispatchInterrupted(Exception):
@@ -402,6 +361,23 @@ async def run_turn(
         turn_exchange: list[Message] = []
         context_totals: dict[str, int] = {}
 
+        async def _validate_span(quote: str) -> dict | None:
+            # Closes over `citation_paper_ids`/`memory_rows` by reference,
+            # not value — both are reassigned in place as the turn
+            # progresses (open-paper set changes, retrieval happens once
+            # up front), and Python's late-binding closures see whatever
+            # the enclosing scope holds at call time, so this always
+            # validates against the turn's current state.
+            async with db.session() as validate_session:
+                return await _resolve_citation(validate_session, citation_paper_ids, memory_rows, quote)
+
+        # HarnessPlan H6 (§3.8): one `CitationStream` for the whole turn,
+        # not one per iteration — every iteration's deltas feed the same
+        # machine and stream live as they arrive, so `.text`/`.citations`
+        # at the end is exactly what was shown, whichever iteration turned
+        # out to be the final answer.
+        citation_stream = CitationStream(_validate_span)
+
         # D18 node 1: single-agent tool-calling loop, hard iteration cap
         # with a graceful stop — each pass either produces a final answer
         # (no tool call) or dispatches every tool call the model made and
@@ -445,6 +421,12 @@ async def run_turn(
             try:
                 async for chunk in complete(llm_messages, tools=registry.core_schemas(), tier="primary", timeout=_COMPLETION_TIMEOUT_S):
                     full_text += chunk.delta
+                    # HarnessPlan H6: streamed live, not buffered until the
+                    # iteration ends — the state machine only holds back a
+                    # `<cite>`/quoted span, for the length of its own
+                    # validation.
+                    for piece in await citation_stream.feed(chunk.delta):
+                        yield TextDeltaEvent(delta=piece)
                     for tc_delta in chunk.tool_calls:
                         acc = tool_call_acc.setdefault(tc_delta.index, {"id": None, "name": None, "arguments": ""})
                         acc["id"] = tc_delta.id or acc["id"]
@@ -458,6 +440,13 @@ async def run_turn(
                         interrupted = True
                         break
             except LLMError as exc:
+                # Whatever text this iteration streamed before the error is
+                # not rolled back (Rules.md) — flush any span it left open
+                # so the last thing on screen is `<unverified>`, never a
+                # dangling delimiter.
+                tail = await citation_stream.flush()
+                if tail:
+                    yield TextDeltaEvent(delta=tail)
                 yield ErrorEvent(code=type(exc).__name__, message=str(exc), recoverable=True, what_still_worked="nothing — the turn produced no answer")
                 yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=iterations)
                 await trace.finish(
@@ -466,6 +455,9 @@ async def run_turn(
                 )
                 return
             except RuntimeError as exc:
+                tail = await citation_stream.flush()
+                if tail:
+                    yield TextDeltaEvent(delta=tail)
                 yield ErrorEvent(code="not_configured", message=str(exc), recoverable=True, what_still_worked=None)
                 yield TurnCompleteEvent(turn_id=turn_id, interrupted=False, iterations=iterations)
                 await trace.finish(
@@ -529,6 +521,9 @@ async def run_turn(
                     # handling) — the turn ends the same way an interrupt
                     # does, rather than leaving the status pill stuck.
                     trace_tool_calls.append({"name": tool_name, "ms": int((time.monotonic() - tool_started_at) * 1000), "ok": False, "denied": False, "budget_blocked": False})
+                    tail = await citation_stream.flush()
+                    if tail:
+                        yield TextDeltaEvent(delta=tail)
                     yield ErrorEvent(
                         code="tool_timeout", message=str(exc), recoverable=True, what_still_worked="the conversation so far"
                     )
@@ -540,6 +535,9 @@ async def run_turn(
                     return
                 except _ToolDispatchInterrupted:
                     trace_tool_calls.append({"name": tool_name, "ms": int((time.monotonic() - tool_started_at) * 1000), "ok": False, "denied": False, "budget_blocked": False})
+                    tail = await citation_stream.flush()
+                    if tail:
+                        yield TextDeltaEvent(delta=tail)
                     yield ErrorEvent(
                         code="turn_interrupted",
                         message=f'"{tool_name}" was interrupted before it returned.',
@@ -563,9 +561,20 @@ async def run_turn(
             # answer — a graceful stop (D18 node 1), never an exception.
             if not full_text:
                 full_text = "I reached my step limit before finishing this — try asking again, more narrowly."
+                for piece in await citation_stream.feed(full_text):
+                    yield TextDeltaEvent(delta=piece)
+
+        # HarnessPlan H6 (§3.8): force-close whatever span the final
+        # iteration left open — normal completion, an interrupt, or the
+        # iteration cap all land here the same way. Partial results, never
+        # well-formed ones (TRD §3).
+        tail = await citation_stream.flush()
+        if tail:
+            yield TextDeltaEvent(delta=tail)
+
+        cleaned_text, citations = citation_stream.text, citation_stream.citations
 
         async with db.session() as db_session:
-            cleaned_text, citations = await _validate_citations(db_session, citation_paper_ids, memory_rows, full_text)
             seq = await _next_seq(db_session, session_ref.conversation_id)
             db_session.add(
                 Messages(
@@ -580,15 +589,6 @@ async def run_turn(
             )
 
         trace_citations = {"validated": len(citations), "unverified": cleaned_text.count("<unverified>")}
-
-        # Sent post-validation, never raw model output (D24) — split on the
-        # tag boundaries already computed above so a chunk never splits one.
-        # An interrupted turn's trailing unclosed tag simply won't match and
-        # passes through as literal text — partial results, not well-formed
-        # ones, is the only guarantee (TRD §3).
-        for piece in re.split(r"(</?(?:cite|unverified)>)", cleaned_text):
-            if piece:
-                yield TextDeltaEvent(delta=piece)
 
         yield TurnCompleteEvent(turn_id=turn_id, interrupted=interrupted, iterations=iterations, citations=citations)
         await trace.finish(
