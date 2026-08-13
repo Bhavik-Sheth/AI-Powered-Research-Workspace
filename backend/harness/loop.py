@@ -68,6 +68,16 @@ HarnessPlan H1 adds a 180s wall-clock bound alongside the existing
 iteration cap (§3.1: "a wall-clock bound matters more with a local model
 than an iteration bound does — eight iterations of a 30B model on CPU can
 run for minutes") and a `turn_traces` row per turn (§3.10).
+
+HarnessPlan H5 (§3.5) deletes the Phase 1.7 decide-then-retrieve step
+entirely: `query_memory` is now `harness/tools/memory.py`, a real
+dispatchable tool the model can call at any iteration, as many times as it
+decides it needs to — not a single auxiliary-tier gate that ran once before
+the loop started and could never fire again after iteration 1. `run_turn`
+keeps `memory_rows`/`retrieval_trace` accumulators for the whole turn and
+hands the same list objects into every `ToolContext` it builds, so the
+citation validator can resolve a `<cite>` span against a row retrieved on
+any iteration and `turn_traces.retrieval` sees every call the turn made.
 """
 
 import asyncio
@@ -346,9 +356,19 @@ async def run_turn(
 
         await trace.start(turn_id, session_ref.conversation_id, session_ref.project_id)
 
-        memory_rows = await context.maybe_retrieve(session_ref.project_id, message)
-        if memory_rows:
-            yield StatusEvent(text="searching your project…")
+        # HarnessPlan H5, §3.5: retrieval is no longer a pre-turn step that
+        # runs once before the loop starts — `query_memory` is a tool the
+        # model calls mid-loop, as many times as it decides it needs to.
+        # `memory_rows` accumulates every `CitedRow` any `query_memory` call
+        # this turn actually returned, so a later `<cite>` span can resolve
+        # against a row retrieved on iteration 5 exactly as well as one from
+        # iteration 1. `retrieval_trace` accumulates `turn_traces.retrieval`
+        # (§3.10) the same way. Both lists are passed into every
+        # `ToolContext` this turn builds (see the tool-dispatch loop below)
+        # so `harness/tools/memory.py`'s handler can append into them —
+        # `ToolContext` is documented as the mechanism (`registry.py`).
+        memory_rows: list[CitedRow] = []
+        retrieval_trace: list[dict] = []
 
         # `Ref`s a tool result has surfaced this turn, merged with whatever
         # the frontend already had in `ui_state.working_set` — band 2
@@ -362,12 +382,11 @@ async def run_turn(
         context_totals: dict[str, int] = {}
 
         async def _validate_span(quote: str) -> dict | None:
-            # Closes over `citation_paper_ids`/`memory_rows` by reference,
-            # not value — both are reassigned in place as the turn
-            # progresses (open-paper set changes, retrieval happens once
-            # up front), and Python's late-binding closures see whatever
-            # the enclosing scope holds at call time, so this always
-            # validates against the turn's current state.
+            # Closes over `citation_paper_ids` by reference (reassigned as
+            # the open-paper set changes) and `memory_rows` by identity —
+            # the same list object `query_memory` calls append into all
+            # turn long, so this always validates against every row
+            # retrieved so far, however many `query_memory` calls have run.
             async with db.session() as validate_session:
                 return await _resolve_citation(validate_session, citation_paper_ids, memory_rows, quote)
 
@@ -411,7 +430,7 @@ async def run_turn(
                 evidence_signature = frozenset(citation_paper_ids)
 
             working_set_refs = [*ui_state.working_set, *seen_refs]
-            blocks = context.build_blocks(ui_state, evidence_blocks_text, open_papers, memory_rows, history, working_set_refs, message)
+            blocks = context.build_blocks(ui_state, evidence_blocks_text, open_papers, history, working_set_refs, message)
             assembled_messages, context_totals = context.assemble(blocks)
             llm_messages = assembled_messages + turn_exchange
 
@@ -501,7 +520,12 @@ async def run_turn(
                                 tool_name=tool_name,
                             )
                         )
-                        ctx = registry.ToolContext(session=db_session, project_id=session_ref.project_id)
+                        ctx = registry.ToolContext(
+                            session=db_session,
+                            project_id=session_ref.project_id,
+                            memory_rows=memory_rows,
+                            retrieval_trace=retrieval_trace,
+                        )
                         result = await _dispatch_tool_bounded(ctx, tool_name, args, cancel_flag)
                         seq = await _next_seq(db_session, session_ref.conversation_id)
                         db_session.add(
@@ -600,6 +624,7 @@ async def run_turn(
             completion_tokens=trace_completion_tokens,
             model=trace_model,
             tool_calls=trace_tool_calls,
+            retrieval=retrieval_trace,
             citations=trace_citations,
             context_blocks=context_totals,
         )

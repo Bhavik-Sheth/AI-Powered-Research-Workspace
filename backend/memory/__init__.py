@@ -19,9 +19,33 @@ from memory.embedder import embed
 from memory.models import CitedRow, SourceType
 from memory.reranker import rerank
 
-__all__ = ["chunk_and_embed_job", "query_memory"]
+__all__ = ["chunk_and_embed_job", "query_memory", "query_memory_with_diagnostics"]
 
-_RERANK_CANDIDATES = 40
+_RERANK_CANDIDATES = 40  # unchanged — recall stage (HarnessPlan H5, §3.5)
+
+# HarnessPlan H5, §3.5: the bug fixed here was live in production — reranking
+# 40 candidates and returning all 40 into a system message cost up to ~64k
+# characters (~16k tokens) from a single retrieval on a 32k-context model.
+# `_RETURN_K` is the hard cut after rerank; `_MIN_RERANK_SCORE` is an
+# absolute floor below which nothing comes back at all.
+_RETURN_K = 6
+
+# UNCALIBRATED — flagged in the HarnessPlan H5 report. There is no live eval
+# fixture with a real embedding/rerank endpoint in this environment to
+# calibrate against (the plan requires calibration against the eval fixture,
+# not a guess). `cross-encoder/ms-marco-MiniLM-L-6-v2` (memory/reranker.py)
+# is a regression-trained cross-encoder whose `.predict()` returns raw,
+# *unbounded* logits — not a 0-1 probability and not cosine similarity. The
+# model's own published examples score clearly-relevant pairs positive
+# (commonly +1 to +11) and clearly-irrelevant pairs negative (commonly -1 to
+# -11), so 0.0 is the natural sign boundary for "this model thinks the pair
+# is relevant at all" on this scale. This is a defensible placeholder, not a
+# validated threshold — tune it against real retrieval before relying on it.
+_MIN_RERANK_SCORE = 0.0
+
+# HarnessPlan H5, §3.5 item 3: a single paper's many section chunks (or one
+# very active note) must not fill every slot and crowd out other sources.
+_MAX_PER_SOURCE_TYPE = 3
 
 
 async def _chunk_abstract(paper_id: uuid.UUID) -> None:
@@ -50,7 +74,13 @@ async def _chunk_abstract(paper_id: uuid.UUID) -> None:
         spans = split_span(text)
         if not spans:
             return
-        vectors = await embed([text[s:e] for s, e in spans])
+        # HarnessPlan H5, §3.5 item 4: the section heading is prefixed onto
+        # the copy handed to the embedder only — matching improves when a
+        # question is phrased by section ("what's their evaluation setup").
+        # The stored `text_` below stays the bare original so it keeps
+        # validating verbatim against the source (D24) — only the embedded
+        # copy ever carries the prefix.
+        vectors = await embed([f"Abstract: {text[s:e]}" for s, e in spans])
         for (start, end), vector in zip(spans, vectors):
             session.add(
                 PaperChunks(
@@ -79,7 +109,12 @@ async def _chunk_paper_sections(paper_id: uuid.UUID) -> None:
             spans = split_span(section_text)
             if not spans:
                 continue
-            vectors = await embed([section_text[s:e] for s, e in spans])
+            # HarnessPlan H5, §3.5 item 4 — see `_chunk_abstract`'s comment:
+            # only the embedded copy gets the heading prefix; `text_` below
+            # stores the bare original.
+            heading = sec.get("heading")
+            prefix = f"{heading}: " if heading else ""
+            vectors = await embed([f"{prefix}{section_text[s:e]}" for s, e in spans])
             for (start, end), vector in zip(spans, vectors):
                 session.add(
                     PaperChunks(
@@ -198,17 +233,80 @@ def _to_cited_row(row: dict) -> CitedRow:
     )
 
 
-async def query_memory(project_id: uuid.UUID, query: str, types: list[str] | None = None) -> list[CitedRow]:
-    """`paper_chunks(papers in P) ∪ project_chunks(P)`, hybrid-fused then
-    cross-encoder reranked (D25). No matching rows is a legal empty list."""
+def _select_top_k(
+    ranked: list[tuple[CitedRow, float]],
+    *,
+    k: int = _RETURN_K,
+    min_score: float = _MIN_RERANK_SCORE,
+    max_per_type: int = _MAX_PER_SOURCE_TYPE,
+) -> list[tuple[CitedRow, float]]:
+    """The output-stage cut (HarnessPlan H5, §3.5) — `ranked` is every
+    reranked candidate, highest score first. Applies the absolute floor
+    first (`ranked` is sorted descending, so the first row below `min_score`
+    means every row after it also fails — stop there), then caps how many
+    rows any one `source_type` contributes so a 12-section paper cannot
+    occupy every slot, then hard-cuts to `k`. Pure function over scored rows
+    — no DB, no model call — so it is directly unit-testable. Returning
+    fewer than `k` rows, including zero, is a normal outcome."""
+    selected: list[tuple[CitedRow, float]] = []
+    per_type: dict[str, int] = {}
+    for row, score in ranked:
+        if score < min_score:
+            break
+        if per_type.get(row.source_type, 0) >= max_per_type:
+            continue
+        selected.append((row, score))
+        per_type[row.source_type] = per_type.get(row.source_type, 0) + 1
+        if len(selected) >= k:
+            break
+    return selected
+
+
+async def _ranked_candidates(
+    project_id: uuid.UUID, query: str, types: list[str] | None
+) -> tuple[list[tuple[CitedRow, float]], int]:
+    """Recall (`db.hybrid_retrieve`) plus cross-encoder rerank (D25), sorted
+    highest score first. Returns `(ranked, candidate_count)` — the shared
+    core `query_memory` and `query_memory_with_diagnostics` both build on,
+    so the recall/rerank logic exists in exactly one place."""
     (query_vector,) = await embed([query])
 
     async with db.session() as session:
         candidates = await db.hybrid_retrieve(session, project_id, query, query_vector, types=types, limit=_RERANK_CANDIDATES)
 
     if not candidates:
-        return []
+        return [], 0
 
     scores = await rerank(query, [c["text"] for c in candidates])
-    ranked = [c for c, _ in sorted(zip(candidates, scores), key=lambda pair: pair[1], reverse=True)]
-    return [_to_cited_row(row) for row in ranked]
+    ranked = sorted(zip([_to_cited_row(c) for c in candidates], scores), key=lambda pair: pair[1], reverse=True)
+    return ranked, len(candidates)
+
+
+async def query_memory(project_id: uuid.UUID, query: str, types: list[str] | None = None) -> list[CitedRow]:
+    """`paper_chunks(papers in P) ∪ project_chunks(P)`, hybrid-fused,
+    cross-encoder reranked, then cut to `_RETURN_K` above `_MIN_RERANK_SCORE`
+    with per-`source_type` balancing (D25; HarnessPlan H5, §3.5). No
+    matching rows above the floor is a legal empty list."""
+    ranked, _ = await _ranked_candidates(project_id, query, types)
+    return [row for row, _ in _select_top_k(ranked)]
+
+
+async def query_memory_with_diagnostics(
+    project_id: uuid.UUID, query: str, types: list[str] | None = None
+) -> tuple[list[CitedRow], dict]:
+    """Same result as `query_memory`, plus the `turn_traces.retrieval`
+    diagnostics (HarnessPlan H5, §3.10): `{query, candidates, returned,
+    top_score}` — `candidates` is how many rows survived hybrid fusion
+    before reranking, `top_score` is the highest-scoring returned row's
+    score (`None` when nothing was returned). Only the `query_memory` tool
+    needs this; the REST route (`api/memory.py`) has no `turn_traces` row to
+    write it into and keeps calling the plain `query_memory`."""
+    ranked, candidate_count = await _ranked_candidates(project_id, query, types)
+    selected = _select_top_k(ranked)
+    diagnostics = {
+        "query": query,
+        "candidates": candidate_count,
+        "returned": len(selected),
+        "top_score": selected[0][1] if selected else None,
+    }
+    return [row for row, _ in selected], diagnostics

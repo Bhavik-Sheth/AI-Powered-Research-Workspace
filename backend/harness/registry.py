@@ -14,23 +14,35 @@ the loop feeds straight back into the next completion, not a crash.
 import inspect
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from harness.models import ToolResult
+from memory.models import CitedRow
 
 
 @dataclass(frozen=True)
 class ToolContext:
     """Everything a tool handler receives beyond its typed arguments — the
     session its writes run on and the project they run against. A handler
-    that needs more than this and its arguments is not a tool."""
+    that needs more than this and its arguments is not a tool.
+
+    `memory_rows`/`retrieval_trace` are the one exception (HarnessPlan H5,
+    §3.5): `loop.py` constructs one list of each before a turn's loop
+    starts and passes the *same* list into every `ToolContext` it builds for
+    that turn, so `query_memory`'s handler can append what it retrieved and
+    `loop.py` can read the accumulation back after `dispatch` returns —
+    without widening the wire-facing `ToolResult` to carry structured
+    `CitedRow`s it has no reason to expose to the model. `ToolContext` stays
+    frozen (no field is ever reassigned); only the lists' contents mutate."""
 
     session: AsyncSession
     project_id: uuid.UUID
+    memory_rows: list[CitedRow] = field(default_factory=list)
+    retrieval_trace: list[dict] = field(default_factory=list)
 
 
 ToolHandler = Callable[[ToolContext, BaseModel], Awaitable[ToolResult]]

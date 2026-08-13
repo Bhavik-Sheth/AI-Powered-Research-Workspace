@@ -2,22 +2,29 @@
 into a turn's `llm_messages`, and how it is kept inside a fixed token
 budget. H1 moved this logic out of `harness/__init__.py` unchanged; H3
 (§3.2) adds the budget and eviction order on top of it: eviction removes
-whole blocks — a retrieval row, one history turn — never truncates one, and
-always in the same order (retrieval first, then history, then the working
-set); the system prompt, tool schemas, and paper evidence for every open
-paper never evict. Nothing outside `harness/` imports this module.
+whole blocks — one history turn, one working-set line — never truncates
+one, and always in the same order (history, then the working set); the
+system prompt, tool schemas, and paper evidence for every open paper never
+evict. Nothing outside `harness/` imports this module.
+
+HarnessPlan H5 (§3.5) removes band 4 (a dedicated, always-present "retrieved
+from the project's memory" block). Retrieval is no longer a pre-turn step
+this module fetches rows for — `query_memory` is a tool the model calls
+mid-loop (`harness/tools/memory.py`), and that call's own `tool_result`
+already lands in `loop.py`'s `turn_exchange`, which is appended to
+`llm_messages` after this module's blocks on every iteration. A separate
+band-4 copy of the same text would be pure duplication of budget for
+content the model has already seen once. `ContextBlock.band` keeps the
+`Literal[1, 2, 3, 4]` shape (a future band could still use 4) but
+`build_blocks` no longer produces one.
 """
 
 import uuid
 from typing import Literal, NamedTuple
 
-from pydantic import BaseModel
-
 import papers
 from harness.models import Ref, UIState
-from llm import LLMError, Message, complete_structured, count_tokens
-from memory import query_memory
-from memory.models import CitedRow
+from llm import Message, count_tokens
 
 SYSTEM_PROMPT = (
     "You are the Research Companion, helping a researcher with their project. "
@@ -32,33 +39,6 @@ SYSTEM_PROMPT = (
 # constant for now so a 128k-context model can't yet raise it — that wiring
 # is out of scope for this phase.
 CONTEXT_BUDGET_TOKENS = 24_000
-
-
-class _MemoryDecision(BaseModel):
-    use_memory: bool
-    query: str = ""
-
-
-_MEMORY_DECISION_PROMPT = (
-    "Decide whether answering the user's message needs searching the project's own notes, "
-    "papers, and past conversations (query_memory). Say yes only if the conversation so far and "
-    "any highlighted passage are not already enough to answer. If yes, give a short search query."
-)
-
-
-async def maybe_retrieve(project_id: uuid.UUID, message: str) -> list[CitedRow]:
-    try:
-        decision = await complete_structured(
-            messages=[Message(role="system", content=_MEMORY_DECISION_PROMPT), Message(role="user", content=message)],
-            schema=_MemoryDecision,
-            tier="auxiliary",
-            timeout=20,
-        )
-    except (*LLMError, RuntimeError):
-        return []  # No memory context beats failing the whole turn over an optional step.
-    if not decision.use_memory or not decision.query:
-        return []
-    return await query_memory(project_id, decision.query)
 
 
 async def open_papers(session, open_paper_ids: list[uuid.UUID]) -> list[tuple[uuid.UUID, str]]:
@@ -112,14 +92,6 @@ def format_open_papers(open_papers_: list[tuple[uuid.UUID, str]]) -> str:
         "compare against a paper that is not in this list, say explicitly that the paper is not "
         "open in this project rather than answering from training knowledge."
     )
-    return "\n".join(lines)
-
-
-def format_memory_rows(rows: list[CitedRow]) -> str:
-    lines = ["Retrieved from the project's memory:"]
-    for row in rows:
-        label = f"§{row.section_heading}" if row.section_heading else row.source_type
-        lines.append(f'- ({label}) "{row.text}"')
     return "\n".join(lines)
 
 
@@ -179,10 +151,10 @@ def format_working_set(items: list[Ref]) -> str | None:
 
 class ContextBlock(NamedTuple):
     """One evictable unit of `llm_messages`. `band` follows §3.2's table:
-    1 is never evicted; 4 evicts first. Eviction removes a block whole —
-    never truncates a message — so band 3 (history) is passed as one block
-    per turn's worth of messages, oldest first, and band 4 (retrieval) as
-    one block per row, so a partial evict is possible within either."""
+    1 is never evicted; higher evicts first. Eviction removes a block
+    whole — never truncates a message — so band 3 (history) is passed as
+    one block per turn's worth of messages, oldest first, so a partial
+    evict is possible within it."""
 
     name: str
     band: Literal[1, 2, 3, 4]
@@ -193,7 +165,6 @@ def build_blocks(
     ui_state: UIState,
     evidence_blocks_text: list[str],
     open_papers_: list[tuple[uuid.UUID, str]],
-    memory_rows: list[CitedRow],
     history: list[Message],
     working_set_refs: list[Ref],
     message: str,
@@ -201,10 +172,10 @@ def build_blocks(
     """The full block list for one loop iteration, in band order per §3.2's
     table — band 1 (system prompt, selection, paper evidence, open-papers
     note, live UI state, current message) never evicts; band 2 (working
-    set) evicts third; band 3 (history, oldest first) evicts second; band 4
-    (retrieval) evicts first. Called fresh each iteration so a mid-turn
-    `ui_state` change or a tool result's new `Ref`s are reflected without
-    re-reading anything that has not changed."""
+    set) evicts second; band 3 (history, oldest first) evicts first. Called
+    fresh each iteration so a mid-turn `ui_state` change or a tool result's
+    new `Ref`s are reflected without re-reading anything that has not
+    changed."""
     blocks = [ContextBlock("system_prompt", 1, Message(role="system", content=SYSTEM_PROMPT))]
     if ui_state.selection is not None:
         blocks.append(
@@ -224,8 +195,6 @@ def build_blocks(
     working_set_text = format_working_set(working_set_refs)
     if working_set_text is not None:
         blocks.append(ContextBlock("working_set", 2, Message(role="system", content=working_set_text)))
-    if memory_rows:
-        blocks.append(ContextBlock("memory", 4, Message(role="system", content=format_memory_rows(memory_rows))))
     for i, msg in enumerate(history):
         blocks.append(ContextBlock(f"history:{i}", 3, msg))
     blocks.append(ContextBlock("current_message", 1, Message(role="user", content=message)))
@@ -234,9 +203,9 @@ def build_blocks(
 
 def assemble(blocks: list[ContextBlock], *, budget: int = CONTEXT_BUDGET_TOKENS) -> tuple[list[Message], dict[str, int]]:
     """Fits `blocks` inside `budget`, evicting whole blocks in band order —
-    every band-4 block before any band-3 block, every band-3 before any
-    band-2 — oldest first within a band, matching the order `blocks` was
-    given in. Band-1 blocks are never evicted; if they alone exceed
+    every band-3 block before any band-2 block — oldest first within a
+    band, matching the order `blocks` was given in. Band-1 blocks are never
+    evicted; if they alone exceed
     `budget`, the assembled context is still returned over budget and
     `llm.complete`'s `_fit_to_budget` is the last-resort guard (logged when
     it fires — this is meant to never happen).

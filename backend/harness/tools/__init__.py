@@ -4,4 +4,4 @@ the catalog non-empty; nothing outside `harness/` imports these modules
 directly (MODULES.md: "harness/'s internal files ... are not separate
 modules")."""
 
-from harness.tools import discovery, experiments, navigation, notes, papers  # noqa: F401
+from harness.tools import discovery, experiments, memory, navigation, notes, papers  # noqa: F401
