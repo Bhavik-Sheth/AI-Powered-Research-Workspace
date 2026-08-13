@@ -42,7 +42,7 @@ class UpdateExperimentArgs(BaseModel):
     status: Literal["planned", "remaining", "in-progress", "done"] | None = None
 
 
-@tool(name="update_experiment", group="experiments", kind="action")
+@tool(name="update_experiment", group="experiments", kind="action", core=False)
 async def update_experiment(ctx: ToolContext, args: UpdateExperimentArgs) -> ToolResult:
     """Patch an existing experiment's title, hypothesis, notes, or status. Only the fields given are changed."""
     try:
