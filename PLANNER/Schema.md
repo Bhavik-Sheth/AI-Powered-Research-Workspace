@@ -323,6 +323,35 @@ exactly where these tables live.
 
 ---
 
+#### `turn_traces` — *Harness Plan H1*
+
+**Purpose.** One row per agent turn, created `running` at turn start and finalized at the end
+(HarnessPlan §3.10). Doubles as turn state for the orphan sweep (`resume.py`, H11): a row still
+`running` with no matching assistant `messages` row is a crashed or killed turn, not a live one.
+Observability only — nothing in the harness reads this table to decide behaviour mid-turn.
+
+| Column | Type | Constraints | Business meaning |
+|---|---|---|---|
+| `turn_id` | UUID | PK, NOT NULL | Same id as `messages.turn_id` for the turn's rows. |
+| `conversation_id` | UUID | FK → `conversations.id` ON DELETE CASCADE, NOT NULL | Owning thread. |
+| `project_id` | UUID | FK → `projects.id` ON DELETE CASCADE, NOT NULL | Owning project — lets a trace be queried without a conversation join. |
+| `parent_turn_id` | UUID | FK → `turn_traces.turn_id` ON DELETE CASCADE, NULL | Set for a subagent run (H9); NULL for a top-level turn. |
+| `status` | TEXT | NOT NULL, DEFAULT `running`, CHECK IN (`running`,`complete`,`interrupted`,`failed`) | Turn state; `running` at insert. |
+| `iterations` | INTEGER | NOT NULL, DEFAULT 0 | Loop passes taken. |
+| `total_ms` | INTEGER | NULL | Wall-clock duration; set at finalize. |
+| `prompt_tokens` | INTEGER | NULL | From `llm.count_tokens`/provider usage; NULL if the provider never reported it. |
+| `completion_tokens` | INTEGER | NULL | Same. |
+| `model` | TEXT | NULL | The resolved `provider/model` string the primary completion used. |
+| `context_blocks` | JSONB | NOT NULL, DEFAULT `'{}'` | `{block_name: tokens}` after eviction — the bloat signal (H3). |
+| `tool_calls` | JSONB | NOT NULL, DEFAULT `'[]'` | `[{name, ms, ok, denied, budget_blocked}]`. |
+| `retrieval` | JSONB | NOT NULL, DEFAULT `'[]'` | `[{query, candidates, returned, top_score}]`. |
+| `citations` | JSONB | NOT NULL, DEFAULT `'{}'` | `{validated, unverified}` — the D24 health metric. |
+| `skill` | TEXT | NULL | The skill loaded this turn, if any (H8). |
+| `error_code` | TEXT | NULL | Set on `status = 'failed'`. |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `now()` | |
+
+---
+
 #### `project_chunks` — *Phase 1*
 
 **Purpose.** The second and last memory table (D25): retrieval over the project's own artifacts.

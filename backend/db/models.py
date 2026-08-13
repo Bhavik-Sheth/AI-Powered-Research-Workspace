@@ -421,6 +421,33 @@ class Messages(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
 
+class TurnTraces(Base):
+    """One row per agent turn, `running` at insert and finalized at the end
+    (Schema.md `turn_traces`, HarnessPlan H1) — observability, and turn
+    state for the orphan sweep (H11)."""
+
+    __tablename__ = "turn_traces"
+    __table_args__ = (CheckConstraint("status IN ('running', 'complete', 'interrupted', 'failed')", name="turn_traces_status_check"),)
+
+    turn_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    parent_turn_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("turn_traces.turn_id", ondelete="CASCADE"), nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'running'"))
+    iterations: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    total_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    context_blocks: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    tool_calls: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    retrieval: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    citations: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    skill: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+
 class PaperChunks(Base):
     """Global retrieval memory over paper content (Schema.md `paper_chunks`,
     Phase 1.7, D25) — one of exactly two memory tables. No `project_id`;

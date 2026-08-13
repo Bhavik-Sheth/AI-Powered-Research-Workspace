@@ -156,13 +156,26 @@ async def broadcast(session: Session, event: TurnEvent | BaseModel) -> None:
 async def _run_turn(
     session: Session, session_ref: SessionRef, text: str, ui_state: UIState, input_modality: str, cancel_flag: asyncio.Event
 ) -> None:
-    async for turn_event in harness.run_turn(session_ref, text, ui_state, input_modality, cancel_flag):
+    # `live_ui_state` lets `run_turn` re-read the session's current UI state
+    # each loop iteration (HarnessPlan H3, §3.2: "a running turn captured
+    # its own copy, so the update lands on the *next* turn" otherwise) —
+    # harness still knows nothing about `Session` or transport, only a
+    # zero-argument callable returning the wire model it already accepts.
+    async for turn_event in harness.run_turn(
+        session_ref, text, ui_state, input_modality, cancel_flag, live_ui_state=lambda: session.ui_state
+    ):
         await broadcast(session, turn_event)
 
 
 async def handle_message(session: Session, event: UpstreamEvent) -> None:
     if isinstance(event, UIStateEvent):
-        session.ui_state = UIState(selection=event.selection)
+        # A partial update (today, just `selection`) — merged onto the
+        # session's existing `UIState`, not replaced wholesale. HarnessPlan
+        # H3 widened `UIState` with `active_view`/`open_panes`/`working_set`;
+        # overwriting the whole object here would wipe every one of those
+        # fields on the next highlight, discarding what `run_turn`'s
+        # mid-turn merge (§3.2) exists to read.
+        session.ui_state = session.ui_state.model_copy(update={"selection": event.selection})
         return
 
     session_ref = SessionRef(project_id=session.project_id, conversation_id=session.conversation_id)

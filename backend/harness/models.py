@@ -1,9 +1,12 @@
 """Wire/value shapes for Agent Harness (Rules.md: names match the wire shape).
 
-`UIState` ships with only `selection` in Phase 1.5 — `activeTab` / `openPanes`
-/ `workingSet` (TRD §4.1) remain unshipped; Phase 3.1 adds `open_paper_ids`
-(the reader tabs currently open), the minimum slice of `openTabs` the
-cross-paper compare tool needs to know a paper is "in the read set" (US4).
+`UIState` shipped with only `selection` in Phase 1.5; Phase 3.1 added
+`open_paper_ids` (the reader tabs currently open), the minimum slice of
+`openTabs` the cross-paper compare tool needs to know a paper is "in the
+read set" (US4). HarnessPlan H3 fills in the rest of TRD Node 2's Zustand
+snapshot — `active_view`/`active_id`/`open_panes`/`working_set` — so context
+assembly's band 1 (§3.2) can describe what the user is actually looking at,
+not just which papers are open.
 """
 
 import uuid
@@ -19,9 +22,41 @@ class SelectionState(BaseModel):
     anchor: QuoteAnchorInput
 
 
+class Ref(BaseModel):
+    """A stable handle to something a tool result named — `kind` + `id` +
+    `title` (HarnessPlan H1, §3.4). This is the mechanism that stops a
+    hallucinated UUID: a tool that names a domain object hands back a
+    handle instead of the model reconstructing an id from memory later, and
+    the working set (H3) is built from these plus whatever the frontend
+    already had in `UIState.working_set` — one shape for both, since a
+    working-set entry is exactly a ref the UI already holds."""
+
+    kind: Literal["paper", "note", "experiment", "search_result"]
+    id: str
+    title: str
+
+
 class UIState(BaseModel):
     selection: SelectionState | None = None
     open_paper_ids: list[uuid.UUID] = Field(default_factory=list)
+    active_view: Literal["library", "reader", "notes", "matrix", "graph", "feed", "experiments"] | None = None
+    active_id: uuid.UUID | None = None
+    open_panes: list[str] = Field(default_factory=list)
+    working_set: list[Ref] = Field(default_factory=list)
+
+
+class ToolResult(BaseModel):
+    """D18 node 3's dual-channel result: `model_view` is the only field that
+    ever enters LLM context; `ui_view_result_id`, when set, is a
+    `result_store` handle the frontend fetches lazily — the rich payload
+    never enters LLM context. `refs` names every domain object this result
+    surfaced, and `ui_actions` are the UI commands D19's Navigation tools
+    emit — the same route transition the user's own click would produce."""
+
+    model_view: str
+    ui_view_result_id: str | None = None
+    refs: list[Ref] = Field(default_factory=list)
+    ui_actions: list[dict] = Field(default_factory=list)
 
 
 class AnchorCitation(BaseModel):

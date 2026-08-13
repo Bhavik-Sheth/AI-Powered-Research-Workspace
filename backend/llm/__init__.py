@@ -8,6 +8,7 @@ than added silently.
 """
 
 import json
+import logging
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Literal, NamedTuple, TypeVar
@@ -114,9 +115,20 @@ class ToolCallDelta(BaseModel):
     arguments: str = ""
 
 
+class Usage(BaseModel):
+    """Token accounting for one completion — carried on the final streamed
+    chunk only (HarnessPlan H1: `turn_traces.prompt_tokens`/`completion_tokens`
+    need a real source; nothing in this module captured usage before)."""
+
+    prompt_tokens: int
+    completion_tokens: int
+
+
 class LLMChunk(BaseModel):
     delta: str = ""
     tool_calls: list[ToolCallDelta] = []
+    usage: Usage | None = None
+    model: str | None = None  # set only on the trailing usage chunk — the resolved `provider/model` string
 
 
 class ProviderOverride(BaseModel):
@@ -202,13 +214,21 @@ async def _resolve(tier: Literal["primary", "auxiliary"], override: ProviderOver
     return await _resolve_tier(tier)
 
 
+_logger = logging.getLogger(__name__)
+
+
 def _fit_to_budget(model: str, messages: list[Message], budget: int | None, max_tokens: int | None) -> list[Message]:
     """Truncates the largest message so the request fits the tier's token budget.
 
-    Definitive section-aware windowing is the caller's job (Bug Fix Plan
-    Phase 1.2); this is the Gateway's last-resort guard so an oversized
-    request degrades to a truncated one instead of a terminal
-    `RateLimitError`. `budget=None` (no ceiling configured) is a no-op.
+    Definitive section-aware windowing is `harness/context.py`'s job
+    (HarnessPlan H3): it assembles every turn's messages inside a 24k-token
+    band-eviction budget before this module ever sees them, so this should
+    never fire for a harness-originated call. This stays as the Gateway's
+    last-resort guard for every other caller (extraction jobs, structured
+    completions) and logs when it fires so a harness call tripping it is
+    visible as the bug it would be — degrading to a mid-message truncation
+    instead of a terminal `RateLimitError`. `budget=None` (no ceiling
+    configured) is a no-op.
     """
     if budget is None:
         return messages
@@ -218,6 +238,7 @@ def _fit_to_budget(model: str, messages: list[Message], budget: int | None, max_
     if litellm.token_counter(model=model, messages=dumped) <= available:
         return messages
 
+    _logger.warning("event=llm_fit_to_budget_fired model=%s available=%d message_count=%d", model, available, len(messages))
     longest_index = max(range(len(messages)), key=lambda i: len(messages[i].content))
     longest = messages[longest_index]
     low, high = 0, len(longest.content)
@@ -555,6 +576,23 @@ async def complete_structured(
         return await _repair_schema_violation(resolved, messages, schema, content, str(exc), timeout)
 
 
+# Generic fallback tokenizer for `count_tokens` when the caller has no
+# resolved model string yet (context-budgeting runs before a tier is
+# resolved to real credentials) — litellm's own default model for its
+# tokenizer. An estimate for eviction thresholds, never for cost/billing
+# math, so a tokenizer mismatch against the eventually-resolved model is
+# immaterial to correctness.
+_DEFAULT_TOKEN_COUNT_MODEL = "gpt-3.5-turbo"
+
+
+def count_tokens(messages: list[Message], model: str | None = None) -> int:
+    """Token count for `messages` — the one place outside this module
+    allowed to need a token count without importing litellm directly
+    (Rules.md: LiteLLM only imported here). `model` selects the tokenizer;
+    omit it for a budgeting estimate made before a tier is resolved."""
+    return litellm.token_counter(model=model or _DEFAULT_TOKEN_COUNT_MODEL, messages=[_to_wire_message(m) for m in messages])
+
+
 async def complete(
     messages: list[Message],
     *,
@@ -577,6 +615,7 @@ async def complete(
             max_tokens=max_tokens,
             timeout=timeout,
             stream=True,
+            stream_options={"include_usage": True},
             num_retries=0,  # call_with_retry below owns retry/backoff (Phase 6.13)
         )
 
@@ -591,6 +630,21 @@ async def complete(
         _get_provider_limiter(resolved.provider), attempt, retryable_exceptions=_LLM_RETRYABLE_EXCEPTIONS, parse_wait_seconds=_parse_wait_seconds
     )
     async for chunk in response:
+        # `stream_options.include_usage` adds one trailing chunk per the
+        # OpenAI streaming convention: `choices` is empty and `usage` is
+        # populated — every content/tool-call chunk before it has an empty
+        # `usage`. A provider that ignores the option (some OpenAI-compatible
+        # local servers) simply never sends that chunk; `usage` stays `None`
+        # on every `LLMChunk` and `turn_traces` records no token counts,
+        # which is a normal degrade, not an error (HarnessPlan H1, §3.10).
+        usage = getattr(chunk, "usage", None)
+        if not chunk.choices:
+            if usage is not None:
+                yield LLMChunk(
+                    usage=Usage(prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens),
+                    model=resolved.model,
+                )
+            continue
         delta = chunk.choices[0].delta
         content = delta.content
         tool_call_deltas = [
