@@ -45,6 +45,23 @@ class UIState(BaseModel):
     working_set: list[Ref] = Field(default_factory=list)
 
 
+class SkillSpec(BaseModel):
+    """A parsed `harness/skills/*.md` playbook (HarnessPlan H8, §3.6) — the
+    YAML frontmatter's `name`/`description`/`tools` plus the Markdown body
+    that follows it. Lives here, not in `harness/skills.py` itself, so
+    `registry.py`'s `ToolContext` can hold one (the single-slot mechanism
+    §3.6's `load_skill` tool uses to hand the active skill back to
+    `loop.py`) without `registry.py` importing `harness/skills.py` — which
+    itself imports `registry.get` to validate a skill's `tools:` list at
+    load time, and two modules importing each other is a cycle neither of
+    them needs."""
+
+    name: str
+    description: str
+    tools: list[str] = Field(default_factory=list)
+    body: str
+
+
 class ToolResult(BaseModel):
     """D18 node 3's dual-channel result: `model_view` is the only field that
     ever enters LLM context; `ui_view_result_id`, when set, is a

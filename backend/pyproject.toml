@@ -33,3 +33,12 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+# HarnessPlan §3.10: two eval tiers. Deterministic scenarios (no marker) run
+# in CI on every commit; `live` scenarios need a real 20-30B endpoint and
+# are excluded from the default run — `pytest -m live` opts in explicitly.
+markers = [
+    "live: needs a real LLM endpoint; excluded from the default test run (pytest -m live to opt in)",
+]
+addopts = "-m \"not live\""

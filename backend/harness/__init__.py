@@ -10,7 +10,15 @@ outside this package imports those internals directly (D18 node 7) —
 first `run_turn`.
 """
 
+from harness import skills as _skills
 from harness import tools as _tools  # noqa: F401  — registers the catalog
 from harness.loop import begin_turn, interrupt, run_turn
+
+# HarnessPlan H8, §3.6: parses and validates every `harness/skills/*.md`
+# file against the tool catalog above — must run after `_tools` has
+# registered every tool, and here (package load, once) rather than lazily on
+# first use, so a broken skill file surfaces at process startup, not the
+# first time a turn tries to select it.
+_skills.load_index()
 
 __all__ = ["begin_turn", "run_turn", "interrupt"]

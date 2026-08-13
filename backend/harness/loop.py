@@ -69,6 +69,17 @@ iteration cap (§3.1: "a wall-clock bound matters more with a local model
 than an iteration bound does — eight iterations of a 30B model on CPU can
 run for minutes") and a `turn_traces` row per turn (§3.10).
 
+HarnessPlan H8 (§3.6) adds `active_skill: SkillSpec | None`, this loop's own
+copy of whichever skill a `load_skill` call landed most recently this turn —
+read back from `ToolContext.loaded_skill_slot` the same way `memory_rows`
+and `seen_refs` are already read back after dispatch. `active_skill` feeds
+`context.build_blocks` (its body enters band 1 as a system message, never
+evicted, for the rest of the turn) and widens this iteration's visible
+schema list beyond `registry.core_schemas()` by the skill's declared
+`tools:`. It is never reset between iterations of the same turn — only
+between turns, since a fresh `run_turn` call starts a fresh `loop.py` frame
+with its own `loaded_skill_slot`.
+
 HarnessPlan H5 (§3.5) deletes the Phase 1.7 decide-then-retrieve step
 entirely: `query_memory` is now `harness/tools/memory.py`, a real
 dispatchable tool the model can call at any iteration, as many times as it
@@ -92,12 +103,13 @@ from sqlalchemy import func, select
 
 import db
 from db.models import Conversations, Messages
-from harness import approval, compaction, context, registry, trace
+from harness import approval, compaction, context, registry, skills, trace
 from harness.models import (
     ApprovalRequestEvent,
     ErrorEvent,
     Ref,
     SessionRef,
+    SkillSpec,
     StatusEvent,
     TextDeltaEvent,
     ToolCallEvent,
@@ -442,6 +454,16 @@ async def run_turn(
         memory_rows: list[CitedRow] = []
         retrieval_trace: list[dict] = []
 
+        # HarnessPlan H8, §3.6: the same shared-mutable-list trick as
+        # `memory_rows` above, sized for "one skill at a time — loading a
+        # second replaces the first" (`registry.ToolContext`'s docstring).
+        # `load_skill`'s handler replaces this list's single element;
+        # `active_skill` below is this loop's own copy of "whatever that
+        # slot held after the last dispatch", read back the same way
+        # `seen_refs` accumulates from `result.refs`.
+        loaded_skill_slot: list[SkillSpec] = []
+        active_skill: SkillSpec | None = None
+
         # `Ref`s a tool result has surfaced this turn, merged with whatever
         # the frontend already had in `ui_state.working_set` — band 2
         # (§3.2), rebuilt fresh each iteration alongside everything else.
@@ -502,15 +524,26 @@ async def run_turn(
                 evidence_signature = frozenset(citation_paper_ids)
 
             working_set_refs = [*ui_state.working_set, *seen_refs]
-            blocks = context.build_blocks(ui_state, evidence_blocks_text, open_papers, history, working_set_refs, message)
+            blocks = context.build_blocks(
+                ui_state, evidence_blocks_text, open_papers, history, working_set_refs, message,
+                skills.index_text(), active_skill,
+            )
             assembled_messages, context_totals = context.assemble(blocks)
             llm_messages = assembled_messages + turn_exchange
+
+            # HarnessPlan H8, §3.6: a loaded skill's declared `tools:` join
+            # the always-visible core set for this iteration only — never
+            # persisted onto the registry itself, so a turn that never loads
+            # a skill sees exactly `core_schemas()`, unchanged from H5.
+            # `schemas_for_turn` dedupes: several skills list a tool the
+            # core set already shows.
+            turn_schemas = registry.schemas_for_turn(active_skill.tools if active_skill is not None else None)
 
             yield StatusEvent(text="thinking…")
             full_text = ""
             tool_call_acc: dict[int, dict] = {}
             try:
-                async for chunk in complete(llm_messages, tools=registry.core_schemas(), tier="primary", timeout=_COMPLETION_TIMEOUT_S):
+                async for chunk in complete(llm_messages, tools=turn_schemas, tier="primary", timeout=_COMPLETION_TIMEOUT_S):
                     full_text += chunk.delta
                     # HarnessPlan H6: streamed live, not buffered until the
                     # iteration ends — the state machine only holds back a
@@ -543,6 +576,7 @@ async def run_turn(
                 await trace.finish(
                     turn_id, status="failed", iterations=iterations, total_ms=int((time.monotonic() - turn_started_at) * 1000),
                     error_code=type(exc).__name__, tool_calls=trace_tool_calls,
+                    skill=active_skill.name if active_skill is not None else None,
                 )
                 return
             except RuntimeError as exc:
@@ -554,6 +588,7 @@ async def run_turn(
                 await trace.finish(
                     turn_id, status="failed", iterations=iterations, total_ms=int((time.monotonic() - turn_started_at) * 1000),
                     error_code="not_configured", tool_calls=trace_tool_calls,
+                    skill=active_skill.name if active_skill is not None else None,
                 )
                 return
 
@@ -616,8 +651,11 @@ async def run_turn(
                                 project_id=session_ref.project_id,
                                 memory_rows=memory_rows,
                                 retrieval_trace=retrieval_trace,
+                                loaded_skill_slot=loaded_skill_slot,
                             )
                             result = await _dispatch_tool_bounded(ctx, tool_name, args, cancel_flag)
+                            if loaded_skill_slot:
+                                active_skill = loaded_skill_slot[-1]
                         else:
                             # Denied or timed out — the loop never reaches
                             # `_dispatch_tool_bounded` at all (D31: no
@@ -658,6 +696,7 @@ async def run_turn(
                     await trace.finish(
                         turn_id, status="failed", iterations=iterations, total_ms=int((time.monotonic() - turn_started_at) * 1000),
                         error_code="tool_timeout", tool_calls=trace_tool_calls,
+                        skill=active_skill.name if active_skill is not None else None,
                     )
                     return
                 except _ToolDispatchInterrupted:
@@ -675,6 +714,7 @@ async def run_turn(
                     await trace.finish(
                         turn_id, status="interrupted", iterations=iterations, total_ms=int((time.monotonic() - turn_started_at) * 1000),
                         tool_calls=trace_tool_calls,
+                        skill=active_skill.name if active_skill is not None else None,
                     )
                     return
                 trace_tool_calls.append({"name": tool_name, "ms": int((time.monotonic() - tool_started_at) * 1000), "ok": not denied, "denied": denied, "budget_blocked": False})
@@ -730,6 +770,7 @@ async def run_turn(
             retrieval=retrieval_trace,
             citations=trace_citations,
             context_blocks=context_totals,
+            skill=active_skill.name if active_skill is not None else None,
         )
     finally:
         _in_flight.pop(key, None)

@@ -23,7 +23,7 @@ import uuid
 from typing import Literal, NamedTuple
 
 import papers
-from harness.models import Ref, UIState
+from harness.models import Ref, SkillSpec, UIState
 from llm import Message, count_tokens
 
 SYSTEM_PROMPT = (
@@ -168,15 +168,28 @@ def build_blocks(
     history: list[Message],
     working_set_refs: list[Ref],
     message: str,
+    skill_index_text: str,
+    active_skill: SkillSpec | None = None,
 ) -> list[ContextBlock]:
     """The full block list for one loop iteration, in band order per §3.2's
-    table — band 1 (system prompt, selection, paper evidence, open-papers
-    note, live UI state, current message) never evicts; band 2 (working
-    set) evicts second; band 3 (history, oldest first) evicts first. Called
-    fresh each iteration so a mid-turn `ui_state` change or a tool result's
-    new `Ref`s are reflected without re-reading anything that has not
-    changed."""
+    table — band 1 (system prompt, skill index, active skill body, selection,
+    paper evidence, open-papers note, live UI state, current message) never
+    evicts; band 2 (working set) evicts second; band 3 (history, oldest
+    first) evicts first. Called fresh each iteration so a mid-turn
+    `ui_state` change, a tool result's new `Ref`s, or a `load_skill` call are
+    all reflected without re-reading anything that has not changed.
+
+    `skill_index_text` (HarnessPlan H8, §3.6) is always present — the
+    model's only way to discover a skill exists, since there is no
+    classifier picking one for it. `active_skill`, when a `load_skill` call
+    has landed this turn, adds its body as a second, never-evicted band-1
+    block — "system is more salient to a small model" (§3.6) than a tool
+    message, hence a block here rather than something folded into
+    `turn_exchange`."""
     blocks = [ContextBlock("system_prompt", 1, Message(role="system", content=SYSTEM_PROMPT))]
+    blocks.append(ContextBlock("skill_index", 1, Message(role="system", content=skill_index_text)))
+    if active_skill is not None:
+        blocks.append(ContextBlock("active_skill", 1, Message(role="system", content=active_skill.body)))
     if ui_state.selection is not None:
         blocks.append(
             ContextBlock(

@@ -20,7 +20,7 @@ from typing import Literal
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from harness.models import ToolResult
+from harness.models import SkillSpec, ToolResult
 from memory.models import CitedRow
 
 
@@ -37,12 +37,25 @@ class ToolContext:
     `loop.py` can read the accumulation back after `dispatch` returns —
     without widening the wire-facing `ToolResult` to carry structured
     `CitedRow`s it has no reason to expose to the model. `ToolContext` stays
-    frozen (no field is ever reassigned); only the lists' contents mutate."""
+    frozen (no field is ever reassigned); only the lists' contents mutate.
+
+    `loaded_skill_slot` is the same pattern, shaped for a different rule
+    (HarnessPlan H8, §3.6): "one skill at a time — loading a second replaces
+    the first". `loop.py` builds one list, of length 0 or 1, before the
+    turn's loop starts and passes it into every `ToolContext` the same way;
+    `load_skill`'s handler replaces its entire contents (`slot[:] = [spec]`)
+    rather than appending, so the slot can never hold more than one
+    `SkillSpec`, and `loop.py` reads `slot[-1]` back after dispatch the same
+    way it reads `memory_rows`. A plain `list` rather than some
+    length-1-enforcing container because the frozen-dataclass mutable-box
+    trick is already established by the fields above — a second, differently
+    shaped box for the same trick would be inconsistency for no benefit."""
 
     session: AsyncSession
     project_id: uuid.UUID
     memory_rows: list[CitedRow] = field(default_factory=list)
     retrieval_trace: list[dict] = field(default_factory=list)
+    loaded_skill_slot: list[SkillSpec] = field(default_factory=list)
 
 
 ToolHandler = Callable[[ToolContext, BaseModel], Awaitable[ToolResult]]
@@ -145,9 +158,39 @@ def get(name: str) -> ToolSpec | None:
 
 def core_schemas() -> list[dict]:
     """The always-visible schema list (H5's core set) — every non-core tool
-    is invisible until a loaded skill adds it (H8), which this registry does
-    not yet implement; H1's catalog is entirely core."""
+    is invisible until a loaded skill adds it (H8's `schemas_for`, below)."""
     return [spec.schema() for spec in _REGISTRY.values() if spec.core]
+
+
+def schemas_for(names: list[str]) -> list[dict]:
+    """Schemas for exactly these tools, in registry order — HarnessPlan H8
+    (§3.6): a loaded skill's declared `tools:` list becomes this turn's
+    extra visible schemas, added to `core_schemas()`. A name that does not
+    resolve is skipped rather than raised here — `skills.load_index()`
+    already validates every skill's `tools:` list against this same
+    registry at startup, loudly, so a bad name reaching this function would
+    mean that startup check regressed, not something this call site should
+    paper over a second time."""
+    return [spec.schema() for spec in _REGISTRY.values() if spec.name in names]
+
+
+def schemas_for_turn(active_skill_tools: list[str] | None) -> list[dict]:
+    """The complete schema list one loop iteration sends the model —
+    `core_schemas()` plus a loaded skill's declared `tools:` (HarnessPlan
+    H8, §3.6), deduplicated by name. A skill's `tools:` list is written for
+    a human reading the skill file, not to avoid repeating a tool the core
+    set already shows — `literature_review.md`, for one real example, lists
+    `search_papers`/`add_paper`/`get_paper`/`save_note`, every one of which
+    is already core. Sending the same function schema twice in one request
+    is wasted budget at best and provider-dependent behaviour at worst, so
+    this is the one place that composition happens and the one place that
+    guards against it."""
+    schemas = core_schemas()
+    if not active_skill_tools:
+        return schemas
+    seen = {spec["function"]["name"] for spec in schemas}
+    schemas.extend(spec for spec in schemas_for(active_skill_tools) if spec["function"]["name"] not in seen)
+    return schemas
 
 
 async def dispatch(ctx: ToolContext, tool_name: str, raw_args: dict) -> ToolResult:
