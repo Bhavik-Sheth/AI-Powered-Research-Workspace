@@ -86,19 +86,22 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
+from typing import Literal
 
 from sqlalchemy import func, select
 
 import db
 from db.models import Conversations, Messages
-from harness import compaction, context, registry, trace
+from harness import approval, compaction, context, registry, trace
 from harness.models import (
+    ApprovalRequestEvent,
     ErrorEvent,
     Ref,
     SessionRef,
     StatusEvent,
     TextDeltaEvent,
     ToolCallEvent,
+    ToolResult,
     ToolResultEvent,
     TurnCompleteEvent,
     TurnEvent,
@@ -138,6 +141,13 @@ _COMPLETION_TIMEOUT_S = 90
 # generously above the slowest legitimate tool (a federated literature
 # search) so it only fires on a genuinely stuck call.
 _TOOL_DISPATCH_TIMEOUT_S = 60
+
+# HarnessPlan H7, §3.9: how long a `tier="confirm"` tool call waits for a
+# human's `approval_response` before it counts as "did not respond in
+# time" — long enough that reading a real approval prompt (e.g. `run_all`'s
+# container spec) is never rushed, short enough that a turn the user simply
+# walked away from still ends instead of hanging forever.
+_APPROVAL_TIMEOUT_S = 300
 
 # One in-flight turn per session (MODULES.md's Agent Harness state note).
 # Cancellation is cooperative rather than a real `asyncio.Task.cancel()`
@@ -278,6 +288,68 @@ async def _dispatch_tool_bounded(ctx: registry.ToolContext, tool_name: str, args
             if not task.done():
                 task.cancel()
         await asyncio.gather(dispatch_task, cancel_task, return_exceptions=True)
+
+
+async def _approval_context(tool_name: str, args: dict) -> tuple[str, str]:
+    """Builds the `summary`/`risk` strings an `approval_request` shows the
+    human (HarnessPlan H7, §3.9) — real values pulled from the tool's own
+    args where practical, not a placeholder. `run_all`'s args carry only an
+    `experiment_id`, so this reads the experiment's actual, already-approved
+    `RunSpec` (`sandbox.load_run_spec`) to describe the container it would
+    spawn. A local import, not a module-level one: `sandbox` imports `ws`,
+    which imports `harness` (this package) to reach `run_turn` — a
+    module-level import here would be a real import cycle, whereas a
+    function-local one only ever runs after every module involved has
+    finished loading. Any future `tier="confirm"` tool this doesn't
+    recognize by name gets a generic fallback — this is deliberately not
+    built out further until a second such tool exists (Rules.md's rule of
+    three)."""
+    if tool_name == "run_all":
+        try:
+            import sandbox  # local: see docstring above
+
+            async with db.session() as approval_session:
+                experiment, spec = await sandbox.load_run_spec(approval_session, uuid.UUID(str(args.get("experiment_id"))))
+            return (
+                f'Run all cells in "{experiment.title}"\'s notebook, restarting the kernel first.',
+                f"Executes code in a Docker container with network={'enabled' if spec.network == 'bridge' else 'disabled'}, "
+                f"gpu={'enabled' if spec.gpu else 'disabled'}.",
+            )
+        except (ValueError, TypeError):
+            pass  # falls through to the generic strings below
+    return (f"Run {tool_name} with {args}", f'Runs the "{tool_name}" tool, which requires explicit approval.')
+
+
+async def _await_approval(request_id: str, cancel_flag: asyncio.Event) -> Literal["approved", "denied", "timed_out"]:
+    """The three-way race HarnessPlan H7 (§3.9) adds ahead of
+    `_dispatch_tool_bounded`'s own two-way one: a pending approval's
+    outcome vs. `cancel_flag` vs. `_APPROVAL_TIMEOUT_S`. Same shape as that
+    function — `asyncio.wait` with `FIRST_COMPLETED`, a `finally` that
+    cancels and gathers whichever tasks didn't finish, plus
+    `approval.discard` so a request that timed out or was interrupted
+    doesn't sit in that module's registry forever. Raises
+    `_ToolDispatchInterrupted` on `cancel_flag`, exactly like
+    `_dispatch_tool_bounded` does — the same `except` clause in `run_turn`
+    already handles that outcome for a tool call, and an approval wait is
+    still a tool call as far as the turn's own interruption handling is
+    concerned."""
+    approval_future = approval.register(request_id)
+    cancel_task = asyncio.ensure_future(cancel_flag.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {approval_future, cancel_task}, timeout=_APPROVAL_TIMEOUT_S, return_when=asyncio.FIRST_COMPLETED
+        )
+        if cancel_task in done:
+            raise _ToolDispatchInterrupted(f"approval for {request_id} interrupted")
+        if approval_future in done:
+            return "approved" if approval_future.result() else "denied"
+        return "timed_out"
+    finally:
+        approval.discard(request_id)
+        for task in (approval_future, cancel_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(approval_future, cancel_task, return_exceptions=True)
 
 
 async def run_turn(
@@ -507,7 +579,25 @@ async def run_turn(
                     args = {}
                 yield ToolCallEvent(tool_name=tool_name, args=args)
                 tool_started_at = time.monotonic()
+                denied = False
                 try:
+                    # HarnessPlan H7, §3.9: a `tier="confirm"` tool pauses
+                    # for a human before it ever reaches
+                    # `_dispatch_tool_bounded` — the three-way race lives in
+                    # `_await_approval`, above. Approval happens *outside*
+                    # `db.session()` deliberately: a wait that can run up to
+                    # `_APPROVAL_TIMEOUT_S` has no business holding a DB
+                    # connection open. `_ToolDispatchInterrupted` from this
+                    # await is caught by the same `except` clause below that
+                    # already handles it for the dispatch call itself.
+                    spec = registry.get(tool_name)
+                    outcome: Literal["approved", "denied", "timed_out"] = "approved"
+                    if spec is not None and spec.tier == "confirm":
+                        request_id = str(uuid.uuid4())
+                        summary, risk = await _approval_context(tool_name, args)
+                        yield ApprovalRequestEvent(request_id=request_id, tool_name=tool_name, args=args, summary=summary, risk=risk)
+                        outcome = await _await_approval(request_id, cancel_flag)
+
                     async with db.session() as db_session:
                         seq = await _next_seq(db_session, session_ref.conversation_id)
                         db_session.add(
@@ -520,13 +610,26 @@ async def run_turn(
                                 tool_name=tool_name,
                             )
                         )
-                        ctx = registry.ToolContext(
-                            session=db_session,
-                            project_id=session_ref.project_id,
-                            memory_rows=memory_rows,
-                            retrieval_trace=retrieval_trace,
-                        )
-                        result = await _dispatch_tool_bounded(ctx, tool_name, args, cancel_flag)
+                        if outcome == "approved":
+                            ctx = registry.ToolContext(
+                                session=db_session,
+                                project_id=session_ref.project_id,
+                                memory_rows=memory_rows,
+                                retrieval_trace=retrieval_trace,
+                            )
+                            result = await _dispatch_tool_bounded(ctx, tool_name, args, cancel_flag)
+                        else:
+                            # Denied or timed out — the loop never reaches
+                            # `_dispatch_tool_bounded` at all (D31: no
+                            # auto-run around the consent gate). The agent
+                            # adapts from a plain `tool_result`, not an
+                            # `error` (HarnessPlan H7, §3.9).
+                            denied = True
+                            result = ToolResult(
+                                model_view="The user declined this action."
+                                if outcome == "denied"
+                                else f'"{tool_name}" did not receive an approval response in time.'
+                            )
                         seq = await _next_seq(db_session, session_ref.conversation_id)
                         db_session.add(
                             Messages(
@@ -574,7 +677,7 @@ async def run_turn(
                         tool_calls=trace_tool_calls,
                     )
                     return
-                trace_tool_calls.append({"name": tool_name, "ms": int((time.monotonic() - tool_started_at) * 1000), "ok": True, "denied": False, "budget_blocked": False})
+                trace_tool_calls.append({"name": tool_name, "ms": int((time.monotonic() - tool_started_at) * 1000), "ok": not denied, "denied": denied, "budget_blocked": False})
                 yield ToolResultEvent(tool_name=tool_name, model_view=result.model_view, result_id=result.ui_view_result_id)
                 for action in result.ui_actions:
                     yield UIActionEvent(action=action.get("action", ""), payload=action)

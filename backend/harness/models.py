@@ -152,4 +152,30 @@ class ErrorEvent(BaseModel):
     what_still_worked: str | None = None
 
 
-TurnEvent = StatusEvent | TextDeltaEvent | ToolCallEvent | ToolResultEvent | UIActionEvent | TurnCompleteEvent | ErrorEvent
+class ApprovalRequestEvent(BaseModel):
+    """HarnessPlan H7, §3.9: emitted in place of dispatching a `tier="confirm"`
+    tool call — `run_all` and any future delete-shaped or MCP tool. `summary`
+    and `risk` are short, human-readable strings `loop.py` builds per call
+    from the tool's own args (real values where practical, e.g. `run_all`'s
+    actual container network/GPU settings — never a placeholder). The loop
+    then awaits `ws`'s matching `approval_response`, raced against
+    `cancel_flag` and a timeout (`approval.py`)."""
+
+    event: Literal["approval_request"] = "approval_request"
+    request_id: str
+    tool_name: str
+    args: dict
+    summary: str
+    risk: str
+
+
+TurnEvent = (
+    StatusEvent
+    | TextDeltaEvent
+    | ToolCallEvent
+    | ToolResultEvent
+    | UIActionEvent
+    | TurnCompleteEvent
+    | ErrorEvent
+    | ApprovalRequestEvent
+)

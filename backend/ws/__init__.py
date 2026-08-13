@@ -31,6 +31,7 @@ import db
 import harness
 from config import get_config
 from db.models import Conversations
+from harness import approval
 from harness.models import ErrorEvent, SelectionState, SessionRef, TurnEvent, UIState
 
 logger = logging.getLogger(__name__)
@@ -72,12 +73,24 @@ class InterruptEvent(BaseModel):
     turn_id: uuid.UUID | None = None
 
 
-UpstreamEvent = UserMessageEvent | UIStateEvent | InterruptEvent
+class ApprovalResponseEvent(BaseModel):
+    """HarnessPlan H7, §3.9's up event — the human's yes/no on a pending
+    `approval_request`. Routed straight into `harness.approval.resolve`
+    (below), never through `run_turn`: the turn that's waiting on it is
+    already running, awaiting the matching `Future` directly."""
+
+    event: Literal["approval_response"] = "approval_response"
+    request_id: str
+    approved: bool
+
+
+UpstreamEvent = UserMessageEvent | UIStateEvent | InterruptEvent | ApprovalResponseEvent
 
 _UPSTREAM_EVENT_TYPES: dict[str, type[BaseModel]] = {
     "user_message": UserMessageEvent,
     "ui_state": UIStateEvent,
     "interrupt": InterruptEvent,
+    "approval_response": ApprovalResponseEvent,
 }
 
 
@@ -168,6 +181,13 @@ async def _run_turn(
 
 
 async def handle_message(session: Session, event: UpstreamEvent) -> None:
+    if isinstance(event, ApprovalResponseEvent):
+        # Resolves the `Future` the running turn's own loop is awaiting
+        # (`harness/loop.py`'s three-way race) — not a new turn, so nothing
+        # else here (`ui_state`, `begin_turn`) applies.
+        approval.resolve(event.request_id, event.approved)
+        return
+
     if isinstance(event, UIStateEvent):
         # A partial update (today, just `selection`) — merged onto the
         # session's existing `UIState`, not replaced wholesale. HarnessPlan
