@@ -11,6 +11,72 @@ renumber anything in `DECISIONS.md`.
 
 ---
 
+## Progress report (2026-08-15) — read this before resuming
+
+**Committed and done:** Voice.2, Voice.3, Voice.4 — commits `e0307fb`, `d39d3e2`, `9336a28` on
+`main`. Real faster-whisper STT, real Piper TTS, weight fetch job with a live `pending → ready`
+readiness signal. All live-verified against a real Postgres/Docker stack (round-tripped real audio
+word-for-word), 54/54 backend tests green, frontend builds clean.
+
+**Built but NOT committed — sitting in the working tree right now:** Voice.5 (Settings: engine
+selector + rebindable talk key) and Voice.6 (talk-key state machine + cancel window). Files:
+
+- Backend (Voice.5): `backend/alembic/versions/0018_voice5_ptt_binding.py` (new — flips
+  `voice_engine` default to `faster_whisper`, adds `voice_ptt_binding`), `backend/db/models.py`,
+  `backend/settings/__init__.py` (`get/set_ptt_binding`), `backend/api/settings.py`
+  (`GET`/`PUT /api/settings/voice`). Migration has been run against the live dev Postgres already.
+- `packages/api-client/` — regenerated, includes the new voice-settings routes.
+- Frontend (Voice.5): `frontend/src/settings/VoiceSettingsForm.tsx` (new), wired into
+  `SettingsPanel.tsx`, `SettingsPanel.css`, `design/labels.ts` (`VoiceEngine` type + label map).
+- Frontend (Voice.6): `frontend/src/voice/pttBinding.ts` (new — shared binding-string <->
+  held-modifiers logic, used by both the capture control and the listener), `frontend/src/state/usePttBinding.ts`
+  (new — polls `GET /api/settings/voice` via react-query), `frontend/src/voice/useVoice.ts`
+  (rewritten — chord keydown/keyup state machine, `pendingVoiceMessage` + `cancelPendingVoiceMessage`
+  + `CANCEL_WINDOW_MS` deferred-send), `frontend/src/companion/CompanionPane.tsx` (Undo affordance
+  in the status line; mouse mic button path left unchanged, exactly per this file's Voice.6 spec).
+
+**Verified live and working (Playwright, real backend, real DB):**
+- Voice section renders in Settings; engine dropdown switches `faster_whisper` <-> `stub` live,
+  confirmed via `GET /api/settings/voice` round-tripping through the real API.
+- Push-to-talk rebind capture works correctly end-to-end, including the tricky case: releasing one
+  held modifier while another is still down does **not** commit early — confirmed by checking the
+  backend value mid-release vs. after full release.
+- Holding the chord (`Ctrl+Shift`) anywhere in the app flips `useVoice`'s `recording` state (visible
+  on the mic button's CSS class) via the real `getUserMedia`/`MediaRecorder` path.
+- Chord release correctly calls `/api/voice/transcribe` and shows the `Sending "…"…` status line
+  with an Undo button once a transcript comes back.
+
+**Open bug — found, not yet fixed:** clicking **Undo** did not reliably prevent the deferred send
+in one Playwright run (a shimmed-`MediaRecorder` test with a mocked transcribe response) — the
+utterance still landed as a user bubble in the transcript despite the click firing well inside the
+2s `CANCEL_WINDOW_MS` window. Not yet root-caused. Suspects to check first, in order:
+1. Whether `pendingTimerRef.current` in `useVoice.ts` is actually the same timer id the JS-dispatched
+   click's `cancelPendingVoiceMessage` clears — check for a stale-closure or a second, orphaned
+   `setTimeout` (e.g. from the keyup-Control-then-keyup-Shift double-keyup sequence somehow calling
+   `handleChordRelease` twice despite the `chordActiveRef` guard — instrument with a `console.log`
+   at the top of `handleChordRelease` and re-run the same repro to see the call count).
+2. Whether React's `StrictMode` (`frontend/src/main.tsx`) is contributing — try the repro with
+   `StrictMode` temporarily removed to isolate.
+3. Actual repro script (Playwright, via `browser_run_code_unsafe`) is described in this session's
+   transcript — shim `window.MediaRecorder` + `navigator.mediaDevices.getUserMedia` before pressing
+   the chord (the sandbox's real fake-audio device doesn't reliably drive `MediaRecorder`'s own
+   event lifecycle — confirmed pre-existing on the **unmodified** mouse mic button too, not a
+   regression), mock `POST /api/voice/transcribe` via `page.route`, hold+release the chord, then
+   `page.evaluate` a direct DOM `.click()` on the `Undo` button (not Playwright's own `.click()`,
+   which retries against actionability checks and can itself eat into the 2s window).
+
+**Next steps, in order:**
+1. Root-cause and fix the Undo race above.
+2. Re-run the Voice.5+Voice.6 batch-4 live UI pass clean (Settings voice section + talk-key
+   hold/cancel), confirm `browser_console_messages` stays error-free.
+2. Commit Voice.5 (migration + backend + api-client + frontend, one commit) and Voice.6 (frontend
+   only, one commit) — nothing from this session is committed yet; both are still sitting as
+   uncommitted changes in the working tree.
+3. Continue to Voice.7 (streaming sentence-by-sentence playback + barge-in) and Voice.8 (tests +
+   sign-off checkpoint) per the build order below.
+
+---
+
 ## 1. The premise
 
 **Voice.1 already shipped.** The D37 module boundary, the engine registry, both REST routes, the

@@ -349,7 +349,15 @@ export function CompanionPane({
     setDraft("");
   }
 
-  const { recording, startRecording, transcribeOnRelease } = useVoice();
+  // The chord-triggered path's deferred send (V13) reads `selectionRef`,
+  // not the `selection` prop directly — this callback fires from a timeout
+  // up to `CANCEL_WINDOW_MS` after the key was released, by which point a
+  // render carrying a newer `selection` may already have happened, exactly
+  // the staleness `selectionRef` already exists to guard against for
+  // `pendingAsk` above.
+  const { recording, startRecording, transcribeOnRelease, pendingVoiceMessage, cancelPendingVoiceMessage } = useVoice(
+    (text) => sendMessage(text, selectionRef.current, "voice"),
+  );
 
   async function handleMicRelease(): Promise<void> {
     if (!recording) return;
@@ -357,15 +365,22 @@ export function CompanionPane({
     if (text) sendMessage(text, selection, "voice");
   }
 
-  const statusLine = queued
-    ? "Disconnected — your message will send once reconnected…"
-    : (statusText ?? (socket.connected ? "Companion" : socket.reconnecting ? "Reconnecting…" : "Connecting…"));
+  const statusLine = pendingVoiceMessage
+    ? `Sending "${pendingVoiceMessage}"…`
+    : queued
+      ? "Disconnected — your message will send once reconnected…"
+      : (statusText ?? (socket.connected ? "Companion" : socket.reconnecting ? "Reconnecting…" : "Connecting…"));
 
   return (
     <aside className="companion">
       <div className="companion__status">
         <span className={`companion__status-dot ${socket.connected ? "companion__status-dot--live" : ""}`} />
         <span className="companion__status-text">{statusLine}</span>
+        {pendingVoiceMessage && (
+          <button type="button" className="companion__stop" onClick={cancelPendingVoiceMessage}>
+            Undo
+          </button>
+        )}
         {turnInFlight && (
           <button type="button" className="companion__stop" onClick={() => socket.send({ event: "interrupt" })}>
             ✕ Stop
