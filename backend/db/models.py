@@ -47,7 +47,8 @@ class ApiKeys(Base):
     primary_model: Mapped[str | None] = mapped_column(String, nullable=True)
     auxiliary_model: Mapped[str | None] = mapped_column(String, nullable=True)
     vault_path: Mapped[str | None] = mapped_column(String, nullable=True)
-    voice_engine: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'stub'"))
+    voice_engine: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'faster_whisper'"))
+    voice_ptt_binding: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'Ctrl+Shift'"))
     # HarnessPlan H10, §3.11: configured MCP servers, read once at startup by
     # harness/mcp/__init__.py:connect_configured_servers. list[dict], each
     # {"name", "transport": "stdio"|"http", "command"|"url", "env"|"headers"}.

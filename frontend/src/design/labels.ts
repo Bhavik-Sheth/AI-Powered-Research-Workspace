@@ -1,4 +1,4 @@
-import type { Experiment, PatchProjectPaperRequest, SaveProviderRequest } from "@research-os/api-client";
+import type { Experiment, PatchProjectPaperRequest, PutVoiceSettingsRequest, SaveProviderRequest } from "@research-os/api-client";
 
 type Provider = SaveProviderRequest["provider"];
 
@@ -63,3 +63,19 @@ export const providerLabel: Record<Provider, string> = {
 };
 
 export const LOCAL_PROVIDERS: ReadonlySet<Provider> = new Set(["ollama", "vllm"]);
+
+/** The two selectable voice engine profiles (Voice Layer Plan V10/V11) —
+ * reuses the generated client's own union (`PutVoiceSettingsRequest`)
+ * rather than hand-declaring a second copy of it (Rules.md). `whisper_cpp`
+ * is a real CHECK value with no registered engine (V11) and is deliberately
+ * absent here — the selector only ever offers a profile that actually
+ * works. */
+export type VoiceEngine = NonNullable<PutVoiceSettingsRequest["voice_engine"]>;
+
+export const VOICE_ENGINE_VALUES: readonly VoiceEngine[] = ["faster_whisper", "stub"];
+
+/** The one place a wire enum value becomes display copy (Rules.md). */
+export const voiceEngineLabel: Record<VoiceEngine, string> = {
+  faster_whisper: "Real voice (faster-whisper + Piper)",
+  stub: "Stub (no real transcription or speech)",
+};

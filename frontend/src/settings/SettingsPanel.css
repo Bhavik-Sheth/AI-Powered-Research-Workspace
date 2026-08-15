@@ -67,3 +67,18 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+.settings-panel__ptt-capture {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  width: fit-content;
+}
+
+.settings-panel__ptt-capture code {
+  font: 12px var(--font-mono);
+  color: var(--text-strong);
+}

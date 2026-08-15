@@ -1733,6 +1733,20 @@ export type ProviderInfo = {
 };
 
 /**
+ * PutVoiceSettingsRequest
+ */
+export type PutVoiceSettingsRequest = {
+    /**
+     * Voice Engine
+     */
+    voice_engine?: 'stub' | 'faster_whisper' | null;
+    /**
+     * Voice Ptt Binding
+     */
+    voice_ptt_binding?: string | null;
+};
+
+/**
  * QuoteAnchor
  *
  * The shared quote-anchor object (D33) — one shape for a card field, a
@@ -2281,6 +2295,20 @@ export type VaultPathRequest = {
 };
 
 /**
+ * VoiceSettings
+ */
+export type VoiceSettings = {
+    /**
+     * Voice Engine
+     */
+    voice_engine: 'stub' | 'faster_whisper' | 'whisper_cpp';
+    /**
+     * Voice Ptt Binding
+     */
+    voice_ptt_binding: string;
+};
+
+/**
  * WhyRelevant
  *
  * Why one item surfaced. Required on every `FeedItem` — an item with
@@ -2521,6 +2549,68 @@ export type PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses = {
 };
 
 export type PutOnboardingCompleteApiSettingsOnboardingCompletePutResponse = PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses[keyof PutOnboardingCompleteApiSettingsOnboardingCompletePutResponses];
+
+export type GetVoiceSettingsApiSettingsVoiceGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/voice';
+};
+
+export type GetVoiceSettingsApiSettingsVoiceGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetVoiceSettingsApiSettingsVoiceGetError = GetVoiceSettingsApiSettingsVoiceGetErrors[keyof GetVoiceSettingsApiSettingsVoiceGetErrors];
+
+export type GetVoiceSettingsApiSettingsVoiceGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: VoiceSettings;
+};
+
+export type GetVoiceSettingsApiSettingsVoiceGetResponse = GetVoiceSettingsApiSettingsVoiceGetResponses[keyof GetVoiceSettingsApiSettingsVoiceGetResponses];
+
+export type PutVoiceSettingsApiSettingsVoicePutData = {
+    body: PutVoiceSettingsRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings/voice';
+};
+
+export type PutVoiceSettingsApiSettingsVoicePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutVoiceSettingsApiSettingsVoicePutError = PutVoiceSettingsApiSettingsVoicePutErrors[keyof PutVoiceSettingsApiSettingsVoicePutErrors];
+
+export type PutVoiceSettingsApiSettingsVoicePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: VoiceSettings;
+};
+
+export type PutVoiceSettingsApiSettingsVoicePutResponse = PutVoiceSettingsApiSettingsVoicePutResponses[keyof PutVoiceSettingsApiSettingsVoicePutResponses];
 
 export type ListProjectsApiProjectsGetData = {
     body?: never;

@@ -178,3 +178,15 @@ async def set_voice_engine(session: AsyncSession, engine: str) -> None:
 async def get_voice_engine(session: AsyncSession) -> str:
     row = await _get_or_create_row(session)
     return row.voice_engine
+
+
+async def set_ptt_binding(session: AsyncSession, binding: str) -> None:
+    """Persists the rebound push-to-talk chord (Voice Layer Plan V12)."""
+    row = await _get_or_create_row(session)
+    row.voice_ptt_binding = binding
+    await session.flush()
+
+
+async def get_ptt_binding(session: AsyncSession) -> str:
+    row = await _get_or_create_row(session)
+    return row.voice_ptt_binding

@@ -1,4 +1,5 @@
-"""`GET/PUT /api/settings/models` — backs Settings Store (TRD §4.2)."""
+"""`GET/PUT /api/settings/models` and `GET/PUT /api/settings/voice` — back
+Settings Store (TRD §4.2, Voice Layer Plan V10/V12)."""
 
 from pathlib import Path
 from typing import Literal
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 
 import db
 import settings
+import voice
 from settings.models import ModelSettings, Provider, ProviderCredentials
 
 router = APIRouter()
@@ -92,3 +94,46 @@ async def put_onboarding_complete() -> ModelSettings:
     async with db.session() as session:
         await settings.complete_onboarding(session)
         return await settings.get_settings(session)
+
+
+class VoiceSettings(BaseModel):
+    # The full `api_keys.voice_engine` CHECK list (Schema.md) — `whisper_cpp`
+    # has no registered engine (V11's "door open, nothing more") so it never
+    # appears as a value in practice, but this mirrors the column's actual
+    # contract rather than only what `PutVoiceSettingsRequest` below lets the
+    # UI choose.
+    voice_engine: Literal["stub", "faster_whisper", "whisper_cpp"]
+    voice_ptt_binding: str
+
+
+class PutVoiceSettingsRequest(BaseModel):
+    # V10: the selector offers only the two profiles with a real engine
+    # behind them. Both optional — the engine and the talk-key binding are
+    # independent controls on the same panel, so either can be changed alone.
+    voice_engine: Literal["stub", "faster_whisper"] | None = None
+    voice_ptt_binding: str | None = None
+
+
+@router.get("/api/settings/voice", response_model=VoiceSettings)
+async def get_voice_settings() -> VoiceSettings:
+    async with db.session() as session:
+        return VoiceSettings(
+            voice_engine=await settings.get_voice_engine(session),
+            voice_ptt_binding=await settings.get_ptt_binding(session),
+        )
+
+
+@router.put("/api/settings/voice", response_model=VoiceSettings)
+async def put_voice_settings(body: PutVoiceSettingsRequest) -> VoiceSettings:
+    async with db.session() as session:
+        if body.voice_engine is not None:
+            await settings.set_voice_engine(session, body.voice_engine)
+            # Takes effect on this very call, not the next restart (Voice.5
+            # acceptance: "the change takes effect without a restart").
+            voice.invalidate_engine_cache()
+        if body.voice_ptt_binding is not None:
+            await settings.set_ptt_binding(session, body.voice_ptt_binding)
+        return VoiceSettings(
+            voice_engine=await settings.get_voice_engine(session),
+            voice_ptt_binding=await settings.get_ptt_binding(session),
+        )

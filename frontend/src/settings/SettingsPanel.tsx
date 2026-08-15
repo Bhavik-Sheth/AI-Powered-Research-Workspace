@@ -13,6 +13,7 @@ import { providerLabel } from "../design/labels";
 import { InterestProfileForm } from "./InterestProfileForm";
 import { ProviderForm } from "./ProviderForm";
 import "./SettingsPanel.css";
+import { VoiceSettingsForm } from "./VoiceSettingsForm";
 
 type Tier = SaveProviderRequest["credentials"]["tier"];
 type BudgetProvider = SaveModelBudgetRequest["provider"];
@@ -229,6 +230,10 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
             </div>
           </>
         )}
+      </section>
+      <section className="settings-panel__section">
+        <h2>Voice</h2>
+        <VoiceSettingsForm />
       </section>
       <section className="settings-panel__section">
         <h2>Interest profile</h2>

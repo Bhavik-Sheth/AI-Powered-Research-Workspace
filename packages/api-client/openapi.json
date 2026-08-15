@@ -372,6 +372,106 @@
         }
       }
     },
+    "/api/settings/voice": {
+      "get": {
+        "summary": "Get Voice Settings",
+        "operationId": "get_voice_settings_api_settings_voice_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Put Voice Settings",
+        "operationId": "put_voice_settings_api_settings_voice_put",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutVoiceSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "summary": "List Projects",
@@ -6779,6 +6879,38 @@
         "title": "ProviderInfo",
         "description": "What is ever read back \u2014 never ciphertext, nonce, or plaintext key."
       },
+      "PutVoiceSettingsRequest": {
+        "properties": {
+          "voice_engine": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "stub",
+                  "faster_whisper"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Engine"
+          },
+          "voice_ptt_binding": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Ptt Binding"
+          }
+        },
+        "type": "object",
+        "title": "PutVoiceSettingsRequest"
+      },
       "QuoteAnchor": {
         "properties": {
           "id": {
@@ -7626,6 +7758,29 @@
           "path"
         ],
         "title": "VaultPathRequest"
+      },
+      "VoiceSettings": {
+        "properties": {
+          "voice_engine": {
+            "type": "string",
+            "enum": [
+              "stub",
+              "faster_whisper",
+              "whisper_cpp"
+            ],
+            "title": "Voice Engine"
+          },
+          "voice_ptt_binding": {
+            "type": "string",
+            "title": "Voice Ptt Binding"
+          }
+        },
+        "type": "object",
+        "required": [
+          "voice_engine",
+          "voice_ptt_binding"
+        ],
+        "title": "VoiceSettings"
       },
       "WhyRelevant": {
         "properties": {
