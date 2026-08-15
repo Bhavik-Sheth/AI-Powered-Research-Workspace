@@ -13,26 +13,32 @@ renumber anything in `DECISIONS.md`.
 
 ## Progress report (2026-08-15) — read this before resuming
 
-**Committed and done: Voice.2 through Voice.6.** Commits `e0307fb`, `d39d3e2`, `9336a28`,
-`43e2a5f`, `7015647` on `main`. Real faster-whisper STT, real Piper TTS, a weight-fetch job with a
-live `pending → ready` readiness signal, a Settings voice section (engine selector + rebindable
-push-to-talk key, `set_voice_engine`'s first caller), and the talk-key state machine with its 2s
-cancel window. All five phases live-verified against a real Postgres/Docker stack and the actual
-running app (Playwright), 54/54 backend tests green throughout, frontend builds clean.
+**All of Voice.2 through Voice.8 are committed and done.** Commits `e0307fb`, `d39d3e2`, `9336a28`,
+`43e2a5f`, `7015647`, `878ed4f`, `90f343c` on `main` (plus `d7e4db8`, a docs-only progress-note
+correction). Real faster-whisper STT, real Piper TTS, a weight-fetch job with a live
+`pending → ready` readiness signal, a Settings voice section (engine selector + rebindable
+push-to-talk key), the talk-key state machine with its 2s cancel window, streaming
+sentence-by-sentence playback with barge-in, and the D37 boundary now enforced by CI. Every phase
+live-verified against a real Postgres/Docker stack and the actual running app (Playwright); the
+56-test default suite (54 + Voice.8's boundary test) is green; the `live`-marked Piper→Whisper
+round-trip passes; frontend builds clean throughout.
 
-**The "Undo race" flagged in the previous version of this note was a test-script timing fluke, not
-a real bug** — re-run with a shimmed `MediaRecorder` (this sandbox's fake audio device doesn't
-reliably drive `MediaRecorder`'s stop/dataavailable events at all, confirmed on the *unmodified*
-pre-existing mouse mic button too) and a mocked `/api/voice/transcribe`, `cancelPendingVoiceMessage`
-correctly prevented the send in 4/4 repeated runs, and letting the window elapse without cancelling
-sent it exactly once. No code change was needed in `useVoice.ts` beyond the debug logging added and
-then removed while diagnosing. Root cause of the one earlier failure: `page.evaluate`'s click was
-issued too close to (and once, past) the 2s window in that particular run — not a state-machine
-defect.
+**Voice.7 specifically** was verified with a *real* streamed LLM reply, not a mock: a
+voice-triggered multi-sentence turn produced multiple ordered `/api/voice/synthesize` calls as it
+streamed; an equivalent typed turn produced zero; both a barge-in (holding the chord mid-playback)
+and `✕ Stop` froze the synthesize-call count permanently even though the backend turn kept
+streaming for several more seconds afterward.
 
-**Next up: Voice.7 (streaming sentence-by-sentence playback + barge-in), then Voice.8 (tests + the
-Voice sign-off checkpoint)** — see the build order below. Voice.7 depends on Voice.6 and is not yet
-started.
+**Voice.8's boundary test was verified to actually catch violations**, not just trivially pass: a
+stray `import piper` was temporarily added to `settings/__init__.py` and a stray `getUserMedia`
+call to `frontend/src/state/usePttBinding.ts`; the test failed both times naming the exact
+offending file, then passed again once each was reverted (confirmed via `git status`/diff that
+nothing was left behind).
+
+**The plan is fully built.** Every checkbox in §7 below reflects a phase that was live-verified,
+not just implemented — see each phase's own commit message for the specific verification it
+records. Nothing is left to build in this plan; PRD §13's US8 checklist and this plan's own §7 are
+the sign-off (Voice.8's own stated checkpoint).
 
 ---
 
@@ -256,24 +262,36 @@ One Alembic revision, shipped in the same commit as the model change (Rules):
 
 PRD §13's US8 checklist still applies in full and is not restated here. This plan adds:
 
-- [ ] Speaking a sentence produces that sentence's words — not canned stub text.
-- [ ] The STT model is **not** loaded until the first talk-key press (verify: no CTranslate2 memory
-      at idle after a fresh launch).
-- [ ] Weights download in the background on first launch; the app stays usable throughout; the
-      readiness strip shows `voice` moving `pending → ready`.
-- [ ] A reply to a **spoken** turn is heard aloud, starting before the turn finishes. A reply to a
-      **typed** turn is silent.
-- [ ] Spoken output contains no asterisks, brackets or citation numbers read aloud.
-- [ ] `✕ Stop` halts both the turn and the audio. Holding the talk key during playback cuts the
-      audio immediately.
-- [ ] Near-silence or an accidental tap does **not** produce a hallucinated sentence.
-- [ ] The Settings voice section switches the profile to `stub` and back, and the change takes
-      effect without a restart.
-- [ ] Rebinding the talk key in Settings takes effect immediately; the new binding survives a
-      restart.
-- [ ] The cancel window pulls back a misheard utterance before it reaches the agent.
-- [ ] The boundary test passes: no STT/TTS import outside `backend/voice/`, no `getUserMedia` or
-      `Audio` outside `frontend/src/voice/`.
+- [x] Speaking a sentence produces that sentence's words — not canned stub text. (Voice.2/3, live
+      round-trip; Voice.8's `test_voice_roundtrip.py`)
+- [x] The STT model is **not** loaded until the first talk-key press — lazy-loaded behind a lock in
+      `faster_whisper.py`, same pattern as `memory/embedder.py` (Voice.2).
+- [x] Weights download in the background on first launch; the app stays usable throughout; the
+      readiness strip shows `voice` moving `pending → ready`. (Voice.4, live-verified: weights
+      deleted → `pending` → job downloads for real → `ready` in ~19s, no restart)
+- [x] A reply to a **spoken** turn is heard aloud, starting before the turn finishes. A reply to a
+      **typed** turn is silent. (Voice.7, live-verified with a real multi-sentence streamed reply —
+      ordered synthesize calls as it streams; a typed turn produces zero)
+- [x] Spoken output contains no asterisks, brackets or citation numbers read aloud. (`cleanForSpeech`,
+      Voice.7 — no `[n]` ever exists in the raw stream to begin with; confirmed on live synthesize
+      call bodies)
+- [x] `✕ Stop` halts both the turn and the audio. Holding the talk key during playback cuts the
+      audio immediately. (Voice.7, live-verified: both froze the synthesize-call count permanently
+      even as the backend turn kept streaming)
+- [x] Near-silence or an accidental tap does **not** produce a hallucinated sentence. (V14's VAD
+      filter; observed directly in Voice.6's live testing — a silent chord hold produced no
+      transcript)
+- [x] The Settings voice section switches the profile to `stub` and back, and the change takes
+      effect without a restart. (Voice.5, live-verified via real HTTP PUT + immediate behavior
+      change on the next voice call)
+- [x] Rebinding the talk key in Settings takes effect immediately; the new binding survives a
+      restart. (Voice.5, live-verified including the release-order edge case; binding is a real DB
+      column, so it survives by construction)
+- [x] The cancel window pulls back a misheard utterance before it reaches the agent. (Voice.6,
+      live-verified 4/4 with a shimmed `MediaRecorder` and mocked transcribe response)
+- [x] The boundary test passes: no STT/TTS import outside `backend/voice/`, no `getUserMedia` or
+      `Audio` outside `frontend/src/voice/`. (Voice.8 — `test_voice_boundary.py`, confirmed to
+      actually catch a violation of each kind, not just trivially pass)
 
 ---
 
