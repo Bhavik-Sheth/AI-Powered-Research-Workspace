@@ -158,6 +158,16 @@ async def discover_models(provider: Literal["ollama", "vllm"], base_url: str) ->
         return [entry["id"] for entry in response.json().get("data", [])]
 
 
+async def get_mcp_servers(session: AsyncSession) -> list[dict]:
+    """Configured MCP servers (HarnessPlan H10, §3.11) — read once at startup
+    by `harness/mcp/__init__.py:connect_configured_servers`, never in a
+    request path. Each entry is a plain dict; `harness/mcp/bridge.py`
+    validates shape (`transport`/`command`/`url`) per-server and degrades
+    that one entry to no tools rather than failing the others."""
+    row = await _get_or_create_row(session)
+    return list(row.mcp_servers)
+
+
 async def set_voice_engine(session: AsyncSession, engine: str) -> None:
     """Persists the selected `backend/voice/` registry engine."""
     row = await _get_or_create_row(session)

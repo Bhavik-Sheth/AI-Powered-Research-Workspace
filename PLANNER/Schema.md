@@ -562,6 +562,7 @@ exactly one row, forever, because there is exactly one user on one machine.
 | `vault_path` | TEXT | NULL | Absolute path chosen at onboarding step 2, default `~/ResearchOS`. |
 | `voice_engine` | TEXT | NOT NULL, DEFAULT `stub`, CHECK IN (`stub`,`faster_whisper`,`whisper_cpp`) | Selected engine in the `backend/voice/` registry. **The only place outside that package where an engine is named** (D37). |
 | `onboarding_completed_at` | TIMESTAMPTZ | NULL | NULL means the gated wizard has not finished; the app returns to step 1. |
+| `mcp_servers` | JSONB | NOT NULL, DEFAULT `'[]'` | *HarnessPlan H10.* `[{name, transport: "stdio"\|"http", command\|url, env?\|headers?}]`. Read once at startup by `harness/mcp/__init__.py`, never in a request path — each configured server is bridged into `ToolSpec`s (`mcp__<server>__<tool>`, always `tier="confirm"`, `core=False`); a dead or misconfigured entry degrades to zero tools for that server without blocking the others or startup itself. |
 
 The per-launch bearer token is **never** stored here — it is regenerated every launch and never
 persisted (D2).

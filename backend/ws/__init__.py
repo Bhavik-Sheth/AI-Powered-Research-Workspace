@@ -31,7 +31,7 @@ import db
 import harness
 from config import get_config
 from db.models import Conversations
-from harness import approval
+from harness import approval, resume
 from harness.models import ErrorEvent, SelectionState, SessionRef, TurnEvent, UIState
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,16 @@ async def handle_connect(project_id: uuid.UUID, token: str, websocket: WebSocket
     _sessions[project_id] = session
     if evicted is not None:
         await _close_evicted(evicted)
+
+    # HarnessPlan H11, §3.11: reconcile any turn left `status='running'` by a
+    # crashed process before this connect's owner ever sees a stuck status
+    # pill. Never allowed to block the connect itself — a sweep failure is
+    # logged, not raised, so a DB hiccup here can't turn into a refused
+    # connection.
+    try:
+        await resume.sweep_orphans(project_id)
+    except Exception:
+        logger.exception("event=orphan_sweep_failed project_id=%s", project_id)
 
     return session
 

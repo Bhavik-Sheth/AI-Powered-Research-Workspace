@@ -48,6 +48,10 @@ class ApiKeys(Base):
     auxiliary_model: Mapped[str | None] = mapped_column(String, nullable=True)
     vault_path: Mapped[str | None] = mapped_column(String, nullable=True)
     voice_engine: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'stub'"))
+    # HarnessPlan H10, §3.11: configured MCP servers, read once at startup by
+    # harness/mcp/__init__.py:connect_configured_servers. list[dict], each
+    # {"name", "transport": "stdio"|"http", "command"|"url", "env"|"headers"}.
+    mcp_servers: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

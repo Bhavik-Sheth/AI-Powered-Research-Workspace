@@ -25,6 +25,7 @@ import db
 import jobs
 import sandbox
 import vault
+from harness import mcp
 from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
 from api.health import Capability, ReadinessState
@@ -136,6 +137,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await jobs.run_catchup_pass()
             except Exception:
                 _mark_failed(readiness, "database")
+
+            if readiness["database"] == "ready":
+                # HarnessPlan H10, §3.11: connect every configured MCP server
+                # once at startup, never in a request path. Never allowed to
+                # fail the sidecar — a bad server config degrades to zero
+                # extra tools, not a failed launch (mcp/__init__.py's own
+                # per-server try/except is belt and suspenders on top of
+                # this one).
+                try:
+                    async with db.session() as mcp_session:
+                        tool_count = await mcp.connect_configured_servers(mcp_session)
+                    logger.info("event=mcp_startup_complete tools=%d", tool_count)
+                except Exception:
+                    logger.exception("event=mcp_startup_failed")
 
     # uvicorn skips its own "started" log line when serving a pre-bound
     # socket (see `_serve`), so this is the one place that confirms readiness.

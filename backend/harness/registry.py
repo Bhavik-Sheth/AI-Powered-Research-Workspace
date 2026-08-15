@@ -11,6 +11,7 @@ a `model_view` that tells the model exactly what was wrong — a correction
 the loop feeds straight back into the next completion, not a crash.
 """
 
+import asyncio
 import inspect
 import uuid
 from collections.abc import Awaitable, Callable
@@ -20,7 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from harness.models import SkillSpec, ToolResult
+from harness.models import Ref, SkillSpec, ToolResult
 from memory.models import CitedRow
 
 
@@ -56,6 +57,23 @@ class ToolContext:
     memory_rows: list[CitedRow] = field(default_factory=list)
     retrieval_trace: list[dict] = field(default_factory=list)
     loaded_skill_slot: list[SkillSpec] = field(default_factory=list)
+
+    # HarnessPlan H9, §3.7: what `deep_research` (and any future subagent
+    # tool) needs to call `subagents.run_subagent` — `loop.py` builds these
+    # once per tool call the same way it builds `memory_rows` etc. above.
+    # `turn_id`/`cancel_flag` let a subagent trace against its real parent
+    # and inherit the parent's interruptibility rather than invent its own.
+    # `status_callback`, when called, appends into a list `loop.py` owns and
+    # reads back right after `dispatch` returns, turning each entry into a
+    # `StatusEvent` — a plain `await registry.dispatch(...)` has no way to
+    # stream anything mid-call, so this is a between-calls "status so far",
+    # not a literal live stream (see `loop.py`'s tool-dispatch loop). `None`
+    # for `turn_id`/`cancel_flag`/`status_callback` and an empty
+    # `working_set` for every existing tool that never touches them."""
+    turn_id: uuid.UUID | None = None
+    cancel_flag: asyncio.Event | None = None
+    status_callback: Callable[[str], None] | None = None
+    working_set: list[Ref] = field(default_factory=list)
 
 
 ToolHandler = Callable[[ToolContext, BaseModel], Awaitable[ToolResult]]
@@ -146,6 +164,19 @@ def tool(
         return func
 
     return decorator
+
+
+def register_dynamic(spec: ToolSpec) -> None:
+    """Registers a `ToolSpec` built at runtime rather than via the `@tool`
+    decorator — HarnessPlan H10, §3.11: an MCP server's tools are only known
+    once its `tools/list` response arrives, at startup, so they can't go
+    through `tool()`'s import-time decoration. Same `_REGISTRY` dict, same
+    `dispatch()` path, same duplicate-name guard as a static tool — an MCP
+    tool is indistinguishable from a hand-written one once it's in here.
+    Re-registering the same name (e.g. a server reconnect) replaces the
+    existing entry rather than raising, since this can legitimately happen
+    more than once per process for the same server."""
+    _REGISTRY[spec.name] = spec
 
 
 def all_specs() -> list[ToolSpec]:
