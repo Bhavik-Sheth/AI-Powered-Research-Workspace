@@ -61,6 +61,7 @@ a straightforward renderer by comparison, so it's listed last and in less depth.
 | PDF → structured text | **`docling`** — PDF to sections, references, and figures, feeding both the extractive card and the citation-check index |
 | Notebook execution | **`nbformat`/`nbclient`** driving a real Jupyter kernel inside a **Docker**-sandboxed, network-off-by-default container — the only source of `measured` experiment metrics, gated behind explicit human approval |
 | Tool extensibility | **MCP (Model Context Protocol)** bridge — a hand-rolled, dependency-free JSON-RPC client (stdio + HTTP/SSE transports) that turns any MCP server's tools into registry tools at runtime |
+| Voice | **`faster-whisper`** (`base.en`, int8, CPU, Silero VAD) for speech-to-text and **Piper** (`en_US-lessac-medium`) for text-to-speech, both lazy-loaded behind an `asyncio.Lock` and pre-fetched by a background job on first launch; **PyAV** decodes whatever the browser recorded. A spoken reply is synthesized and played sentence-by-sentence as the turn streams, not held until it finishes — the same WebSocket turn a typed message gets, tagged only by how it arrived. |
 
 ### Backend core (`backend/`)
 
@@ -107,7 +108,7 @@ Status legend: ✅ Done · 🚧 Partial/stubbed · 📋 Planned
 | **Literature Matrix** | ✅ | A live projection of each paper's extractive card (Problem/Method/Datasets/Results/Limitations) plus custom per-paper extractive columns, cached after first run. Cell edits are tracked as user overrides without corrupting the underlying extraction. |
 | **Writing (LaTeX)** | ✅ | A `.tex` document per project, mirrored to the vault. Compiles via a sandboxed, offline Tectonic-in-Docker container (SwiftLaTeX/WASM live preview is designed but not the shipped compile path today); a citation checker flags missing and unsupported claims. The AI never drafts prose — it checks and organizes only. |
 | **Research Feed** | ✅ | A scheduled, catch-up-on-launch poller: interest profile (seeded from a project's focus, editable) → category-driven fetch across arXiv/OpenAlex/S2 → deterministic keyword + centroid-cosine + cross-encoder scoring → dedup against a seen-set. No LLM in the ranking path. |
-| **Voice** | 🚧 Stubbed | Push-to-talk is wired end-to-end in the UI and routes through the same Companion turn a typed message would, but the speech-to-text/text-to-speech engines are stubs (canned text / silence) — `faster-whisper`/Piper are not yet wired in. The module boundary and transport are real. |
+| **Voice** | ✅ | Push-to-talk two ways — a mic button, or holding a rebindable key chord (default `Ctrl+Shift`) anywhere in the app. Real `faster-whisper` transcription and real Piper speech, weights fetched in the background on first launch so the app stays usable while they download. A spoken reply is heard sentence-by-sentence as it streams, with barge-in (hold the chord to cut it off) and a `✕ Stop`; a ~2s undo window on send catches a misheard utterance before it reaches the agent. A typed turn stays silent — the agent itself never knows how a turn arrived. |
 
 ## Architecture note
 
@@ -230,4 +231,7 @@ PLANNER/                Architecture decisions, PRD, harness plan, UI design, an
 - [`PLANNER/PRD.md`](PLANNER/PRD.md) — the user-facing feature list and phase breakdown.
 - [`PLANNER/HarnessPlan.md`](PLANNER/HarnessPlan.md) — the agent harness rebuild plan (H1–H11):
   context budgeting, streaming, skills, subagents, MCP, approvals, crash recovery.
+- [`PLANNER/VoiceLayerPlan.md`](PLANNER/VoiceLayerPlan.md) — the voice layer build (Voice.2–Voice.8):
+  real STT/TTS engines behind the fixed module boundary, streaming playback, the talk-key state
+  machine, and the CI-enforced boundary test.
 - [`PLANNER/UI_DESIGN.md`](PLANNER/UI_DESIGN.md) — look-and-feel: palette, type ramp, component shape.
