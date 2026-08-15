@@ -1,3 +1,6 @@
 {
-  "enabledPlugins": {}
+  "enabledPlugins": {},
+  "worktree": {
+    "bgIsolation": "none"
+  }
 }

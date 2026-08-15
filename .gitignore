@@ -32,3 +32,4 @@ __pycache__/
 
 # Status reports (local design/architecture notes, not shipped)
 # /backend/status_report/
+resume_description.md
