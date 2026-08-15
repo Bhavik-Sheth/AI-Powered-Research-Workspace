@@ -24,11 +24,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import db
 import jobs
 import sandbox
+import settings
 import vault
 from harness import mcp
+from voice import weights as voice_weights
 from api.deps import require_bearer_token
 from api.errors import handle_exception, handle_http_exception, handle_validation_error
-from api.health import Capability, ReadinessState
+from api.health import readiness
 from api.anchors import router as anchors_router
 from api.conversations import router as conversations_router
 from api.experiments import router as experiments_router
@@ -54,19 +56,13 @@ logger = logging.getLogger(__name__)
 
 _COMPOSE_FILE = Path(__file__).parent.parent / "docker" / "docker-compose.yml"
 
-_INITIAL_READINESS: dict[Capability, ReadinessState] = {
-    "vault": "pending",
-    "database": "pending",
-    "docker": "pending",
-    "llm": "pending",
-    "search": "pending",
-    "embeddings": "pending",
-    "reranker": "pending",
-    "voice": "pending",
-}
+# SAQ's own job default is 10s (see jobs/__init__.py's own note on this same
+# point) — the combined ~200MB of Whisper + Piper weights need far longer
+# than that on an ordinary connection.
+_FETCH_VOICE_MODELS_TIMEOUT_S = 900
 
 
-def _mark_failed(readiness: dict[Capability, ReadinessState], capability: Capability) -> None:
+def _mark_failed(capability: str) -> None:
     logger.exception("event=startup_step_failed capability=%s", capability)
     readiness[capability] = "failed"
 
@@ -103,15 +99,14 @@ async def _compose_up(vault_root: Path) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    readiness: dict[Capability, ReadinessState] = dict(_INITIAL_READINESS)
-    app.state.readiness = readiness
+    readiness.update((capability, "pending") for capability in readiness)
 
     vault_root: Path | None = None
     try:
         vault_root = vault.ensure_layout()
         readiness["vault"] = "ready"
     except OSError:
-        _mark_failed(readiness, "vault")
+        _mark_failed("vault")
 
     if vault_root is not None:
         docker_ready = False
@@ -124,7 +119,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # continuous reconciliation (D4's spirit).
             await sandbox.sweep_orphaned_notebook_servers()
         except (FileNotFoundError, RuntimeError):
-            _mark_failed(readiness, "docker")
+            _mark_failed("docker")
 
         if docker_ready:
             try:
@@ -145,7 +140,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 else:
                     await jobs.run_catchup_pass()
             except Exception:
-                _mark_failed(readiness, "database")
+                _mark_failed("database")
 
             if readiness["database"] == "ready":
                 # HarnessPlan H10, §3.11: connect every configured MCP server
@@ -160,6 +155,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     logger.info("event=mcp_startup_complete tools=%d", tool_count)
                 except Exception:
                     logger.exception("event=mcp_startup_failed")
+
+                # Voice Layer Plan V9/Voice.4: the stub profile needs no
+                # weights and is trivially ready. A real profile is `ready`
+                # immediately if a prior launch already fetched its weights
+                # (Voice.4's job below is a no-op on every later launch);
+                # otherwise this enqueues that fetch and leaves `voice`
+                # `pending` until it completes — never blocking startup on a
+                # ~200MB download.
+                try:
+                    async with db.session() as voice_session:
+                        engine = await settings.get_voice_engine(voice_session)
+                    if engine == "stub" or voice_weights.present():
+                        readiness["voice"] = "ready"
+                    else:
+                        await jobs.enqueue("fetch_voice_models_job", timeout=_FETCH_VOICE_MODELS_TIMEOUT_S)
+                except Exception:
+                    _mark_failed("voice")
 
     # uvicorn skips its own "started" log line when serving a pre-bound
     # socket (see `_serve`), so this is the one place that confirms readiness.

@@ -5,12 +5,13 @@ the first real one. English-only: `_lang` stays in the transcribe
 signature because the registry (`voice/__init__.py`) is engine-agnostic,
 but this engine ignores anything but English (V3).
 
-Weights are cached under the vault's `.research-os/` (same pattern as
-`writing/tectonic.py`'s compile cache) rather than the user's home
-directory, so a fresh vault carries its own model cache and nothing is
-written outside it. Voice.4 layers a background pre-fetch of this same
-directory on top; until then, the first talk-key press downloads on demand
-via `WhisperModel`'s own `download_model` call.
+Weights are cached under the vault's `.research-os/voice/whisper/`
+(`weights.py` owns the exact path) rather than the user's home directory,
+so a fresh vault carries its own model cache and nothing is written
+outside it. `weights.fetch()` pre-populates this directory from a
+background job on first launch (V9); if it hasn't run yet, this first
+talk-key press downloads on demand instead, via the same `WhisperModel`
+call.
 """
 
 import asyncio
@@ -18,23 +19,17 @@ import io
 
 from faster_whisper import WhisperModel, decode_audio
 
-from settings import get_vault_path
+from voice import weights
 from voice.models import Transcript
-
-_MODEL_SIZE = "base.en"
 
 _model: WhisperModel | None = None
 _lock = asyncio.Lock()
 
 
-def _model_dir() -> str:
-    path = get_vault_path() / ".research-os" / "voice" / "whisper"
-    path.mkdir(parents=True, exist_ok=True)
-    return str(path)
-
-
 def _load_model() -> WhisperModel:
-    return WhisperModel(_MODEL_SIZE, device="cpu", compute_type="int8", download_root=_model_dir())
+    return WhisperModel(
+        weights.WHISPER_MODEL_SIZE, device="cpu", compute_type="int8", download_root=str(weights.whisper_dir())
+    )
 
 
 async def _get_model() -> WhisperModel:

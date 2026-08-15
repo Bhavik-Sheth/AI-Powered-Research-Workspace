@@ -101,6 +101,7 @@ def _job_functions() -> list:
         trace_references_job,
     )
     from sandbox import run_experiment_job
+    from voice.weights import fetch_voice_models_job
 
     return [
         fetch_pdf_job,
@@ -113,6 +114,7 @@ def _job_functions() -> list:
         run_experiment_job,
         poll_feed_job,
         interest_profile_reextract_job,
+        fetch_voice_models_job,
     ]
 
 

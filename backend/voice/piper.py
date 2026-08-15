@@ -10,34 +10,25 @@ as the degradation path (V8).
 import asyncio
 import io
 import wave
-from pathlib import Path
 
 from piper import PiperVoice
 from piper.download_voices import download_voice
 
-from settings import get_vault_path
-
-_VOICE_NAME = "en_US-lessac-medium"
+from voice import weights
 
 _voice: PiperVoice | None = None
 _lock = asyncio.Lock()
 
 
-def _voice_dir() -> Path:
-    path = get_vault_path() / ".research-os" / "voice" / "piper"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def _load_voice() -> PiperVoice:
-    voice_dir = _voice_dir()
-    model_path = voice_dir / f"{_VOICE_NAME}.onnx"
+    model_path = weights.piper_model_path()
     if not model_path.exists():
         # `piper-tts` has no built-in "fetch by name" the way faster-whisper
-        # does (V9's job takes over this fetch once Voice.4 lands); this is
-        # the same public helper its own CLI (`python -m piper.download_voices`)
-        # uses, called synchronously inside this lazy-load's own thread.
-        download_voice(_VOICE_NAME, voice_dir)
+        # does; `weights.fetch()` pre-populates this from a background job
+        # on first launch (V9) — if that hasn't run yet, fall back to the
+        # same public helper its own CLI uses, synchronously in this
+        # lazy-load's own thread.
+        download_voice(weights.PIPER_VOICE_NAME, weights.piper_dir())
     return PiperVoice.load(model_path)
 
 
