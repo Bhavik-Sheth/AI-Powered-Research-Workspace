@@ -47,13 +47,15 @@ def test_index_text_contains_each_skills_description():
         assert spec.description in text
 
 
-def test_find_related_work_does_not_yet_reference_deep_research_in_tools():
-    """Scoping note (HarnessPlan H9 not yet built): `find_related_work`'s body may *talk about*
-    `deep_research` as a tool it will use once H9 lands, but its `tools:` frontmatter list must
-    not name it yet — `deep_research` is not a registered tool, and `load_index` validates every
-    named tool at startup, so listing it now would fail loudly the moment this file loads."""
+def test_find_related_work_references_deep_research_in_tools():
+    """HarnessPlan H9: `find_related_work` is `deep_research`'s entry point (§3.6's table), so once
+    the subagent tool is registered its `tools:` frontmatter list names it — and, like every other
+    tool a skill declares, it resolves against the real registry (proven the same way the other
+    `load_index` test proves it: this file loading at all means `load_index`'s own startup
+    validation already accepted it)."""
     spec = skills.load_index()["find_related_work"]
-    assert "deep_research" not in spec.tools
+    assert "deep_research" in spec.tools
+    assert registry.get("deep_research") is not None
     for tool_name in spec.tools:
         assert registry.get(tool_name) is not None
 

@@ -633,6 +633,19 @@ async def run_turn(
                         yield ApprovalRequestEvent(request_id=request_id, tool_name=tool_name, args=args, summary=summary, risk=risk)
                         outcome = await _await_approval(request_id, cancel_flag)
 
+                    # HarnessPlan H9, §3.7: a subagent tool (today, only
+                    # `deep_research`) reports progress through
+                    # `ToolContext.status_callback` rather than a live stream
+                    # — `registry.dispatch` is a single `await` with no way
+                    # to yield mid-call, so the callback appends into this
+                    # per-tool-call list instead; every entry becomes a
+                    # `StatusEvent`, in order, once dispatch returns and the
+                    # `db.session()` block below has closed (never yielded
+                    # from inside an open session — a suspended generator
+                    # has no bound on how long the caller takes to resume
+                    # it, and a DB session has no business staying open for
+                    # that).
+                    subagent_status: list[str] = []
                     async with db.session() as db_session:
                         seq = await _next_seq(db_session, session_ref.conversation_id)
                         db_session.add(
@@ -646,12 +659,19 @@ async def run_turn(
                             )
                         )
                         if outcome == "approved":
+                            # `turn_id`/`cancel_flag` are this turn's own —
+                            # a subagent traces against its real parent and
+                            # inherits the parent's interruptibility rather
+                            # than inventing its own.
                             ctx = registry.ToolContext(
                                 session=db_session,
                                 project_id=session_ref.project_id,
                                 memory_rows=memory_rows,
                                 retrieval_trace=retrieval_trace,
                                 loaded_skill_slot=loaded_skill_slot,
+                                turn_id=turn_id,
+                                cancel_flag=cancel_flag,
+                                status_callback=subagent_status.append,
                             )
                             result = await _dispatch_tool_bounded(ctx, tool_name, args, cancel_flag)
                             if loaded_skill_slot:
@@ -680,6 +700,8 @@ async def run_turn(
                                 result_id=result.ui_view_result_id,
                             )
                         )
+                    for status_text in subagent_status:
+                        yield StatusEvent(text=status_text)
                 except TimeoutError as exc:
                     # The whole tool_call/tool_result transaction rolled
                     # back with the timeout (db.session()'s own exception
