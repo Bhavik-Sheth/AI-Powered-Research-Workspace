@@ -9,6 +9,73 @@ import { isModifierKey, keysForBinding, type ModifierKey } from "./pttBinding";
 // isn't kept waiting.
 const CANCEL_WINDOW_MS = 2000;
 
+// Splits accumulated assistant text into complete sentences as it streams
+// (V7) — a terminator only counts once it's followed by real whitespace
+// already in the buffer, never by "end of buffer so far", so a period that
+// turns out to be mid-abbreviation (more text streams in right after)
+// never gets treated as a boundary before it actually is one.
+const SENTENCE_BOUNDARY = /[.!?]+(?:["')\]]*)\s+/g;
+
+// The harness's own citation markup (D24) — read the cited evidence inline
+// as prose (V6), not "bracket n" (there is no `[n]` in the raw stream at
+// all; that superscript is `parseCitations.tsx`'s own render-time
+// artifact, so V6's "no citation numbers read aloud" is already satisfied
+// by never introducing one here).
+const CITE_TAG = /<(cite|unverified)>([\s\S]*?)<\/\1>/g;
+const CODE_FENCE = /```[\s\S]*?```/g;
+
+/** Net open/close depth of `<cite>`/`<unverified>` tags up to this point in
+ * the buffer — >0 means a sentence boundary here would fall mid-quote. */
+function citeTagDepth(text: string): number {
+  const opens = (text.match(/<(cite|unverified)>/g) ?? []).length;
+  const closes = (text.match(/<\/(cite|unverified)>/g) ?? []).length;
+  return opens - closes;
+}
+
+/** True if the buffer up to this point has an unterminated ``` fence. */
+function insideCodeFence(text: string): boolean {
+  return (text.match(/```/g) ?? []).length % 2 === 1;
+}
+
+/** Pulls every sentence that can be safely spoken out of `text`, holding
+ * back anything still inside an open citation tag or code fence (Voice
+ * Layer Plan §6 risk: "the splitter must hold text back until a terminator
+ * appears outside a fence") — those keep growing in `remainder` until a
+ * later call sees them closed. */
+function splitCompleteSentences(text: string): { sentences: string[]; remainder: string } {
+  const sentences: string[] = [];
+  let cursor = 0;
+  SENTENCE_BOUNDARY.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = SENTENCE_BOUNDARY.exec(text)) !== null) {
+    const end = match.index + match[0].length;
+    const soFar = text.slice(0, end);
+    if (citeTagDepth(soFar) === 0 && !insideCodeFence(soFar)) {
+      sentences.push(text.slice(cursor, end));
+      cursor = end;
+    }
+  }
+  return { sentences, remainder: text.slice(cursor) };
+}
+
+/** Raw streamed assistant text -> what should actually be spoken (V6): cited
+ * evidence read inline as prose, markdown syntax stripped, a code fence
+ * skipped entirely (reading a code block aloud is not useful prose). No
+ * second LLM call — this is a fixed, non-LLM transform, same spirit as the
+ * provenance validator being deterministic. */
+function cleanForSpeech(raw: string): string {
+  return raw
+    .replace(CITE_TAG, "$2")
+    .replace(CODE_FENCE, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Voice Capture (MODULES.md, D37) — the only module touching
  * `getUserMedia` or an audio element. Push-to-talk two ways: the mouse/touch
  * mic button (unchanged — hold to record, release to transcribe and send
@@ -22,6 +89,18 @@ const CANCEL_WINDOW_MS = 2000;
  * `onSendVoiceMessage` is called once the chord-triggered cancel window
  * elapses uncancelled — this hook owns capture/transcribe/timing, the
  * caller (`CompanionPane`) owns what "send" actually means (the WebSocket).
+ *
+ * Voice.7: a reply to a voice-triggered turn is spoken as it streams.
+ * `beginVoiceTurn`/`feedAssistantDelta`/`endVoiceTurn` are `CompanionPane`'s
+ * hooks into that — call `beginVoiceTurn` when a voice-tagged send goes
+ * out, `feedAssistantDelta` on every `text_delta` while that turn is still
+ * the current one, `endVoiceTurn` on its `turn_complete`. Sentences are
+ * synthesized and played back-to-back through an internal queue as they
+ * complete, not held until the whole turn finishes. `stopPlayback` (wired
+ * to `✕ Stop`, and called automatically on a barge-in) clears the queue
+ * and cuts whatever is currently playing; it also mutes the rest of the
+ * turn that was playing, so a still-streaming interrupted turn's later
+ * sentences don't quietly start speaking again a moment later.
  */
 export function useVoice(onSendVoiceMessage: (text: string) => void) {
   const [recording, setRecording] = useState(false);
@@ -89,17 +168,130 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
     }
   }
 
-  async function playAudio(text: string): Promise<void> {
-    setError(null);
-    try {
-      const audioBytes = await postJsonForBinary("/api/voice/synthesize", { text });
+  // The sentence playback queue (V7) — a growing raw-text buffer for the
+  // turn currently being spoken, the cleaned sentences waiting on
+  // synthesis+playback, and the currently-playing `Audio` element.
+  // `playbackEpochRef` is bumped by `stopPlayback` so an in-flight
+  // synthesize-or-play continuation started under a now-stale epoch aborts
+  // itself instead of resurrecting audio for a turn that was just cut off
+  // (Voice Layer Plan §6 risk: "audio outliving its turn").
+  const turnBufferRef = useRef("");
+  const synthQueueRef = useRef<string[]>([]);
+  const drainingRef = useRef(false);
+  const playbackEpochRef = useRef(0);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioUrlRef = useRef<string | null>(null);
+  // Resolves the in-flight `playOne` promise — `stopPlayback` calls this
+  // directly, since `audio.pause()` alone never fires `onended` and would
+  // otherwise leave `drainQueue`'s loop awaiting a promise that never
+  // settles.
+  const currentResolveRef = useRef<(() => void) | null>(null);
+  // Set by `stopPlayback` (✕ Stop, or a barge-in) and cleared by the next
+  // `beginVoiceTurn` — suppresses further sentences from a turn that's
+  // still streaming after it was cut off, so it doesn't quietly start
+  // speaking again a moment later.
+  const voiceMutedRef = useRef(false);
+
+  function playOne(audioBytes: ArrayBuffer, epoch: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (playbackEpochRef.current !== epoch) {
+        resolve();
+        return;
+      }
       const url = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not play this audio");
+      currentAudioRef.current = audio;
+      currentAudioUrlRef.current = url;
+      currentResolveRef.current = resolve;
+      const finish = () => {
+        URL.revokeObjectURL(url);
+        currentAudioRef.current = null;
+        currentAudioUrlRef.current = null;
+        currentResolveRef.current = null;
+        resolve();
+      };
+      audio.onended = finish;
+      audio.onerror = finish;
+      void audio.play().catch(finish);
+    });
+  }
+
+  async function drainQueue(): Promise<void> {
+    if (drainingRef.current) return;
+    drainingRef.current = true;
+    const epoch = playbackEpochRef.current;
+    try {
+      while (synthQueueRef.current.length > 0) {
+        if (playbackEpochRef.current !== epoch) return;
+        const sentence = synthQueueRef.current.shift() as string;
+        let audioBytes: ArrayBuffer;
+        try {
+          audioBytes = await postJsonForBinary("/api/voice/synthesize", { text: sentence });
+        } catch (err) {
+          // Rules.md: "partial source failure degrades, it does not fail" —
+          // one sentence's synthesis failing skips just that sentence,
+          // the rest of the turn keeps speaking.
+          setError(err instanceof Error ? err.message : "Could not synthesize this reply");
+          continue;
+        }
+        if (playbackEpochRef.current !== epoch) return;
+        await playOne(audioBytes, epoch);
+      }
+    } finally {
+      drainingRef.current = false;
     }
+  }
+
+  /** Enqueues one cleaned sentence for synthesis+playback, in order. */
+  function enqueueSentence(cleaned: string): void {
+    if (!cleaned) return;
+    synthQueueRef.current.push(cleaned);
+    void drainQueue();
+  }
+
+  /** Clears the queue and cuts whatever is currently playing (✕ Stop, or a
+   * barge-in) — mutes the rest of the turn that was playing so a still-
+   * streaming interrupted turn doesn't start speaking again a moment later. */
+  function stopPlayback(): void {
+    playbackEpochRef.current += 1;
+    voiceMutedRef.current = true;
+    synthQueueRef.current = [];
+    currentAudioRef.current?.pause();
+    if (currentAudioUrlRef.current) URL.revokeObjectURL(currentAudioUrlRef.current);
+    currentAudioRef.current = null;
+    currentAudioUrlRef.current = null;
+    currentResolveRef.current?.();
+    currentResolveRef.current = null;
+  }
+
+  /** Call when a voice-tagged send goes out — resets the per-turn buffer
+   * and unmutes (a fresh turn is not the one a previous barge-in cut off). */
+  function beginVoiceTurn(): void {
+    stopPlayback();
+    voiceMutedRef.current = false;
+    turnBufferRef.current = "";
+  }
+
+  /** Call on every `text_delta` while the current turn is voice-tagged —
+   * extracts and speaks whatever complete sentences the new text
+   * completes, holding back an in-progress one (V7: heard as it's written,
+   * not held until the turn finishes). */
+  function feedAssistantDelta(delta: string): void {
+    if (voiceMutedRef.current) return;
+    turnBufferRef.current += delta;
+    const { sentences, remainder } = splitCompleteSentences(turnBufferRef.current);
+    turnBufferRef.current = remainder;
+    for (const sentence of sentences) enqueueSentence(cleanForSpeech(sentence));
+  }
+
+  /** Call on the voice-tagged turn's `turn_complete` — speaks whatever text
+   * never reached a sentence terminator (e.g. the reply's last clause). */
+  function endVoiceTurn(): void {
+    const remainder = turnBufferRef.current;
+    turnBufferRef.current = "";
+    if (voiceMutedRef.current) return;
+    const cleaned = cleanForSpeech(remainder);
+    if (cleaned) enqueueSentence(cleaned);
   }
 
   /** Cancels a still-pending chord-triggered send (the status line's Undo
@@ -126,7 +318,9 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
   useEffect(() => {
     return () => {
       if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
+      stopPlayback();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Talk-key state machine (MODULES.md's specified but never-built key
@@ -156,6 +350,10 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
       const allHeld = [...chordKeys].every((key) => heldRef.current.has(key));
       if (allHeld) {
         chordActiveRef.current = true;
+        // V7: holding the talk key barges in and cuts whatever is playing —
+        // the same trigger as starting a new recording, since pressing the
+        // chord at all already means "I want to talk now."
+        stopPlayback();
         void startRecording();
       }
     }
@@ -199,8 +397,11 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
     error,
     startRecording,
     transcribeOnRelease,
-    playAudio,
     pendingVoiceMessage,
     cancelPendingVoiceMessage,
+    beginVoiceTurn,
+    feedAssistantDelta,
+    endVoiceTurn,
+    stopPlayback,
   };
 }

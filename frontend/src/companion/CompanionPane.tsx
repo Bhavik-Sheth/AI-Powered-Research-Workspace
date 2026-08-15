@@ -152,8 +152,25 @@ export function CompanionPane({
   // of dropping or racing it.
   const historyLoadedRef = useRef(false);
   const bufferedEventsRef = useRef<DownstreamEvent[]>([]);
+  // Whether the turn currently streaming was sent by voice (V5/V7) — set in
+  // `sendMessage` from that send's own `inputModality`, read (never seen by
+  // the agent, D36) only here in the UI to decide whether to speak the
+  // reply. A typed turn leaves this `false`, so `feedAssistantDelta`/
+  // `endVoiceTurn` below are simply never called for it — "typed turns stay
+  // silent" falls out of that, not a separate check.
+  const isVoiceTurnRef = useRef(false);
   selectionRef.current = selection;
   queuedRef.current = queued;
+
+  // Declared before `handleDownstream`/`sendMessage` reference it below —
+  // `onSendVoiceMessage` only stores the `sendMessage` reference here, it
+  // doesn't call it, so `sendMessage` being a hoisted function declaration
+  // (not yet assigned when this line runs, only when actually invoked,
+  // long after render) is enough (same reasoning `pendingAsk`'s effect
+  // below already relies on for `sendMessage`).
+  const { recording, startRecording, transcribeOnRelease, pendingVoiceMessage, cancelPendingVoiceMessage, beginVoiceTurn, feedAssistantDelta, endVoiceTurn, stopPlayback } = useVoice(
+    (text) => sendMessage(text, selectionRef.current, "voice"),
+  );
 
   function nextId(): number {
     nextIdRef.current += 1;
@@ -165,11 +182,13 @@ export function CompanionPane({
       setStatusText(evt.text);
     } else if (evt.event === "text_delta") {
       assistantBufferRef.current += evt.delta;
+      if (isVoiceTurnRef.current) feedAssistantDelta(evt.delta);
     } else if (evt.event === "turn_complete") {
       const content = assistantBufferRef.current;
       assistantBufferRef.current = "";
       setTurnInFlight(false);
       setStatusText(null);
+      if (isVoiceTurnRef.current) endVoiceTurn();
       if (content) {
         setTranscript((prev) => [...prev, { id: nextId(), role: "assistant", content, citations: evt.citations }]);
       }
@@ -209,6 +228,10 @@ export function CompanionPane({
       if (evt.code !== "turn_in_progress") {
         setTurnInFlight(false);
         setStatusText(null);
+        // A terminal error still ends the turn — speak whatever partial
+        // reply already streamed in rather than dropping it silently
+        // (Rules.md: "partial results are never rolled back").
+        if (isVoiceTurnRef.current) endVoiceTurn();
       }
       setTranscript((prev) => [...prev, { id: nextId(), role: "error", content: evt.message }]);
     }
@@ -321,6 +344,8 @@ export function CompanionPane({
     // below), so the message goes out regardless and lets that answer
     // reach the transcript instead of being swallowed here first.
     if (!text.trim()) return;
+    isVoiceTurnRef.current = inputModality === "voice";
+    if (isVoiceTurnRef.current) beginVoiceTurn();
     const sent = socket.send({
       event: "user_message",
       text,
@@ -349,16 +374,6 @@ export function CompanionPane({
     setDraft("");
   }
 
-  // The chord-triggered path's deferred send (V13) reads `selectionRef`,
-  // not the `selection` prop directly — this callback fires from a timeout
-  // up to `CANCEL_WINDOW_MS` after the key was released, by which point a
-  // render carrying a newer `selection` may already have happened, exactly
-  // the staleness `selectionRef` already exists to guard against for
-  // `pendingAsk` above.
-  const { recording, startRecording, transcribeOnRelease, pendingVoiceMessage, cancelPendingVoiceMessage } = useVoice(
-    (text) => sendMessage(text, selectionRef.current, "voice"),
-  );
-
   async function handleMicRelease(): Promise<void> {
     if (!recording) return;
     const text = await transcribeOnRelease();
@@ -382,7 +397,14 @@ export function CompanionPane({
           </button>
         )}
         {turnInFlight && (
-          <button type="button" className="companion__stop" onClick={() => socket.send({ event: "interrupt" })}>
+          <button
+            type="button"
+            className="companion__stop"
+            onClick={() => {
+              socket.send({ event: "interrupt" });
+              stopPlayback();
+            }}
+          >
             ✕ Stop
           </button>
         )}
