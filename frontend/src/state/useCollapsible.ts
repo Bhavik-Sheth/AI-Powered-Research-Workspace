@@ -4,9 +4,15 @@ import { useState } from "react";
  * client layout state, persisted in localStorage so it survives a reload.
  * Not project data, so it never touches the backend.
  */
-export function useCollapsible(key: string): [boolean, () => void, (next: boolean) => void] {
+export function useCollapsible(
+  key: string,
+  defaultCollapsed = false,
+): [boolean, () => void, (next: boolean) => void] {
   const storageKey = `researchos.${key}`;
-  const [collapsed, setCollapsedState] = useState(() => localStorage.getItem(storageKey) === "true");
+  const [collapsed, setCollapsedState] = useState(() => {
+    const stored = localStorage.getItem(storageKey);
+    return stored === null ? defaultCollapsed : stored === "true";
+  });
 
   function toggle() {
     setCollapsedState((prev) => {

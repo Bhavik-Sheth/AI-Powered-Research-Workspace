@@ -68,6 +68,22 @@ export function useTabStack(projectId: string) {
     });
   }
 
+  /** Closes every open tab except Dashboard — same "Dashboard is never
+   * closable" rule the per-tab close button already enforces (it renders no
+   * close button for it), applied to all of them at once rather than one
+   * `closeTab` call per tab. If Dashboard somehow isn't in the stack, the
+   * empty-stack effect in `AppShell.tsx` reopens it, same as it does after
+   * closing the last tab individually. */
+  function closeAllTabs() {
+    setTabs((prev) => {
+      const next = prev.filter((tab) => tab.kind === "dashboard");
+      const nextActive = next[0]?.id ?? null;
+      persist(next, nextActive);
+      setActiveTab(nextActive);
+      return next;
+    });
+  }
+
   function activateTab(id: string) {
     setActiveTab(id);
     persist(tabs, id);
@@ -101,5 +117,5 @@ export function useTabStack(projectId: string) {
     });
   }
 
-  return { tabs, activeTab, loaded, error, reload, openTab, closeTab, activateTab, updateTabLabel, reorderTab };
+  return { tabs, activeTab, loaded, error, reload, openTab, closeTab, closeAllTabs, activateTab, updateTabLabel, reorderTab };
 }

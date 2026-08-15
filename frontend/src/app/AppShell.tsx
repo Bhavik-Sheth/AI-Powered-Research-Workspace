@@ -395,6 +395,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
     reload: reloadTabStack,
     openTab,
     closeTab,
+    closeAllTabs,
     activateTab,
     updateTabLabel,
     reorderTab,
@@ -426,7 +427,11 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
   // consumed there the same one-shot way `pendingAsk` already is.
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
   const [navCollapsed, toggleNav, setNavCollapsed] = useCollapsible("leftNavCollapsed");
-  const [companionCollapsed, toggleCompanion, setCompanionCollapsed] = useCollapsible("companionCollapsed");
+  // Collapsed by default (a fresh install, or any browser with no saved
+  // preference yet) — the Companion opens on demand rather than claiming
+  // screen space before the user has asked for it; an explicit toggle is
+  // still remembered either way, same as the nav's own collapse state.
+  const [companionCollapsed, toggleCompanion, setCompanionCollapsed] = useCollapsible("companionCollapsed", true);
   // The Experiments detail pane's own measured width (Phase 6.8), reported
   // by `ExperimentsBoard` while a notebook is open there; `null` when no
   // notebook is open, so the effect below has nothing to react to.
@@ -858,6 +863,15 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
                   )}
                 </div>
               )}
+              <button
+                type="button"
+                className="tab-bar__close-all"
+                aria-label="Close all tabs"
+                title="Close all tabs"
+                onClick={closeAllTabs}
+              >
+                Close all
+              </button>
             </div>
           )}
           <main className="center-pane-stack">

@@ -257,6 +257,15 @@
   color: var(--link-hover);
 }
 
+.companion__live-caption {
+  font: italic 12px/1.4 var(--font-ui);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: var(--radius-button);
+  background: var(--surface-muted);
+  min-height: 1.4em;
+}
+
 .companion__composer {
   display: flex;
   align-items: center;

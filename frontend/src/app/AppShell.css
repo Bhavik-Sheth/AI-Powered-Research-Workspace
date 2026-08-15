@@ -301,6 +301,23 @@ button.left-nav__item {
   color: var(--text-strong);
 }
 
+.tab-bar__close-all {
+  flex: none;
+  border: none;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-radius: var(--radius-button);
+  padding: 6px 10px;
+  margin-left: 6px;
+  cursor: pointer;
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
+}
+
+.tab-bar__close-all:hover {
+  color: var(--text-strong);
+}
+
 .tab-bar__overflow-menu {
   position: absolute;
   top: 100%;

@@ -9,6 +9,16 @@ import { isModifierKey, keysForBinding, type ModifierKey } from "./pttBinding";
 // isn't kept waiting.
 const CANCEL_WINDOW_MS = 2000;
 
+// Live captions while the mic is held — `faster_whisper.py` transcribes a
+// whole clip at once, it has no incremental/streaming decode mode, so this
+// is a best-effort approximation: every tick, whatever's been recorded
+// *so far* is re-transcribed from the start and replaces the caption.
+// 1.2s balances "feels live" against re-running the STT engine on a
+// steadily growing clip — a much shorter interval would mean the previous
+// poll is still often in flight when the next one would fire (the in-flight
+// guard below just skips that tick rather than piling up requests).
+const LIVE_CAPTION_POLL_MS = 1200;
+
 // Splits accumulated assistant text into complete sentences as it streams
 // (V7) — a terminator only counts once it's followed by real whitespace
 // already in the buffer, never by "end of buffer so far", so a period that
@@ -119,6 +129,40 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
   const onSendRef = useRef(onSendVoiceMessage);
   onSendRef.current = onSendVoiceMessage;
 
+  // Best-effort live caption of the clip recorded so far — null whenever
+  // not actively holding the mic. See `LIVE_CAPTION_POLL_MS`'s own comment
+  // for why this re-transcribes from the start each tick rather than
+  // streaming incrementally.
+  const [liveCaption, setLiveCaption] = useState<string | null>(null);
+  const liveCaptionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveCaptionInFlightRef = useRef(false);
+
+  function stopLiveCaptionPolling(): void {
+    if (liveCaptionTimerRef.current !== null) {
+      clearInterval(liveCaptionTimerRef.current);
+      liveCaptionTimerRef.current = null;
+    }
+    setLiveCaption(null);
+  }
+
+  async function pollLiveCaption(mimeType: string): Promise<void> {
+    if (liveCaptionInFlightRef.current || chunksRef.current.length === 0) return;
+    liveCaptionInFlightRef.current = true;
+    try {
+      const blobSoFar = new Blob(chunksRef.current, { type: mimeType });
+      const { text } = await postBinaryForJson<{ text: string }>("/api/voice/transcribe", await blobSoFar.arrayBuffer());
+      // Recording may have stopped while this request was in flight —
+      // don't resurrect a caption for a hold that already ended.
+      if (recorderRef.current) setLiveCaption(text);
+    } catch {
+      // A single failed poll just leaves the last caption showing; the
+      // final transcribe on release (`transcribeOnRelease`) is what
+      // actually matters and reports its own error independently.
+    } finally {
+      liveCaptionInFlightRef.current = false;
+    }
+  }
+
   async function startRecording(): Promise<void> {
     setError(null);
     try {
@@ -128,9 +172,15 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
-      recorder.start();
+      // A timeslice, not a bare `start()` — makes `ondataavailable` fire
+      // periodically *while still recording* instead of only once on
+      // `stop()`, which is what lets the live-caption poll below see
+      // anything before the hold ends.
+      recorder.start(LIVE_CAPTION_POLL_MS);
       recorderRef.current = recorder;
       setRecording(true);
+      setLiveCaption(null);
+      liveCaptionTimerRef.current = setInterval(() => void pollLiveCaption(recorder.mimeType), LIVE_CAPTION_POLL_MS);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not access the microphone");
     }
@@ -138,6 +188,7 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
 
   function stopRecording(): Promise<Blob | null> {
     return new Promise((resolve) => {
+      stopLiveCaptionPolling();
       const recorder = recorderRef.current;
       if (!recorder) {
         resolve(null);
@@ -318,6 +369,7 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
   useEffect(() => {
     return () => {
       if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
+      if (liveCaptionTimerRef.current !== null) clearInterval(liveCaptionTimerRef.current);
       stopPlayback();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -397,6 +449,7 @@ export function useVoice(onSendVoiceMessage: (text: string) => void) {
     error,
     startRecording,
     transcribeOnRelease,
+    liveCaption,
     pendingVoiceMessage,
     cancelPendingVoiceMessage,
     beginVoiceTurn,

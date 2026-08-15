@@ -168,9 +168,18 @@ export function CompanionPane({
   // (not yet assigned when this line runs, only when actually invoked,
   // long after render) is enough (same reasoning `pendingAsk`'s effect
   // below already relies on for `sendMessage`).
-  const { recording, startRecording, transcribeOnRelease, pendingVoiceMessage, cancelPendingVoiceMessage, beginVoiceTurn, feedAssistantDelta, endVoiceTurn, stopPlayback } = useVoice(
-    (text) => sendMessage(text, selectionRef.current, "voice"),
-  );
+  const {
+    recording,
+    startRecording,
+    transcribeOnRelease,
+    liveCaption,
+    pendingVoiceMessage,
+    cancelPendingVoiceMessage,
+    beginVoiceTurn,
+    feedAssistantDelta,
+    endVoiceTurn,
+    stopPlayback,
+  } = useVoice((text) => sendMessage(text, selectionRef.current, "voice"));
 
   function nextId(): number {
     nextIdRef.current += 1;
@@ -466,6 +475,16 @@ export function CompanionPane({
           );
         })}
       </div>
+
+      {recording && (
+        // Best-effort live captions (`useVoice`'s own doc comment on
+        // `LIVE_CAPTION_POLL_MS` explains why it's a periodic re-transcribe,
+        // not true streaming) — visible for both talk paths, mouse button
+        // and chord.
+        <div className="companion__live-caption" aria-live="polite">
+          {liveCaption ?? "Listening…"}
+        </div>
+      )}
 
       <div className="companion__composer">
         <input
