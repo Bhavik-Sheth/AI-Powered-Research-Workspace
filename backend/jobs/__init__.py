@@ -21,6 +21,7 @@ from saq.job import Job
 from saq.queue.postgres import PostgresQueue
 from saq.worker import Worker
 
+import settings
 from config import get_config
 from db import session
 from db.models import Project, ScheduledJobs
@@ -56,15 +57,32 @@ def _reextract_kwargs(row: ScheduledJobs) -> dict:
     return {"project_id": str(row.project_id), "timeout": _REEXTRACT_JOB_TIMEOUT_S}
 
 
-# job_kind -> (SAQ-registered handler name, cadence seconds, kwargs builder).
-_SCHEDULE_KINDS: dict[str, tuple[str, int, Callable[[ScheduledJobs], dict]]] = {
-    "feed_poll": ("poll_feed_job", _FEED_POLL_INTERVAL_S, _feed_poll_kwargs),
+# job_kind -> (SAQ-registered handler name, cadence seconds, kwargs builder,
+# needs_llm). `needs_llm` (bug-fix flag, see `run_catchup_pass`) marks a job
+# kind whose handler makes a real LLM call every time it runs —
+# `interest_profile_reextract_job` calls `complete_structured` unconditionally
+# (`feed/__init__.py`); `poll_feed_job` does not (`score_candidate`'s own
+# docstring: "no LLM anywhere in this path" — it uses the embeddings/
+# reranker capabilities, not a chat model). A `needs_llm=True` kind is only
+# ever dispatched once a provider is actually configured and validated —
+# see `_provider_is_configured` below.
+_SCHEDULE_KINDS: dict[str, tuple[str, int, Callable[[ScheduledJobs], dict], bool]] = {
+    "feed_poll": ("poll_feed_job", _FEED_POLL_INTERVAL_S, _feed_poll_kwargs, False),
     "interest_profile_reextract": (
         "interest_profile_reextract_job",
         _INTEREST_PROFILE_REEXTRACT_INTERVAL_S,
         _reextract_kwargs,
+        True,
     ),
 }
+
+# Bug-fix flag (Layer 3): a vault idle long enough to accumulate several
+# overdue rows across multiple projects/job-kinds must not replay all of
+# them in one burst the moment a process connects — cap one catch-up pass
+# to this many dispatches; anything past the cap simply stays overdue and
+# is picked up by the next real launch's pass, exactly as if this pass had
+# run a little later.
+_MAX_CATCHUP_DISPATCHES_PER_PASS = 2
 
 
 def _job_functions() -> list:
@@ -145,23 +163,65 @@ async def _ensure_schedule_rows(db_session, job_kind: str, interval_seconds: int
             )
 
 
+async def _provider_is_configured(db_session) -> bool:
+    """Bug-fix flag (Layer 1): whether a real completion call has anywhere
+    to go. `interest_profile_reextract_job` calls `complete_structured`
+    unconditionally the moment it's dispatched — dispatching it before any
+    provider is validated is a wasted call at best (it fails inside
+    `llm.complete`'s own resolution step) and, worse, dispatches real spend
+    the instant a provider *is* configured, with no chance for the caller
+    to have meant "just start the sidecar," which is exactly `SKIP_JOB_
+    CATCHUP` (Layer 2) already covers for that case. This check is the
+    narrower, always-on correctness fix: an `interest_profile_reextract`
+    row simply never counts as "due" — `last_run_at`/`next_due_at` are left
+    untouched — until onboarding has actually completed."""
+    model_settings = await settings.get_settings(db_session)
+    return bool(model_settings.primary_model or model_settings.auxiliary_model)
+
+
 async def run_catchup_pass() -> None:
-    """Runs any `scheduled_jobs` overdue since `last_run_at`, once, at startup."""
+    """Runs `scheduled_jobs` overdue since `last_run_at`, once, at startup —
+    bounded and provider-aware (bug fix, see module-level constants and
+    `_provider_is_configured` above): a `needs_llm` job kind is skipped
+    entirely (left overdue, retried next pass) while no provider is
+    configured, and at most `_MAX_CATCHUP_DISPATCHES_PER_PASS` rows are
+    actually dispatched — a vault idle long enough to owe several jobs
+    replays them a few at a time across real launches, never as one burst
+    against whatever provider happens to be configured the moment a
+    process connects (including a process that only wanted to verify the
+    sidecar boots)."""
     now = datetime.now(timezone.utc)
+    dispatched = 0
     async with session() as db_session:
-        for job_kind, (_, interval_seconds, _) in _SCHEDULE_KINDS.items():
+        for job_kind, (_, interval_seconds, _, _) in _SCHEDULE_KINDS.items():
             await _ensure_schedule_rows(db_session, job_kind, interval_seconds, now)
         await db_session.flush()
 
-        overdue = (await db_session.scalars(select(ScheduledJobs).where(ScheduledJobs.next_due_at <= now))).all()
+        provider_configured = await _provider_is_configured(db_session)
+
+        overdue = (
+            await db_session.scalars(
+                select(ScheduledJobs).where(ScheduledJobs.next_due_at <= now).order_by(ScheduledJobs.next_due_at)
+            )
+        ).all()
+        skipped_no_provider = 0
         for row in overdue:
             registered = _SCHEDULE_KINDS.get(row.job_kind)
             if registered is None:
                 continue
-            function_name, interval_seconds, kwargs_builder = registered
+            function_name, interval_seconds, kwargs_builder, needs_llm = registered
+            if needs_llm and not provider_configured:
+                skipped_no_provider += 1
+                continue  # left overdue on purpose — retried once a provider exists (Layer 1)
+            if dispatched >= _MAX_CATCHUP_DISPATCHES_PER_PASS:
+                break  # the rest stay overdue for the next pass (Layer 3)
             await enqueue(function_name, **kwargs_builder(row))
             row.last_run_at = now
             row.next_due_at = now + timedelta(seconds=interval_seconds)
+            dispatched += 1
 
-    if overdue:
-        logger.info("job_kind=catchup event=overdue_dispatched count=%d", len(overdue))
+    if dispatched or skipped_no_provider:
+        logger.info(
+            "job_kind=catchup event=catchup_pass_complete dispatched=%d skipped_no_provider=%d overdue_total=%d",
+            dispatched, skipped_no_provider, len(overdue),
+        )

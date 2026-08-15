@@ -134,7 +134,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await db.run_migrations()
                 readiness["database"] = "ready"
                 await jobs.start()
-                await jobs.run_catchup_pass()
+                if get_config().skip_job_catchup:
+                    # Bug-fix flag: a launch that only needs the sidecar up
+                    # (a test run, a smoke check) must never replay a
+                    # backlog of overdue scheduled jobs against a real
+                    # vault — two of those job kinds call a real LLM. New
+                    # jobs from real user actions still work; only this
+                    # on-launch backlog replay is skipped.
+                    logger.info("event=job_catchup_skipped reason=skip_job_catchup_set")
+                else:
+                    await jobs.run_catchup_pass()
             except Exception:
                 _mark_failed(readiness, "database")
 

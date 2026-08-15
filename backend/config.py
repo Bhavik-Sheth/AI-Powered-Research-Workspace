@@ -39,6 +39,17 @@ class Config(BaseSettings):
     postgres_port: int = 5433
     firecrawl_api_key: str | None = None
     s2_api_key: str | None = None
+    # Bug-fix flag (see jobs/__init__.py:run_catchup_pass's own docstring):
+    # a vault that has sat idle accumulates overdue `scheduled_jobs` rows,
+    # and `run_catchup_pass` fires all of them the moment ANY process
+    # connects to it — including a process that only wants to verify the
+    # sidecar boots. Two of those job kinds call a real LLM. Set
+    # `SKIP_JOB_CATCHUP=1` for any launch (a test run, a smoke check, an
+    # agent verifying startup) that must guarantee zero background spend —
+    # `jobs.start()` still runs, so jobs enqueued by real user actions
+    # during that process's lifetime still work; only the on-launch replay
+    # of a backlog is skipped.
+    skip_job_catchup: bool = False
 
     @property
     def database_url(self) -> str:

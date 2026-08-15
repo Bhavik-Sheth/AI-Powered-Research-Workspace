@@ -94,6 +94,14 @@ loads the frontend from `frontend/dist` (run `npm run build:frontend` first, or 
 BEARER_TOKEN=devtoken PYTHONPATH=backend uv run --project backend pytest tests/ -q
 ```
 
+If you also start the real sidecar (`uv run python main.py`) against an
+existing vault while testing or smoke-checking — not just the deterministic
+suite above — set `SKIP_JOB_CATCHUP=1` in `backend/.env` first. A vault
+idle long enough owes overdue scheduled jobs, and two of them (feed poll,
+interest-profile re-extraction) call the LLM; without this flag, the
+moment the process connects it replays the whole backlog against whatever
+provider is configured, including a real one. See `.env.example`.
+
 ## What's built so far
 
 Phase 1 (US1–US7) and Voice.1 are implemented and live-verified end to end:
