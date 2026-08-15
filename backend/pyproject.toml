@@ -25,6 +25,7 @@ dependencies = [
     "nbclient>=0.10",
     "python-multipart>=0.0.20",
     "faster-whisper>=1.2.1",
+    "piper-tts>=1.6.1",
 ]
 
 [dependency-groups]

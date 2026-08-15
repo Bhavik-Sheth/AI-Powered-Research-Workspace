@@ -2632,6 +2632,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pathvalidate"
+version = "3.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/2a/52a8da6fe965dea6192eb716b357558e103aea0a1e9a8352ad575a8406ca/pathvalidate-3.3.1.tar.gz", hash = "sha256:b18c07212bfead624345bb8e1d6141cdcf15a39736994ea0b94035ad2b1ba177", size = 63262, upload-time = "2025-06-15T09:07:20.736Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/70/875f4a23bfc4731703a5835487d0d2fb999031bd415e7d17c0ae615c18b7/pathvalidate-3.3.1-py3-none-any.whl", hash = "sha256:5263baab691f8e1af96092fa5137ee17df5bdfbd6cff1fcac4d6ef4bc2e1735f", size = 24305, upload-time = "2025-06-15T09:07:19.117Z" },
+]
+
+[[package]]
 name = "pgvector"
 version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2723,6 +2732,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/20/22fe9384b7949e25fb1293bcfc84fb82590ff4ea6b37c95b24d26d793d86/pillow-12.3.0-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:fbd139c8447d25dd750ab79ee274cc5e1fe80fc56340ab10b18a195e1b6eca3e", size = 5237776, upload-time = "2026-07-01T11:56:30.263Z" },
     { url = "https://files.pythonhosted.org/packages/08/14/f6ba68107680ffa74b39985f3f30884e41318fbc4250caa423c79b4788bb/pillow-12.3.0-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e7e480451b9fa137494bccd3a7d69adbe8ac65a87d97be61e11f1b1050a5bac3", size = 5860358, upload-time = "2026-07-01T11:56:32.68Z" },
     { url = "https://files.pythonhosted.org/packages/36/54/0169bc772ec491108b62f644f8ecf1fe5d8ae5ebafde2ee2142210166903/pillow-12.3.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:04f01d28a6aaff387bf842a13be313df23ba0597a44f1a976c9feb3c6ff4711a", size = 7231786, upload-time = "2026-07-01T11:56:35.046Z" },
+]
+
+[[package]]
+name = "piper-tts"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "onnxruntime" },
+    { name = "pathvalidate" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/b4/ca1567b991df8117e5a2ca7b0be660a32add64faed22edbeb807261da34f/piper_tts-1.6.1.tar.gz", hash = "sha256:4a01e73e4607947708638a035bf5c4fb463312a7606cad30ffaf9d0dafdccf88", size = 24261764, upload-time = "2026-08-13T15:24:00.93Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/ec/64ce79474e8623ec5854ffd58cc910dac3a84f060afc0b52a3e15c50aed1/piper_tts-1.6.1-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:a08da11fbe14cdf4582c6a8c79e181dc69fc4d529c4204f68ae75c81d4136343", size = 34101356, upload-time = "2026-08-13T15:23:44.309Z" },
+    { url = "https://files.pythonhosted.org/packages/34/e4/a7c9b78fd7434f33380a9c6685e784592b5da194f5f5f521addce6184c22/piper_tts-1.6.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:c19f94181a72d0968a588778bc13a6e7361aec87519e226b0296ad611b4cfe6b", size = 34109315, upload-time = "2026-08-13T15:23:47.551Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/77/0e23f8b4484734e9445b289d29de27972e71f006dc61ea5f915ddb460d21/piper_tts-1.6.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:95e5b54a6b336c1f7fa084752e13444dca99a6244ffc92cf99e0065d88bdbe15", size = 34121327, upload-time = "2026-08-13T15:23:50.907Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/d4/3ed594147f673fbab25775be4568510706cbd47d7a58145485f26fc599d9/piper_tts-1.6.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c586e71e7923360bc530e411a6d10636bc0c31de37caeddb27731671889ece79", size = 34121020, upload-time = "2026-08-13T15:23:54.329Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/9e/972aa29e47417c7557b221d43f9817b1bcd3d16464e8b18713a5160ad5ac/piper_tts-1.6.1-cp39-abi3-win_amd64.whl", hash = "sha256:30e5203d2fceb4baa5c95ead6f408847fb5970540d840478dc8e6d397679cefc", size = 34109166, upload-time = "2026-08-13T15:23:57.823Z" },
 ]
 
 [[package]]
@@ -3567,6 +3593,7 @@ dependencies = [
     { name = "nbclient" },
     { name = "nbformat" },
     { name = "pgvector" },
+    { name = "piper-tts" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
@@ -3598,6 +3625,7 @@ requires-dist = [
     { name = "nbclient", specifier = ">=0.10" },
     { name = "nbformat", specifier = ">=5.10" },
     { name = "pgvector", specifier = ">=0.5.0" },
+    { name = "piper-tts", specifier = ">=1.6.1" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "python-multipart", specifier = ">=0.0.20" },

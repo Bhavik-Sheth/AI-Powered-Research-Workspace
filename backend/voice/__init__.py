@@ -2,12 +2,10 @@
 is configured (MODULES.md, D37). The one module boundary voice must be
 swappable behind: no other module may import an STT/TTS library, name an
 engine, or know a model exists. `stub` ships alongside the first real
-engine, `faster_whisper` for STT (Voice Layer Plan V3) — lazy-loaded on
-first call exactly like `search/reranker.py` and `memory/embedder.py`
-already are. `voice_engine`'s value names an engine *profile*, not a
-single library (V11): the `faster_whisper` key will pick up Piper as its
-TTS half once that engine registers here too, so one setting selects both
-directions.
+profile, `faster_whisper` (Voice Layer Plan V11: one `voice_engine` value
+names an engine *profile* — faster-whisper STT paired with Piper TTS — not
+two independently selected libraries), lazy-loaded on first call exactly
+like `search/reranker.py` and `memory/embedder.py` already are.
 
 The selected engine name is cached in-process after the first DB read
 (Voice Layer Plan §2, "decided without a question") so the hot
@@ -29,7 +27,7 @@ from collections.abc import Awaitable, Callable
 
 import db
 import settings
-from voice import faster_whisper, stub
+from voice import faster_whisper, piper, stub
 from voice.models import Transcript
 
 __all__ = ["transcribe", "synthesize", "invalidate_engine_cache"]
@@ -40,7 +38,10 @@ _TRANSCRIBE_ENGINES: dict[str, Callable[[bytes, str], Awaitable[Transcript]]] = 
     "stub": stub.transcribe,
     "faster_whisper": faster_whisper.transcribe,
 }
-_SYNTHESIZE_ENGINES: dict[str, Callable[[str, str], Awaitable[bytes]]] = {"stub": stub.synthesize}
+_SYNTHESIZE_ENGINES: dict[str, Callable[[str, str], Awaitable[bytes]]] = {
+    "stub": stub.synthesize,
+    "faster_whisper": piper.synthesize,
+}
 
 _cached_engine: str | None = None
 
