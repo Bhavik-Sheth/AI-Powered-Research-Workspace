@@ -42,28 +42,44 @@
   --link: #ff9b51;
   --link-hover: #ffb37d;
 
+  /* Ember ordinal ramp — dark → bright, for ordered-scale data encoding only
+     (the dashboard progress meter). Sanctioned like `--graph-node-*`: a
+     4-step scale, not four independent accents. Validated as an ordinal ramp
+     with dataviz/scripts/validate_palette.js (monotone L, adjacent ΔL ≥ 0.06). */
+  --ramp-ember-1: #7a3400;
+  --ramp-ember-2: #b35100;
+  --ramp-ember-3: #ff6c02;
+  --ramp-ember-4: #ff9b51;
+  /* The decorative wash — one faint Ember bloom from a tile's top-left,
+     applied as a system across every dashboard tile, never a per-card
+     flourish. Layer it over a solid surface in `background`. */
+  --ember-bloom: radial-gradient(130% 90% at 0% 0%, rgba(255, 108, 2, 0.08), transparent 55%);
+
   /* ── Text & borders (BaseHub neutrals) ───────────────────────────────── */
   --text-strong: #f3f3f3;      /* Bone White — headings, primary actions only */
   --text: #dedede;             /* Ash Gray — running content text */
   --text-muted: #909090;       /* Fog Gray — body / secondary / labels */
-  --text-faint: #646464;       /* Slate Gray — timestamps, disabled, hints */
+  --text-faint: #646464;       /* Slate Gray — timestamps, disabled hints, non-text borders (3:1 OK, not for body text) */
+  --text-placeholder: #7d7d7d; /* dimmest ink that still clears WCAG AA on the input surfaces (4.55:1 on #121212) */
   --border: #303030;           /* Iron Border — structural dividers */
   --border-faint: #252525;     /* Charcoal Edge — card / panel borders */
   --border-dashed: #3a3a3a;    /* dashed placeholders / pending chips */
   --graph-edge: #3a3a3a;
 
   /* Categorical palette — the one sanctioned exception to "one accent".
-     Knowledge-graph node types only (§ graph). Equal lightness/chroma so no
-     type reads as more important; each is also paired with a shape
-     (frontend/src/graph/nodeStyle.ts) so it survives color-blindness.
-     Duplicated as literals there because Cytoscape's canvas renderer cannot
-     resolve a CSS custom property. */
-  --graph-node-paper: oklch(66% 0.16 245);     /* blue — kept cool so it never competes with Ember */
-  --graph-node-author: oklch(66% 0.15 285);    /* purple */
-  --graph-node-dataset: oklch(70% 0.15 150);   /* green */
-  --graph-node-method: oklch(74% 0.14 75);     /* amber */
-  --graph-node-repo: oklch(68% 0.16 330);      /* magenta */
-  --graph-node-idea: oklch(70% 0.15 25);       /* warm red */
+     Knowledge-graph node types only (§ graph). Stepped for the dark card
+     surface and validated colour-blind-safe (dataviz validate_palette.js:
+     worst adjacent CVD ΔE 14.1, normal-vision ΔE 22.4, all ≥ 3:1). Each is
+     also paired with a shape (frontend/src/graph/nodeStyle.ts) so identity
+     never rests on colour alone. Kept as hex, mirrored in nodeStyle.ts,
+     because Cytoscape's canvas renderer cannot resolve a CSS custom
+     property or parse oklch(). Keep the two files in sync. */
+  --graph-node-paper: #2389e2;    /* blue */
+  --graph-node-author: #8f6edb;   /* purple */
+  --graph-node-dataset: #20a04e;  /* green */
+  --graph-node-method: #bd7400;   /* amber */
+  --graph-node-repo: #ba5db3;     /* magenta */
+  --graph-node-idea: #d55753;     /* warm red */
 
   /* Informational — Glacier Blue. Status chips / info badges only, never a
      surface or a CTA. */
@@ -151,7 +167,7 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: var(--text-faint);
+  color: var(--text-placeholder);
 }
 
 /* Text selection everywhere picks up the Ember tint rather than the browser

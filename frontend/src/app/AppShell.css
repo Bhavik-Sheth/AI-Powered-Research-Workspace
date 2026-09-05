@@ -98,7 +98,7 @@ body {
 }
 
 .top-bar__search::placeholder {
-  color: var(--text-faint);
+  color: var(--text-placeholder);
 }
 
 .top-bar__search:focus {

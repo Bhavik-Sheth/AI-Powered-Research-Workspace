@@ -1,7 +1,7 @@
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .dashboard__title {
@@ -11,13 +11,116 @@
   margin: 0;
 }
 
-/* "Currently working on" (Phase 6.10) — the project's focus_seed plus every
-   in-progress experiment's hypothesis, both plain projected text. */
-.dashboard__focus {
-  background: var(--surface-raised);
+/* KPI row — a plain 4-up grid, uniform height, no raggedness. */
+.dashboard__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Bento body — a two-column masonry (CSS multi-column). Tiles pack
+   vertically inside each column with no row alignment, so a short tile never
+   leaves a gap under it waiting for a tall neighbour. `--wide` tiles break
+   the columns and run full width. */
+.dashboard__grid {
+  column-count: 2;
+  column-gap: 12px;
+}
+
+.dashboard__tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
   border-radius: var(--radius-card);
-  box-shadow: var(--panel-shadow);
-  padding: 12px 14px;
+  border: 1px solid var(--border);
+  /* The "gradient of orange" — one faint Ember bloom from the top-left,
+     the same on every tile so it reads as the surface, not decoration. */
+  background: var(--ember-bloom), var(--surface-raised);
+}
+
+.dashboard__tile--kpi {
+  gap: 4px;
+}
+
+/* Column-flow tiles: keep each tile whole and give it the gap the column
+   layout doesn't provide between siblings. */
+.dashboard__grid > .dashboard__tile {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+
+.dashboard__grid > .dashboard__tile--wide {
+  column-span: all;
+}
+
+@container center-pane (max-width: 940px) {
+  .dashboard__kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dashboard__grid {
+    column-count: 1;
+  }
+}
+
+@container center-pane (max-width: 520px) {
+  .dashboard__kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Section header — a small Ember-gradient tick makes each tile's start
+   unmistakable without another border. */
+.dashboard__section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 10px var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 2px;
+}
+
+.dashboard__section-label::before {
+  content: "";
+  flex: none;
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-text));
+}
+
+.dashboard__empty {
+  font: 12px var(--font-ui);
+  color: var(--text-muted);
+}
+
+/* ── KPI tile inner ──────────────────────────────────────────────────── */
+.dashboard__kpi-label {
+  font: 700 10px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.dashboard__kpi-value {
+  font: 700 26px var(--font-reading);
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+}
+
+.dashboard__kpi-qualifier {
+  font: 400 10px var(--font-ui);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Currently working on ────────────────────────────────────────────── */
+.dashboard__focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -35,92 +138,144 @@
   margin: 0;
 }
 
-/* Progress meter (Phase 6.10) — one bar, four bands, exactly the four
-   `experiments.status` values. Never the danger family. */
-.dashboard__progress-meter {
+/* ── Progress donut ─────────────────────────────────────────────────────
+   Part-to-whole at a glance. Four `experiments.status` values as arcs in the
+   Ember ordinal ramp (dark planned → bright done), a 2px surface gap between
+   them, the done count in the centre, and a legend that keeps every exact
+   count readable. Never the danger family. */
+.dashboard__donut-row {
   display: flex;
-  height: 10px;
-  border-radius: var(--radius-badge);
-  overflow: hidden;
-  background: var(--border);
-}
-
-.dashboard__progress-band {
-  height: 100%;
-}
-
-.dashboard__progress-band--planned {
-  background: var(--border);
-}
-
-.dashboard__progress-band--remaining {
-  background: var(--text-muted);
-  opacity: 0.5;
-}
-
-.dashboard__progress-band--in_progress {
-  background: var(--accent-text-outline);
-}
-
-.dashboard__progress-band--done {
-  background: var(--accent);
-}
-
-.dashboard__progress-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.dashboard__progress-legend-item {
-  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font: 11px var(--font-ui);
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.dashboard__donut {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  flex: none;
+}
+
+.dashboard__donut svg {
+  width: 100%;
+  height: 100%;
+  /* start the first arc at 12 o'clock */
+  transform: rotate(-90deg);
+}
+
+.dashboard__donut-track {
+  fill: none;
+  stroke: var(--surface-muted);
+  stroke-width: 4;
+}
+
+.dashboard__donut-arc {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: butt;
+}
+
+.dashboard__donut-arc--planned {
+  stroke: var(--ramp-ember-1);
+}
+.dashboard__donut-arc--remaining {
+  stroke: var(--ramp-ember-2);
+}
+.dashboard__donut-arc--in_progress {
+  stroke: var(--ramp-ember-3);
+}
+.dashboard__donut-arc--done {
+  stroke: var(--ramp-ember-4);
+}
+
+.dashboard__donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.dashboard__donut-value {
+  font: 700 30px var(--font-reading);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text-strong);
+}
+
+.dashboard__donut-label {
+  font: 400 10px var(--font-ui);
   color: var(--text-muted);
 }
 
+.dashboard__donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dashboard__donut-legend-item {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font: 12px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.dashboard__donut-legend-count {
+  font: 700 12px var(--font-mono);
+  color: var(--text-strong);
+}
+
 .dashboard__progress-swatch {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 2px;
 }
 
 .dashboard__progress-swatch--planned {
-  background: var(--border);
+  background: var(--ramp-ember-1);
 }
-
 .dashboard__progress-swatch--remaining {
-  background: var(--text-muted);
-  opacity: 0.5;
+  background: var(--ramp-ember-2);
 }
-
 .dashboard__progress-swatch--in_progress {
-  background: var(--accent-text-outline);
+  background: var(--ramp-ember-3);
 }
-
 .dashboard__progress-swatch--done {
-  background: var(--accent);
+  background: var(--ramp-ember-4);
 }
 
-/* Pending experiments / relevant papers (Phase 6.10) — same row language as
-   the resume rows below. */
+/* ── List rows (pending / relevant / resume / nudge) ─────────────────── */
+/* Inside a tile these drop to the darker `--surface` so they read as
+   distinct chips against the tile's own raised surface. */
 .dashboard__pending-row,
 .dashboard__relevant-row {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  background: var(--surface-raised);
-  border: none;
-  border-radius: var(--radius-card);
-  box-shadow: var(--panel-shadow);
-  padding: 10px 14px;
-  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-button);
+  padding: 10px 12px;
   text-align: left;
   font: 600 13px var(--font-reading);
   color: var(--text-strong);
+}
+
+.dashboard__pending-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .dashboard__relevant-row {
@@ -128,24 +283,10 @@
 }
 
 .dashboard__relevant-row:hover {
-  border: 1px solid var(--accent);
-  padding: 9px 13px;
+  border-color: var(--accent);
 }
 
 .dashboard__pending-hypothesis {
-  font: 12px var(--font-ui);
-  color: var(--text-muted);
-}
-
-.dashboard__section-label {
-  font: 700 10px var(--font-ui);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin: 0 0 8px;
-}
-
-.dashboard__empty {
   font: 12px var(--font-ui);
   color: var(--text-muted);
 }
@@ -154,18 +295,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--surface-raised);
-  border: 1px solid transparent;
-  border-radius: var(--radius-card);
-  box-shadow: var(--panel-shadow);
-  padding: 12px 14px;
-  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-button);
+  padding: 10px 12px;
 }
 
 /* The row for the tab that is actually on screen right now — same
- * accent-tint + accent-border language the tab strip and notes list use
- * for "this one is active" (AppShell.css .tab-bar__tab--active,
- * NotesView.css .notes-view__row--active). */
+ * accent-tint + accent-border language the tab strip and notes list use. */
 .dashboard__resume-row--active {
   background: var(--accent-tint-12);
   border-color: var(--accent);
@@ -187,6 +324,10 @@
   font: 600 13px var(--font-reading);
   color: var(--text-strong);
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard__resume-badge {
@@ -203,6 +344,7 @@
 .dashboard__resume-context {
   font: 11px var(--font-ui);
   color: var(--text-muted);
+  flex: none;
 }
 
 .dashboard__resume-link {
@@ -212,6 +354,7 @@
   border: none;
   cursor: pointer;
   padding: 0;
+  flex: none;
 }
 
 .dashboard__resume-link:hover {
@@ -225,9 +368,8 @@
   align-items: center;
   gap: 12px;
   border: 1px dashed var(--border-dashed);
-  border-radius: var(--radius-card);
-  padding: 12px 14px;
-  margin-bottom: 8px;
+  border-radius: var(--radius-button);
+  padding: 10px 12px;
 }
 
 .dashboard__nudge-text {
