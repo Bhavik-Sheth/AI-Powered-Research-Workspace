@@ -14,7 +14,8 @@
 }
 
 .experiments__title {
-  font: 800 20px var(--font-reading);
+  font: 700 20px var(--font-reading);
+  letter-spacing: -0.02em;
   color: var(--text-strong);
   margin: 0;
 }
@@ -44,7 +45,7 @@
   border: none;
   border-radius: var(--radius-button);
   background: var(--accent);
-  color: var(--surface-raised);
+  color: var(--text-strong);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -433,7 +434,7 @@
   border: none;
   border-radius: var(--radius-button);
   background: var(--accent);
-  color: var(--surface-raised);
+  color: var(--text-strong);
   cursor: pointer;
 }
 
@@ -458,4 +459,13 @@
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Reflow to the center pane's width (container on `.center-pane`). The rail
+   moves above the detail pane instead of competing with it for width. */
+@container center-pane (max-width: 620px) {
+  .experiments__layout { flex-direction: column; }
+  .experiments__rail { width: auto; max-height: 184px; }
+  .experiments__rail--collapsed { width: auto; height: 28px; max-height: 28px; }
+  .experiments__header { flex-direction: column; align-items: flex-start; }
 }

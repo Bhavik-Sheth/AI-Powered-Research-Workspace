@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#040404}
+a{color:#ff6c02}
+a:hover{color:#ff9b51}
+::-webkit-scrollbar{width:10px}
+</style>
+</helmet>
+
+<div style="max-width:1040px;margin:0 auto;padding:56px 32px 112px;font-family:'Geist',sans-serif;color:#f3f3f3">
+
+  <div style="margin-bottom:56px">
+    <div style="font:600 12px 'Geist',sans-serif;letter-spacing:.06em;color:#ff6c02;text-transform:uppercase;margin-bottom:12px">Design System</div>
+    <div style="font:600 48px 'Geist',sans-serif;letter-spacing:-1.92px;line-height:1.14;margin-bottom:12px">Research Companion OS</div>
+    <div style="font:400 16px/1.5 'Geist',sans-serif;color:#909090;max-width:640px">A near-monochrome, dark-canvas theme built for a research workspace — one molten orange accent doing the work of a full color system, flat hairline-bordered surfaces, and Geist's tight negative tracking throughout. Adapted from BaseHub's visual language.</div>
+  </div>
+
+  <!-- COLORS -->
+  <div style="font:600 24px 'Geist',sans-serif;letter-spacing:-0.72px;margin-bottom:20px;padding-top:8px;border-top:1px solid #252525">Colors</div>
+
+  <div style="font:500 14px 'Geist',sans-serif;color:#dedede;margin-bottom:12px">Accent</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:32px">
+    <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;overflow:hidden">
+      <div style="height:64px;background:#ff6c02"></div>
+      <div style="padding:10px 12px"><div style="font:500 13px 'Geist',sans-serif">Ember Orange</div><div style="font:400 12px 'Geist Mono',monospace;color:#909090">#ff6c02</div></div>
+    </div>
+    <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;overflow:hidden">
+      <div style="height:64px;background:linear-gradient(#ff6c02,#ff9b51)"></div>
+      <div style="padding:10px 12px"><div style="font:500 13px 'Geist',sans-serif">Ember Glow</div><div style="font:400 12px 'Geist Mono',monospace;color:#909090">→ #ff9b51</div></div>
+    </div>
+    <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;overflow:hidden">
+      <div style="height:64px;background:#ff5c5c"></div>
+      <div style="padding:10px 12px"><div style="font:500 13px 'Geist',sans-serif">Signal Red</div><div style="font:400 12px 'Geist Mono',monospace;color:#909090">#ff5c5c · intentional addition, danger states only</div></div>
+    </div>
+  </div>
+
+  <div style="font:500 14px 'Geist',sans-serif;color:#dedede;margin-bottom:12px">Surfaces (elevation, darkest → lightest)</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:32px">
+    <sc-for list="{{ surfaces }}" as="s" hint-placeholder-count="5">
+      <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;overflow:hidden">
+        <div style="height:56px;background:{{ s.hex }}"></div>
+        <div style="padding:10px 12px"><div style="font:500 13px 'Geist',sans-serif">{{ s.name }}</div><div style="font:400 12px 'Geist Mono',monospace;color:#909090">{{ s.hex }}</div></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="font:500 14px 'Geist',sans-serif;color:#dedede;margin-bottom:12px">Text &amp; borders</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:32px">
+    <sc-for list="{{ neutrals }}" as="n" hint-placeholder-count="6">
+      <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;overflow:hidden">
+        <div style="height:56px;background:{{ n.hex }}"></div>
+        <div style="padding:10px 12px"><div style="font:500 13px 'Geist',sans-serif">{{ n.name }}</div><div style="font:400 12px 'Geist Mono',monospace;color:#909090">{{ n.hex }} · {{ n.role }}</div></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="font:500 14px 'Geist',sans-serif;color:#dedede;margin-bottom:12px">Functional accents (graph &amp; status only)</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:32px">
+    <sc-for list="{{ functional }}" as="f" hint-placeholder-count="5">
+      <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;overflow:hidden">
+        <div style="height:56px;background:{{ f.hex }}"></div>
+        <div style="padding:10px 12px"><div style="font:500 13px 'Geist',sans-serif">{{ f.name }}</div><div style="font:400 12px 'Geist Mono',monospace;color:#909090">{{ f.hex }}</div></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- TYPE -->
+  <div style="font:600 24px 'Geist',sans-serif;letter-spacing:-0.72px;margin-bottom:20px;padding-top:8px;border-top:1px solid #252525">Typography</div>
+  <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;padding:24px;margin-bottom:20px;display:flex;flex-direction:column;gap:18px">
+    <div style="font:600 60px 'Geist',sans-serif;letter-spacing:-3px;line-height:1.1">Display 60</div>
+    <div style="font:600 48px 'Geist',sans-serif;letter-spacing:-1.92px;line-height:1.14">Display 48</div>
+    <div style="font:600 32px 'Geist',sans-serif;letter-spacing:-0.96px;line-height:1.2">Heading 32</div>
+    <div style="font:600 24px 'Geist',sans-serif;letter-spacing:-0.72px;line-height:1.23">Heading 24</div>
+    <div style="font:600 18px 'Geist',sans-serif;letter-spacing:-0.54px;line-height:1.4">Heading-sm 18</div>
+    <div style="font:400 14px/1.5 'Geist',sans-serif;color:#909090">Body 14 — regular weight, Fog Gray, left-aligned always. The tight negative tracking at every size is what makes the type feel machined rather than typeset.</div>
+    <div style="font:400 13px/1.5 'Geist Mono',monospace;color:#909090">Geist Mono 13 — version tags, branch labels, file paths, inline commit IDs.</div>
+  </div>
+  <div style="font:400 13px/1.6 'Geist',sans-serif;color:#909090;margin-bottom:32px">Geist substitute: Inter. Weights 400/500/600. Letter-spacing runs from -0.05em at 60px to normal at 11–14px.</div>
+
+  <!-- SPACING / RADIUS -->
+  <div style="font:600 24px 'Geist',sans-serif;letter-spacing:-0.72px;margin-bottom:20px;padding-top:8px;border-top:1px solid #252525">Spacing &amp; radius</div>
+  <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap">
+    <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;padding:20px;flex:1;min-width:260px">
+      <div style="font:500 13px 'Geist',sans-serif;color:#dedede;margin-bottom:12px">Spacing scale (4px base)</div>
+      <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+        <sc-for list="{{ spacing }}" as="sp" hint-placeholder-count="8">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <div style="width:{{ sp.px }}px;height:12px;background:#ff6c02;border-radius:2px"></div>
+            <div style="font:400 11px 'Geist Mono',monospace;color:#646464">{{ sp.px }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;padding:20px;flex:1;min-width:260px">
+      <div style="font:500 13px 'Geist',sans-serif;color:#dedede;margin-bottom:12px">Corner radius</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="text-align:center"><div style="width:48px;height:48px;background:#1b1b1b;border-radius:4px;margin-bottom:6px"></div><div style="font:400 11px 'Geist Mono',monospace;color:#646464">4 · buttons</div></div>
+        <div style="text-align:center"><div style="width:48px;height:48px;background:#1b1b1b;border-radius:8px;margin-bottom:6px"></div><div style="font:400 11px 'Geist Mono',monospace;color:#646464">8 · inputs</div></div>
+        <div style="text-align:center"><div style="width:48px;height:48px;background:#1b1b1b;border-radius:12px;margin-bottom:6px"></div><div style="font:400 11px 'Geist Mono',monospace;color:#646464">12 · cards/panels</div></div>
+        <div style="text-align:center"><div style="width:48px;height:48px;background:#1b1b1b;border-radius:16px;margin-bottom:6px"></div><div style="font:400 11px 'Geist Mono',monospace;color:#646464">16 · outer frame</div></div>
+        <div style="text-align:center"><div style="width:48px;height:48px;background:#1b1b1b;border-radius:9999px;margin-bottom:6px"></div><div style="font:400 11px 'Geist Mono',monospace;color:#646464">9999 · pills/badges</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPONENTS -->
+  <div style="font:600 24px 'Geist',sans-serif;letter-spacing:-0.72px;margin-bottom:20px;padding-top:8px;border-top:1px solid #252525">Components</div>
+  <div style="background:#0c0c0c;border:1px solid #252525;border-radius:12px;padding:24px;margin-bottom:32px;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <div style="background:#ff6c02;color:#f3f3f3;font:500 14px 'Geist',sans-serif;border-radius:4px;padding:10px 16px">Primary action</div>
+      <div style="background:transparent;color:#909090;border:1px solid #909090;font:500 14px 'Geist',sans-serif;border-radius:4px;padding:10px 16px">Secondary</div>
+      <div style="background:#1b1b1b;color:#f3f3f3;font:500 14px 'Geist',sans-serif;border-radius:4px;padding:6px 12px">Nav login</div>
+      <div style="background:transparent;color:#ff6c02;border:1px solid #ff6c02;font:500 12px 'Geist',sans-serif;border-radius:9999px;padding:6px 12px">Section tag</div>
+      <div style="background:transparent;color:#55c2ff;border:1px solid #55c2ff;font:500 12px 'Geist',sans-serif;border-radius:9999px;padding:4px 10px">Info badge</div>
+      <div style="background:transparent;color:#909090;border:1px solid #909090;font:500 11px 'Geist',sans-serif;border-radius:4px;padding:2px 6px">New</div>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="background:#121212;border:1px solid #252525;border-radius:12px;padding:24px;max-width:280px">
+        <div style="font:400 14px/1.5 'Geist',sans-serif;color:#f3f3f3;margin-bottom:12px">"The companion surfaces exactly what's in the paper — nothing more."</div>
+        <div style="font:400 12px 'Geist',sans-serif;color:#909090">— a researcher, on trust</div>
+      </div>
+      <div style="background:#121212;border:1px solid #252525;border-radius:12px;padding:16px;max-width:220px">
+        <div style="height:2px;background:#ff6c02;margin:-16px -16px 12px"></div>
+        <div style="font:600 16px 'Geist',sans-serif;margin-bottom:4px">Template card</div>
+        <div style="font:400 13px 'Geist',sans-serif;color:#909090">2px accent bar, flat fill, no padding on media</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DO / DONT -->
+  <div style="font:600 24px 'Geist',sans-serif;letter-spacing:-0.72px;margin-bottom:20px;padding-top:8px;border-top:1px solid #252525">Do's and don'ts</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:8px">
+    <div>
+      <div style="font:600 14px 'Geist',sans-serif;color:#ff6c02;margin-bottom:10px">Do</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ dos }}" as="d" hint-placeholder-count="4">
+          <div style="font:400 13px/1.5 'Geist',sans-serif;color:#909090">— {{ d }}</div>
+        </sc-for>
+      </div>
+    </div>
+    <div>
+      <div style="font:600 14px 'Geist',sans-serif;color:#ff5c5c;margin-bottom:10px">Don't</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ donts }}" as="d" hint-placeholder-count="4">
+          <div style="font:400 13px/1.5 'Geist',sans-serif;color:#909090">— {{ d }}</div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      surfaces: [
+        {name:'Void', hex:'#040404'},
+        {name:'Onyx', hex:'#0c0c0c'},
+        {name:'Obsidian', hex:'#121212'},
+        {name:'Graphite', hex:'#1b1b1b'},
+        {name:'Black', hex:'#000000'},
+      ],
+      neutrals: [
+        {name:'Bone White', hex:'#f3f3f3', role:'primary text/headings'},
+        {name:'Ash Gray', hex:'#dedede', role:'secondary headings'},
+        {name:'Fog Gray', hex:'#909090', role:'body/secondary text'},
+        {name:'Slate Gray', hex:'#646464', role:'muted/timestamps'},
+        {name:'Iron Border', hex:'#303030', role:'structural borders'},
+        {name:'Charcoal Edge', hex:'#252525', role:'card/panel borders'},
+      ],
+      functional: [
+        {name:'Glacier Blue', hex:'#55c2ff'},
+        {name:'Signal Red', hex:'#ff5c5c'},
+        {name:'Node — purple', hex:'oklch(58% 0.14 285)'},
+        {name:'Node — green', hex:'oklch(58% 0.14 150)'},
+        {name:'Node — amber', hex:'oklch(62% 0.13 75)'},
+      ],
+      spacing: [4,8,12,16,20,24,32,56].map(px => ({px})),
+      dos: [
+        'Use Ember Orange for exactly one element per view: a CTA, a section tag, or the frame border — never several at once',
+        'Set headings in Geist 600 with tight negative tracking; it\u2019s what makes the type feel machined',
+        'Define surfaces with 1px hairline borders (#252525 / #303030) instead of shadows',
+        'Keep body copy in Fog Gray and reserve Bone White for headlines and primary actions',
+      ],
+      donts: [
+        'Never introduce a second warm color — orange is the only warm voice in the system',
+        'Don\u2019t use drop shadows on cards, buttons, or nav — the design rejects elevation as a signal',
+        'Don\u2019t use Glacier Blue outside informational badges and status chips',
+        'Don\u2019t exceed 12px radius on cards or 4px on buttons — larger radii read as a different, friendlier product',
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

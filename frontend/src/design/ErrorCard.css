@@ -25,7 +25,7 @@
   padding: 0 14px;
   font: 700 12px var(--font-ui);
   background: var(--danger-fill);
-  color: #fff;
+  color: var(--text-strong);
   border: none;
   cursor: pointer;
 }

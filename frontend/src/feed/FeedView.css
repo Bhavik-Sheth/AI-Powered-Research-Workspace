@@ -64,7 +64,7 @@
 .feed__save {
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--text-strong);
 }
 
 .feed__save:hover {

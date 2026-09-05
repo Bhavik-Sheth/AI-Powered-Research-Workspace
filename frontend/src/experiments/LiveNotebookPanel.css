@@ -101,7 +101,7 @@
   border: none;
   border-radius: var(--radius-button);
   background: var(--accent);
-  color: var(--surface-raised);
+  color: var(--text-strong);
   cursor: pointer;
 }
 

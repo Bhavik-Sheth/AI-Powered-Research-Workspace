@@ -5,7 +5,8 @@
 }
 
 .dashboard__title {
-  font: 800 20px var(--font-reading);
+  font: 700 20px var(--font-reading);
+  letter-spacing: -0.02em;
   color: var(--text-strong);
   margin: 0;
 }

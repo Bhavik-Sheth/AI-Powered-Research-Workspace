@@ -90,7 +90,8 @@
 }
 
 .writing__editor-title {
-  font: 800 20px var(--font-reading);
+  font: 700 20px var(--font-reading);
+  letter-spacing: -0.02em;
   color: var(--text-strong);
   margin: 0;
 }
@@ -218,4 +219,24 @@
 
 .writing__citation-finding--clean {
   color: var(--text-muted);
+}
+
+/* Reflow to the center pane's width (container on `.center-pane`). The
+   drafts list becomes a horizontal strip above the editor rather than
+   disappearing, and the source/preview split stacks. */
+@container center-pane (max-width: 760px) {
+  .writing__split { grid-template-columns: 1fr; }
+}
+@container center-pane (max-width: 640px) {
+  .writing { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .writing__drafts {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-faint);
+  }
+  .writing__drafts-header { display: none; }
+  .writing__draft-row { flex: none; border-left: none; border-top: 2px solid transparent; }
+  .writing__draft-row--active,
+  .writing__draft-row--active:hover { border-left: none; border-top: 2px solid var(--accent); }
 }

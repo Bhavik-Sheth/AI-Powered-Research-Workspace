@@ -707,6 +707,9 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         <div
           className={`pane-shell pane-shell--left ${navCollapsed ? "pane-shell--collapsed" : ""} ${navResizing ? "pane-shell--resizing" : ""}`}
           style={navCollapsed ? undefined : { width: navWidth }}
+          // -1: clicking anywhere in the pane (not just a control) marks it
+          // the active pane for the `:focus-within` ring — never a Tab stop.
+          tabIndex={-1}
         >
           <nav className="left-nav">
             {NAV_GROUPS.map((group) => (
@@ -767,7 +770,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         >
           {navCollapsed ? "›" : "‹"}
         </button>
-        <div className="center-pane-column">
+        <div className="center-pane-column" tabIndex={-1}>
           {tabs.length > 1 && (
             <div className="tab-bar-row">
               <div className="tab-bar" ref={tabBarRef}>
@@ -902,6 +905,7 @@ function ProjectShell({ projectId, onSwitchProject }: { projectId: string; onSwi
         <div
           className={`pane-shell pane-shell--right ${companionCollapsed ? "pane-shell--collapsed" : ""} ${companionResizing ? "pane-shell--resizing" : ""}`}
           style={companionCollapsed ? undefined : { width: companionWidth }}
+          tabIndex={-1}
         >
           <CompanionPane
             projectId={projectId}

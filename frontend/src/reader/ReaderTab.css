@@ -19,7 +19,8 @@
 }
 
 .reader__header-title {
-  font: 800 17px var(--font-reading);
+  font: 700 17px var(--font-reading);
+  letter-spacing: -0.02em;
   color: var(--text-strong);
   margin: 0;
   min-width: 0;
@@ -158,7 +159,8 @@
 .reader__page {
   position: relative;
   background: var(--surface-raised);
-  box-shadow: 0 1px 3px oklch(26% 0.079 210 / 0.16);
+  border: 1px solid var(--border-faint);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .reader__page canvas {
@@ -262,8 +264,8 @@
 .reader__promote {
   margin-top: 12px;
   padding: 8px 14px;
-  font: 13px/1 var(--font-ui);
-  color: var(--surface);
+  font: 600 13px/1 var(--font-ui);
+  color: var(--text-strong);
   background: var(--accent);
   border: none;
   border-radius: var(--radius-button);
@@ -283,7 +285,7 @@
   gap: 4px;
   background: var(--surface-raised);
   border-radius: var(--radius-button);
-  box-shadow: 0 4px 16px oklch(26% 0.079 210 / 0.22);
+  box-shadow: 0 0 0 1px var(--border), 0 12px 32px rgba(0, 0, 0, 0.6);
   padding: 6px;
   z-index: 20;
 }
@@ -306,4 +308,29 @@
 .reader__popover button:disabled {
   cursor: default;
   color: var(--text-muted);
+}
+
+/* Reflow to the center pane's width (container on `.center-pane`). The
+   section rail narrows, then the whole body stacks into one column so the
+   page, the rail and the extractive card all stay visible — none is
+   dropped. */
+@container center-pane (max-width: 900px) {
+  .reader__sidebar { width: 132px; min-width: 120px; }
+}
+@container center-pane (max-width: 700px) {
+  .reader__body { flex-direction: column; }
+  .reader__sidebar {
+    width: auto;
+    min-width: 0;
+    max-height: 116px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .reader__card {
+    width: auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 260px;
+  }
+  .reader__pages { min-height: 340px; }
 }

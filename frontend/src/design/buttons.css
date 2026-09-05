@@ -1,9 +1,12 @@
-/* Shared button/select chrome (UI_DESIGN.md §1 Shape, elevation, spacing).
-   `.btn` carries the shared height/radius/padding/font every button shares;
-   `.btn--primary`/`.btn--outline` are the two color treatments; `.btn--inline`
-   is the smaller in-context variant (e.g. "Find related", cell Save/Cancel).
-   `.select` mirrors `frontend/src/app/AppShell.css`'s `.top-bar__switcher` —
-   the one existing convention for a styled `<select>` in this codebase. */
+/* Shared button/select chrome (Research Companion OS - Design System.dc.html,
+   "Components"). `.btn` carries the shared height/radius/padding/font every
+   button shares; `.btn--primary`/`.btn--outline` are the two treatments from
+   the design (Ember fill, hairline ghost); `.btn--inline` is the smaller
+   in-context variant. `.select` mirrors AppShell.css's `.top-bar__switcher`.
+
+   Buttons cap at 4px radius — the design is explicit that a larger radius
+   "reads as a different, friendlier product". No shadows: the ghost button
+   is defined by its 1px border, not elevation. */
 
 .btn {
   display: inline-flex;
@@ -12,54 +15,56 @@
   gap: 6px;
   height: 32px;
   padding: 0 14px;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-button);
-  font: 700 12px var(--font-ui);
+  font: 600 12px var(--font-ui);
+  letter-spacing: -0.01em;
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .btn:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .btn--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-strong);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--link-hover);
+  background: var(--accent-text);
 }
 
 .btn--outline {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: transparent;
+  border-color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .btn--outline:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent-text-outline);
+  border-color: var(--text-muted);
+  color: var(--text-strong);
 }
 
 .btn--inline {
   height: auto;
   padding: 6px 12px;
-  font: 700 11px var(--font-ui);
+  font: 600 11px var(--font-ui);
 }
 
 .select {
-  font: 600 12px var(--font-ui);
+  font: 500 12px var(--font-ui);
   color: var(--text);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius-button);
+  border-radius: var(--radius-input);
   padding: 3px 8px;
   cursor: pointer;
 }
 
 .select:hover {
-  border-color: var(--accent);
+  border-color: var(--text-muted);
 }

@@ -154,8 +154,8 @@ const STYLESHEET = [
       // Literal values, not `var(--font-ui)` / `var(--text-strong)`: same
       // reason as the LEGEND colours above — Cytoscape's canvas stylesheet
       // cannot resolve a CSS custom property at all.
-      "font-family": '"Space Grotesk", sans-serif',
-      color: "#001018",
+      "font-family": '"Geist", sans-serif',
+      color: "#dedede",
       "text-valign": "bottom",
       "text-margin-y": 4,
       // The label text itself is already wrapped-and-capped to 3 lines by
@@ -170,14 +170,14 @@ const STYLESHEET = [
   },
   {
     selector: "node:selected",
-    style: { "border-width": 3, "border-color": "#0089df" },
+    style: { "border-width": 3, "border-color": "#ff6c02" },
   },
   {
     selector: "edge",
     style: {
       width: 1.5,
-      "line-color": "#7aa7b0",
-      "target-arrow-color": "#7aa7b0",
+      "line-color": "#5c5c5c",
+      "target-arrow-color": "#5c5c5c",
       "target-arrow-shape": "triangle",
       "curve-style": "bezier",
       "line-style": (el: cytoscape.EdgeSingular) => (el.data("provenance") === "llm" ? "dashed" : "solid"),

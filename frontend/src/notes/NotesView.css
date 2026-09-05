@@ -113,7 +113,8 @@
 
 .notes-view__title-input {
   flex: 1;
-  font: 800 20px var(--font-reading);
+  font: 700 20px var(--font-reading);
+  letter-spacing: -0.02em;
   color: var(--text-strong);
   border: none;
   background: none;
@@ -156,7 +157,7 @@
   padding: 0 14px;
   font: 700 12px var(--font-ui);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-strong);
   border: none;
   cursor: pointer;
 }
@@ -175,4 +176,17 @@
 .notes-view__save--clean {
   background: var(--surface-muted);
   color: var(--text-muted);
+}
+
+/* Reflow to the center pane's width (container on `.center-pane`). */
+@container center-pane (max-width: 620px) {
+  .notes-view { flex-direction: column; }
+  .notes-view__list {
+    width: auto;
+    min-width: 0;
+    max-height: 160px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .notes-view__editor { min-width: 0; padding: 14px 16px; }
 }

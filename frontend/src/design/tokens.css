@@ -1,94 +1,162 @@
-/* Design Tokens — the literal values from UI_DESIGN.md §1. Every component
-   renders against these custom properties; no component inlines a color,
-   font or spacing literal of its own (Rules.md). */
+/* Design tokens — the literal values from `Research Companion OS - Design
+   System.dc.html` (repo root). A near-monochrome, dark-canvas theme:
+   one molten-orange accent doing the work of a full color system, flat
+   hairline-bordered surfaces (no elevation), and Geist's tight negative
+   tracking throughout. Every component renders against these custom
+   properties; no component inlines a color, font or spacing literal of its
+   own (PLANNER/Rules.md). Token *names* are unchanged from the previous
+   system so every downstream stylesheet keeps working — only the values
+   moved. */
 
-/* Self-hosted font faces (no CDN request at runtime — offline-first). Weights
-   are limited to what the app actually sets via font-weight/font-style
-   (grepped across frontend/src): Space Grotesk 400/600/700 upright, Newsreader
-   400 upright + italic, JetBrains Mono 400 upright. */
-@import "@fontsource/space-grotesk/400.css";
-@import "@fontsource/space-grotesk/600.css";
-@import "@fontsource/space-grotesk/700.css";
-@import "@fontsource/newsreader/400.css";
-@import "@fontsource/newsreader/400-italic.css";
-@import "@fontsource/jetbrains-mono/400.css";
+/* Self-hosted font faces (no CDN request at runtime — offline-first). Geist
+   for everything (UI + reading), Geist Mono for version tags, branch labels,
+   file paths and inline IDs. Weights limited to what the app sets: 400/500/
+   600/700 upright + 400 italic for Geist, 400 upright for Geist Mono. */
+@import "@fontsource/geist/400.css";
+@import "@fontsource/geist/400-italic.css";
+@import "@fontsource/geist/500.css";
+@import "@fontsource/geist/600.css";
+@import "@fontsource/geist/700.css";
+@import "@fontsource/geist-mono/400.css";
 
 :root {
-  /* Color */
-  --page-bg: #e4e0d8;
-  --frame-bg: oklch(91% 0.079 225);
-  --frame-grid: oklch(52% 0.42 225 / 0.16);
-  --frame-grid-quiet: oklch(52% 0.42 225 / 0.07);
-  --surface: oklch(98% 0.024 210);
-  --surface-raised: #fff;
-  --surface-muted: oklch(93% 0.024 210);
-  --surface-inactive: oklch(84% 0.073 210);
-  --accent: oklch(52% 0.385 210);
-  --accent-text: oklch(38% 0.33 210);
-  --accent-text-outline: oklch(42% 0.2 210);
-  --accent-tint-10: oklch(52% 0.385 210 / 0.10);
-  --accent-tint-12: oklch(52% 0.385 210 / 0.12);
-  --accent-tint-14: oklch(52% 0.385 210 / 0.14);
-  --accent-tint-15: oklch(52% 0.385 210 / 0.15);
-  --accent-tint-25: oklch(52% 0.385 210 / 0.25);
-  --link: oklch(45% 0.32 210);
-  --link-hover: oklch(38% 0.36 210);
-  --text-strong: oklch(15% 0.055 210);
-  --text: oklch(28% 0.05 210);
-  --text-muted: oklch(49% 0.04 210);
-  --border: oklch(88% 0.055 210);
-  --border-faint: oklch(92% 0.025 210);
-  --border-dashed: oklch(80% 0.05 210);
-  --graph-edge: oklch(70% 0.05 210);
+  /* ── Canvas & surfaces (elevation is a border, never a shadow) ────────── */
+  --page-bg: #000000;          /* Black — behind the frame */
+  --frame-bg: #040404;         /* Void — the app frame */
+  --frame-grid: rgba(255, 108, 2, 0.16);       /* Ember machined grid — visible on the Void canvas */
+  --frame-grid-quiet: rgba(255, 108, 2, 0.07); /* dimmed behind sustained reading (reader/writing/notes) */
+  --surface: #0c0c0c;          /* Onyx — panels, nav, center pane */
+  --surface-raised: #121212;   /* Obsidian — cards, inputs, raised blocks */
+  --surface-muted: #252525;    /* Charcoal fill — muted blocks, assistant bubbles, inactive tabs, PDF viewport, hover */
+  --surface-inactive: #1b1b1b;
 
-  /* Categorical palette (UI_DESIGN.md §1) — the one sanctioned exception to
-     "one accent". Used only for knowledge-graph node types (§4.7). Equal
-     lightness and chroma so no type reads as more important; each is also
-     paired with a shape (frontend/src/graph/nodeStyle.ts) so it survives
-     color-blindness. Duplicated as literal values there because Cytoscape's
-     canvas renderer cannot resolve a CSS custom property. */
-  --graph-node-paper: oklch(52% 0.385 210);
-  --graph-node-author: oklch(58% 0.14 285);
-  --graph-node-dataset: oklch(58% 0.14 150);
-  --graph-node-method: oklch(62% 0.13 75);
-  --graph-node-repo: oklch(58% 0.15 330);
-  --graph-node-idea: oklch(58% 0.14 25);
+  /* ── Accent — Ember Orange. Exactly one element per view. ─────────────── */
+  --accent: #ff6c02;                 /* Ember Orange — CTA / active marker / frame edge */
+  --accent-text: #ff9b51;            /* Ember Glow — accent as text on dark */
+  --accent-text-outline: #ff9b51;
+  --accent-tint-10: rgba(255, 108, 2, 0.10);
+  --accent-tint-12: rgba(255, 108, 2, 0.12);
+  --accent-tint-14: rgba(255, 108, 2, 0.14);
+  --accent-tint-15: rgba(255, 108, 2, 0.15);
+  --accent-tint-25: rgba(255, 108, 2, 0.28);
+  --link: #ff9b51;
+  --link-hover: #ffb37d;
 
-  /* Danger family — errors only, never a status */
-  --danger-rule: oklch(55% 0.19 25);
-  --danger-border: oklch(80% 0.09 25);
-  --danger-badge-border: oklch(70% 0.12 25);
-  --danger-title: oklch(40% 0.16 25);
-  --danger-body: oklch(35% 0.04 25);
-  --danger-text: oklch(45% 0.15 25);
-  --danger-fill: oklch(52% 0.19 25);
+  /* ── Text & borders (BaseHub neutrals) ───────────────────────────────── */
+  --text-strong: #f3f3f3;      /* Bone White — headings, primary actions only */
+  --text: #dedede;             /* Ash Gray — running content text */
+  --text-muted: #909090;       /* Fog Gray — body / secondary / labels */
+  --text-faint: #646464;       /* Slate Gray — timestamps, disabled, hints */
+  --border: #303030;           /* Iron Border — structural dividers */
+  --border-faint: #252525;     /* Charcoal Edge — card / panel borders */
+  --border-dashed: #3a3a3a;    /* dashed placeholders / pending chips */
+  --graph-edge: #3a3a3a;
 
-  /* Typography — three families (UI_DESIGN.md §1 Typography), self-hosted via
-     the @fontsource packages imported above (no Google Fonts CDN request at
-     runtime). System fonts remain only as the fallback if a face fails to
-     load. */
-  --font-ui: "Space Grotesk", system-ui, sans-serif;
-  --font-reading: "Newsreader", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Categorical palette — the one sanctioned exception to "one accent".
+     Knowledge-graph node types only (§ graph). Equal lightness/chroma so no
+     type reads as more important; each is also paired with a shape
+     (frontend/src/graph/nodeStyle.ts) so it survives color-blindness.
+     Duplicated as literals there because Cytoscape's canvas renderer cannot
+     resolve a CSS custom property. */
+  --graph-node-paper: oklch(66% 0.16 245);     /* blue — kept cool so it never competes with Ember */
+  --graph-node-author: oklch(66% 0.15 285);    /* purple */
+  --graph-node-dataset: oklch(70% 0.15 150);   /* green */
+  --graph-node-method: oklch(74% 0.14 75);     /* amber */
+  --graph-node-repo: oklch(68% 0.16 330);      /* magenta */
+  --graph-node-idea: oklch(70% 0.15 25);       /* warm red */
 
-  /* Shape, elevation, spacing */
-  --radius-frame: 22px;
-  --radius-panel: 14px;
-  --radius-card: 10px;
-  --radius-badge: 9px;
-  --radius-button: 8px;
+  /* Informational — Glacier Blue. Status chips / info badges only, never a
+     surface or a CTA. */
+  --info: #55c2ff;
+  --info-tint: rgba(85, 194, 255, 0.14);
+
+  /* Danger family — Signal Red. Errors only, never a status. */
+  --danger-rule: #ff5c5c;
+  --danger-border: rgba(255, 92, 92, 0.30);
+  --danger-badge-border: rgba(255, 92, 92, 0.55);
+  --danger-title: #ff8080;
+  --danger-body: #dedede;
+  --danger-text: #ff7a7a;
+  --danger-fill: #ff5c5c;
+
+  /* ── Typography — Geist everywhere, Geist Mono for machine text. Tight
+     negative tracking is applied per size in the components; the tokens just
+     name the families. System fonts remain only as load-failure fallback. */
+  --font-ui: "Geist", system-ui, -apple-system, sans-serif;
+  --font-reading: "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+
+  /* ── Shape. 4 buttons · 8 inputs · 12 cards/panels · 16 frame · pill. ─── */
+  --radius-frame: 16px;
+  --radius-panel: 12px;
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-badge: 999px;
+  --radius-button: 4px;
+
+  /* ── Spacing (4px base: 4 8 12 16 20 24 32 56) ───────────────────────── */
   --shell-column-gap: 12px;
-  --panel-shadow: 0 1px 4px oklch(26% 0.079 210 / 0.16);
-  /* The center pane's floor (Phase 6.2) — a PDF page maxes out at 420px
-     (UI_DESIGN.md §4.2) plus its own padding; this is the narrowest the
-     column gets before it scrolls horizontally instead of compressing. */
+
+  /* ── Elevation. The BaseHub theme gives panels a soft, low drop shadow
+     against the Void canvas (nav / center pane / Companion carry only this,
+     no border). Cards layer their own 1px border on top. */
+  --panel-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+
+  /* The center pane's floor — a PDF page maxes out at 420px plus padding;
+     narrower than this the column scrolls horizontally instead of
+     compressing content into unreadability. */
   --center-pane-min-width: 360px;
 }
 
-/* Global focus ring (UI_DESIGN.md §6 "the mock already sets a global
-   :focus-visible ... keep it") — every interactive element, everywhere. */
+/* Global focus ring — every interactive element, everywhere. Ember on the
+   dark canvas is already the highest-contrast marker in the system. */
 *:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* Native form controls and scrollbars adopt the dark theme so the OS light
+   defaults never flash through a select menu, a date picker or a gutter. */
+:root {
+  color-scheme: dark;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-muted);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Form-control baseline. Element selectors (specificity 0,0,1) so any
+   component class still wins — this only catches the inputs/textareas/
+   selects that never set their own surface, keeping the OS light default
+   from flashing through them on the dark canvas. */
+input,
+textarea,
+select {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+}
+
+/* Text selection everywhere picks up the Ember tint rather than the browser
+   default blue. */
+::selection {
+  background: var(--accent-tint-25);
+  color: var(--text-strong);
 }

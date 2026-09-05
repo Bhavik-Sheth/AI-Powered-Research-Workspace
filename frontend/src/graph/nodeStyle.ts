@@ -34,12 +34,12 @@ export function categoryOf(nodeType: string): LegendCategory {
 // black). These are the browser's own gamut-mapped conversion of each
 // oklch() value, computed once via `canvas.fillStyle` + `getImageData`.
 export const LEGEND: { category: LegendCategory; label: string; color: string; shape: string }[] = [
-  { category: "paper", label: "Paper", color: "#0089df", shape: "ellipse" },
-  { category: "author", label: "Author", color: "#736bc9", shape: "ellipse" },
-  { category: "dataset", label: "Dataset", color: "#2a914b", shape: "round-rectangle" },
-  { category: "method", label: "Method / concept", color: "#b37903", shape: "hexagon" },
-  { category: "repo", label: "Code / repo", color: "#aa55a4", shape: "round-rectangle" },
-  { category: "idea", label: "Idea / note", color: "#bf534e", shape: "diamond" },
+  { category: "paper", label: "Paper", color: "#2ea8ff", shape: "ellipse" },
+  { category: "author", label: "Author", color: "#8f86e0", shape: "ellipse" },
+  { category: "dataset", label: "Dataset", color: "#3cbf6a", shape: "round-rectangle" },
+  { category: "method", label: "Method / concept", color: "#d99311", shape: "hexagon" },
+  { category: "repo", label: "Code / repo", color: "#d06fc9", shape: "round-rectangle" },
+  { category: "idea", label: "Idea / note", color: "#e0736c", shape: "diamond" },
 ];
 
 const LEGEND_BY_CATEGORY = new Map(LEGEND.map((entry) => [entry.category, entry]));

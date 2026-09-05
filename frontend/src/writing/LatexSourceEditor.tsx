@@ -10,11 +10,47 @@ import { citeCompletionSource } from "./citeAutocomplete";
 import { citationDecorations } from "./citationDecorations";
 import { latexMathWidgets } from "./latexMathWidget";
 
-const FONT_THEME = EditorView.theme({
-  "&": { fontSize: "13px", height: "100%" },
-  ".cm-content": { fontFamily: "var(--font-mono)" },
-  ".cm-scroller": { overflow: "auto" },
-});
+// The editor sits on the dark `--surface-raised` pane, so it needs a dark
+// theme rather than CodeMirror's light default. Colours come from the design
+// tokens (tokens.css) so the source pane stays in step with the rest of the
+// app; `{ dark: true }` flips CodeMirror's own built-in light/dark switches.
+const FONT_THEME = EditorView.theme(
+  {
+    "&": {
+      fontSize: "13px",
+      height: "100%",
+      color: "var(--text)",
+      backgroundColor: "transparent",
+    },
+    ".cm-content": {
+      fontFamily: "var(--font-mono)",
+      caretColor: "var(--accent)",
+    },
+    ".cm-scroller": { overflow: "auto", lineHeight: "1.6" },
+    "&.cm-focused .cm-cursor": { borderLeftColor: "var(--accent)" },
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
+      backgroundColor: "var(--accent-tint-25)",
+    },
+    ".cm-gutters": {
+      backgroundColor: "transparent",
+      color: "var(--text-faint)",
+      border: "none",
+    },
+    ".cm-activeLine": { backgroundColor: "rgba(255, 255, 255, 0.03)" },
+    ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text-muted)" },
+    ".cm-tooltip": {
+      backgroundColor: "var(--surface-raised)",
+      border: "1px solid var(--border)",
+      borderRadius: "var(--radius-input)",
+      color: "var(--text)",
+    },
+    ".cm-tooltip-autocomplete ul li[aria-selected]": {
+      backgroundColor: "var(--accent-tint-15)",
+      color: "var(--text-strong)",
+    },
+  },
+  { dark: true },
+);
 
 /** The `.tex` source pane (MODULES.md Manuscript Editor) — CodeMirror 6 in
  * JetBrains Mono with LaTeX highlighting and the live inline-math widgets.

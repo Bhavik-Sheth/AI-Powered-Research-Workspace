@@ -27,7 +27,8 @@
 }
 
 .wizard__title {
-  font: 800 20px var(--font-reading);
+  font: 700 20px var(--font-reading);
+  letter-spacing: -0.02em;
   color: var(--text-strong);
   margin: 0 0 6px;
 }
@@ -76,7 +77,7 @@
   padding: 0 14px;
   font: 700 12px var(--font-ui);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-strong);
   border: none;
   cursor: pointer;
 }

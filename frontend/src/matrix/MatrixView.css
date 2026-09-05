@@ -185,3 +185,12 @@
   display: flex;
   gap: 6px;
 }
+
+/* Reflow to the center pane's width (container on `.center-pane`). The grid
+   itself keeps its own horizontal scroll (`.matrix__grid-scroll`) — a wide
+   comparison table is meant to scroll, not compress — but the chrome around
+   it stacks. */
+@container center-pane (max-width: 640px) {
+  .matrix__toolbar { flex-wrap: wrap; }
+  .matrix__picker { flex-direction: column; gap: 12px; }
+}

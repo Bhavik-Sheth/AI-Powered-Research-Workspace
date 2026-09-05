@@ -8,7 +8,7 @@
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  box-shadow: 0 12px 40px oklch(26% 0.079 210 / 0.25);
+  box-shadow: 0 0 0 1px var(--border), 0 24px 64px rgba(0, 0, 0, 0.6);
   /* No overlay div to supply an edge gutter anymore — the 48px is the same
      24px-per-side inset the old `.approval-prompt__overlay` padding gave
      on narrow viewports. */
@@ -22,7 +22,7 @@
 }
 
 .approval-prompt::backdrop {
-  background: oklch(20% 0.08 225 / 0.45);
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .approval-prompt__header {
@@ -202,7 +202,7 @@
 
 .approval-prompt__button--approve {
   background: var(--accent);
-  color: var(--surface-raised);
+  color: var(--text-strong);
   border: none;
 }
 
